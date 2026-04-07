@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { User, SystemSettings } from '../types';
-import { Mail, ArrowLeft, Lock, HelpCircle, Shield, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowLeft, Lock, HelpCircle, Shield, CheckCircle2, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -14,6 +15,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   
   // Reset Password State
   const [isResetting, setIsResetting] = useState(false);
@@ -21,26 +23,75 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
   const [resetSuccess, setResetSuccess] = useState(false);
   const [tempPassword, setTempPassword] = useState(''); // Estado para simular email
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    
-    if (foundUser) {
-      // Verifica se a senha corresponde (seja a original ou a resetada na sessão atual)
+    try {
+      // 1. Tenta buscar o usuário no Supabase
+      const { data: foundUser, error: supabaseError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .single();
+
+      if (supabaseError || !foundUser) {
+        // Fallback para mock data se o Supabase falhar ou não encontrar (útil para desenvolvimento)
+        const mockUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (mockUser) {
+          if (password !== mockUser.password) {
+            setError('Senha incorreta.');
+            setLoading(false);
+            return;
+          }
+          if (!mockUser.hasSystemAccess) {
+            setError('Este usuário não tem permissão de acesso ao sistema.');
+            setLoading(false);
+            return;
+          }
+          onLogin(mockUser);
+          return;
+        }
+        setError('Usuário não encontrado. Verifique o email.');
+        setLoading(false);
+        return;
+      }
+
+      // 2. Verifica a senha (no Supabase)
       if (password !== foundUser.password) {
-          setError('Senha incorreta.');
-          return;
+        setError('Senha incorreta.');
+        setLoading(false);
+        return;
       }
 
-      if (!foundUser.hasSystemAccess) {
-          setError('Este usuário não tem permissão de acesso ao sistema.');
-          return;
+      if (!foundUser.has_system_access) {
+        setError('Este usuário não tem permissão de acesso ao sistema.');
+        setLoading(false);
+        return;
       }
-      onLogin(foundUser);
-    } else {
-      setError('Usuário não encontrado. Verifique o email.');
+
+      // Converte o formato do Supabase (snake_case) para o formato do App (camelCase)
+      const mappedUser: User = {
+        id: foundUser.id,
+        name: foundUser.name,
+        email: foundUser.email,
+        role: foundUser.role,
+        avatar: foundUser.avatar,
+        squad: foundUser.squad_id,
+        clientId: foundUser.client_id,
+        hourlyRate: foundUser.hourly_rate,
+        salary: foundUser.salary,
+        hasSystemAccess: foundUser.has_system_access,
+        preferences: foundUser.preferences
+      };
+
+      onLogin(mappedUser);
+    } catch (err) {
+      console.error('Erro no login:', err);
+      setError('Ocorreu um erro ao tentar entrar. Tente novamente.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -146,12 +197,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
                     </div>
                   )}
 
+                  {/* FIX: Remove invalid CSS property 'shadowColor' */}
                   <button 
                     type="submit"
-                    className="w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 text-sm tracking-wide"
-                    style={{ backgroundColor: systemSettings.primaryColor, shadowColor: `${systemSettings.primaryColor}40` }}
+                    disabled={loading}
+                    className="w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 text-sm tracking-wide flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: systemSettings.primaryColor }}
                   >
-                    ENTRAR NO SISTEMA
+                    {loading ? (
+                      <>
+                        <Loader2 className="animate-spin" size={18} />
+                        AUTENTICANDO...
+                      </>
+                    ) : (
+                      'ENTRAR NO SISTEMA'
+                    )}
                   </button>
                 </form>
             </>

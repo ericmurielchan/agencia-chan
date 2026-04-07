@@ -1,7 +1,13 @@
-
-import React, { useState } from 'react';
-import { Client, Squad, ClientContact, AgencyService, User } from '../types';
-import { Plus, Edit2, Trash2, Folder, FileText, Calendar, Mail, Phone, ExternalLink, Search, DollarSign, Users, Briefcase, User as UserIcon, Star, Link, Shield, X, Check, ShoppingBag, Key, Lock, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Modal } from './Modal';
+import { Client, Squad, AgencyService, User, ConfirmOptions, Task, Requisition, PasswordEntry } from '../types';
+import { 
+    Plus, Edit2, Trash2, Folder, FileText, Calendar, Mail, Phone, ExternalLink, 
+    Search, DollarSign, Users, Briefcase, User as UserIcon, Star, Link, Shield, 
+    X, Check, ShoppingBag, Key, Lock, Unlock, AlertCircle, Ban, Power, 
+    LayoutDashboard, ClipboardList, History, HardDrive, Eye, EyeOff, 
+    MessageSquare, Tag, Building2, Globe, Hash, UserCheck, CreditCard, Info, ListChecks
+} from 'lucide-react';
 
 interface ClientManagementProps {
   clients: Client[];
@@ -10,647 +16,996 @@ interface ClientManagementProps {
   services: AgencyService[];
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  openConfirm: (options: ConfirmOptions) => Promise<boolean>;
+  tasks: Task[];
+  requisitions: Requisition[];
+  currentUser: User;
 }
 
-export const ClientManagement: React.FC<ClientManagementProps> = ({ clients, setClients, squads, services, users, setUsers }) => {
+export const ClientManagement: React.FC<ClientManagementProps> = ({ 
+    clients, setClients, squads, services, users, setUsers, openConfirm, tasks, requisitions, currentUser 
+}) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewingClient, setViewingClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'RECURRING' | 'ONEOFF'>('ALL');
-  const [activeTab, setActiveTab] = useState<'GENERAL' | 'CONTRACT' | 'CONTACTS' | 'ACCESS'>('GENERAL');
+  const [activeTab, setActiveTab] = useState<'GENERAL' | 'CONTACTS' | 'SERVICES' | 'PASSWORDS' | 'DOCS' | 'INTERNAL'>('GENERAL');
+  const [activeViewTab, setActiveViewTab] = useState<'SUMMARY' | 'SERVICES' | 'REQUISITIONS' | 'TASKS' | 'HISTORY' | 'FILES' | 'PASSWORDS'>('SUMMARY');
 
-  const [editingClient, setEditingClient] = useState<Partial<Client>>({ 
-      name: '',
-      status: 'ACTIVE', 
-      contacts: [],
-      level: 'BASIC',
-      isRecurring: true,
-      serviceIds: [],
-      squadId: ''
-  });
+  const [editingClient, setEditingClient] = useState<Partial<Client>>({});
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
 
-  // Novo estado para criação de acesso na aba ACCESS
-  const [newUserLogin, setNewUserLogin] = useState({ name: '', email: '', password: '' });
+  const isAdmin = currentUser.role === 'ADMIN';
+  const isManager = currentUser.role === 'MANAGER';
+  const isFinance = currentUser.role === 'FINANCE';
+  const canManageAccess = isAdmin || isManager || isFinance;
 
-  // Stats Calculation
-  const activeClients = clients.filter(c => c.status === 'ACTIVE');
-  const totalMRR = activeClients.reduce((acc, c) => acc + (c.monthlyValue || 0), 0);
-  const avgTicket = activeClients.length > 0 ? totalMRR / activeClients.length : 0;
+  // Filter clients based on role
+  const filteredClients = useMemo(() => {
+    let base = clients;
+    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
+        base = clients.filter(c => c.responsibleId === currentUser.id || squads.find(s => s.id === c.squadId)?.members.includes(currentUser.id));
+    }
+    return base.filter(c => 
+        c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        c.legalName?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [clients, searchTerm, currentUser, squads]);
 
   const handleSave = () => {
-      // Validação de Campos Obrigatórios
-      if (!editingClient.name || !editingClient.name.trim()) {
-          alert("O campo 'Nome do Cliente' é obrigatório.");
+      if (!editingClient.name?.trim()) {
+          alert("Nome/Empresa é obrigatório.");
           return;
       }
-
-      if (!editingClient.squadId) {
-          alert("Por favor, selecione a 'Squad Responsável' na aba Visão Geral.");
-          setActiveTab('GENERAL'); // Leva o usuário para a aba correta
-          return;
-      }
-      
       if (editingClient.id) {
           setClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...editingClient } as Client : c));
       } else {
-          setClients(prev => [...prev, { ...editingClient, id: Date.now().toString() } as Client]);
+          const newClient: Client = {
+              ...editingClient,
+              id: Date.now().toString(),
+              status: editingClient.status || 'ACTIVE',
+              isRecurring: editingClient.isRecurring || false,
+              level: editingClient.level || 'BASIC',
+              contacts: [],
+              passwords: [],
+              passwordLogs: [],
+              documentationLinks: [],
+              tags: [],
+              systemAccesses: editingClient.systemAccesses || [],
+              entryDate: new Date().toISOString().split('T')[0]
+          } as Client;
+          setClients(prev => [...prev, newClient]);
       }
       setIsModalOpen(false);
-      resetForm();
   };
 
-  const resetForm = () => {
-      setEditingClient({ 
-          name: '',
-          status: 'ACTIVE', 
-          contacts: [], 
-          level: 'BASIC', 
-          isRecurring: true, 
-          serviceIds: [],
-          squadId: ''
-      });
-      setActiveTab('GENERAL');
-      setNewUserLogin({ name: '', email: '', password: '' });
-  };
+  const togglePassword = (passwordId: string, platform: string) => {
+      if (currentUser.role === 'FREELANCER') return;
 
-  const handleCreateNew = () => {
-      resetForm();
-      setIsModalOpen(true);
-  };
+      setVisiblePasswords(prev => ({ ...prev, [passwordId]: !prev[passwordId] }));
+      
+      // Log the view
+      if (!visiblePasswords[passwordId] && viewingClient) {
+          const log = {
+              id: Date.now().toString(),
+              userId: currentUser.id,
+              timestamp: Date.now(),
+              platform
+          };
+          setClients(prev => prev.map(c => c.id === viewingClient.id ? {
+              ...c,
+              passwordLogs: [...(c.passwordLogs || []), log]
+          } : c));
+      }
 
-  const addContact = () => {
-      const newContacts = [...(editingClient.contacts || []), { name: '', email: '', phone: '', role: '' }];
-      setEditingClient({...editingClient, contacts: newContacts});
-  };
-
-  const updateContact = (idx: number, field: keyof ClientContact, value: string) => {
-      const newContacts = [...(editingClient.contacts || [])];
-      newContacts[idx] = { ...newContacts[idx], [field]: value };
-      setEditingClient({...editingClient, contacts: newContacts});
-  };
-
-  const removeContact = (idx: number) => {
-      const newContacts = editingClient.contacts?.filter((_, i) => i !== idx);
-      setEditingClient({...editingClient, contacts: newContacts});
-  };
-  
-  const toggleService = (serviceId: string) => {
-      const currentServices = editingClient.serviceIds || [];
-      if (currentServices.includes(serviceId)) {
-          setEditingClient({...editingClient, serviceIds: currentServices.filter(id => id !== serviceId)});
-      } else {
-          setEditingClient({...editingClient, serviceIds: [...currentServices, serviceId]});
+      // Auto-hide after 30 seconds
+      if (!visiblePasswords[passwordId]) {
+          setTimeout(() => {
+              setVisiblePasswords(prev => ({ ...prev, [passwordId]: false }));
+          }, 30000);
       }
   };
 
-  // --- Lógica de Usuários do Portal (Aba Access) ---
-  const handleAddUserLogin = () => {
-      const name = newUserLogin.name.trim();
-      const email = newUserLogin.email.trim();
-      const password = newUserLogin.password.trim();
-
-      if (!name || !email || !password) {
-          alert("Preencha todos os campos para criar o acesso.");
-          return;
-      }
-
-      const existing = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (existing) {
-          alert("Já existe um usuário com este e-mail.");
-          return;
-      }
-
-      if (!editingClient.id) {
-          alert("Salve o cliente antes de criar acessos.");
-          return;
-      }
-
-      const newUser: User = {
-          id: Date.now().toString(),
-          name,
-          email,
-          role: 'CLIENT',
-          clientId: editingClient.id, // VINCULA AO CLIENTE
-          avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${name}`,
-          hasSystemAccess: true,
-          password
-      };
-
-      setUsers(prev => [...prev, newUser]);
-      setNewUserLogin({ name: '', email: '', password: '' });
-      alert("Usuário criado com sucesso!");
-  };
-
-  const handleDeleteUserLogin = (userId: string) => {
-      if (confirm("Tem certeza que deseja remover o acesso deste usuário?")) {
-          setUsers(prev => prev.filter(u => u.id !== userId));
-      }
-  };
-
-  const getLevelColor = (level?: string) => {
-      switch(level) {
-          case 'ADVANCED': return 'bg-purple-100 text-purple-700 border-purple-200';
-          case 'INTERMEDIATE': return 'bg-blue-100 text-blue-700 border-blue-200';
-          default: return 'bg-slate-100 text-slate-600 border-slate-200';
-      }
-  };
-
-  const filteredClients = clients.filter(client => {
-      const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            client.legalName?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterType === 'ALL' || 
-                            (filterType === 'RECURRING' && client.isRecurring) || 
-                            (filterType === 'ONEOFF' && !client.isRecurring);
-      return matchesSearch && matchesFilter;
-  });
-
-  // Usuários vinculados ao cliente atual
-  const linkedUsers = users.filter(u => u.role === 'CLIENT' && u.clientId === editingClient.id);
+  const getClientTasks = (clientId: string) => tasks.filter(t => t.clientId === clientId);
+  const getClientRequisitions = (clientId: string) => requisitions.filter(r => r.clientId === clientId);
 
   return (
-    <div className="space-y-6">
-       
-       {/* Dashboard Summary */}
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-               <div>
-                   <p className="text-xs font-bold text-slate-500 uppercase">Receita Recorrente (MRR)</p>
-                   <p className="text-2xl font-bold text-slate-800">R$ {totalMRR.toLocaleString()}</p>
-               </div>
-               <div className="bg-emerald-50 p-3 rounded-full text-emerald-600"><DollarSign size={24}/></div>
-           </div>
-           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-               <div>
-                   <p className="text-xs font-bold text-slate-500 uppercase">Clientes Ativos</p>
-                   <p className="text-2xl font-bold text-slate-800">{activeClients.length}</p>
-               </div>
-               <div className="bg-blue-50 p-3 rounded-full text-blue-600"><Users size={24}/></div>
-           </div>
-           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-               <div>
-                   <p className="text-xs font-bold text-slate-500 uppercase">Ticket Médio</p>
-                   <p className="text-2xl font-bold text-slate-800">R$ {avgTicket.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-               </div>
-               <div className="bg-purple-50 p-3 rounded-full text-purple-600"><Star size={24}/></div>
-           </div>
-       </div>
-
-       {/* Toolbar */}
-       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-           <div className="flex items-center gap-2 w-full md:w-auto">
-               <div className="relative w-full md:w-64">
-                   <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                   <input 
-                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-pink-500"
-                        placeholder="Buscar cliente..."
-                        value={searchTerm}
+    <div className="space-y-6 h-full flex flex-col overflow-hidden">
+        {/* HEADER / FILTERS */}
+        <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4 shrink-0">
+            <div className="flex items-center gap-4 flex-1 min-w-[300px]">
+                <div className="relative flex-1">
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                    <input 
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-transparent focus:bg-white focus:border-pink-200 rounded-xl text-sm font-bold outline-none transition-all" 
+                        placeholder="Buscar cliente por nome ou razão social..." 
+                        value={searchTerm} 
                         onChange={e => setSearchTerm(e.target.value)}
-                   />
-               </div>
-               <div className="flex bg-slate-100 p-1 rounded-lg">
-                   <button onClick={() => setFilterType('ALL')} className={`px-3 py-1.5 text-xs font-bold rounded ${filterType === 'ALL' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Todos</button>
-                   <button onClick={() => setFilterType('RECURRING')} className={`px-3 py-1.5 text-xs font-bold rounded ${filterType === 'RECURRING' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Recorrentes</button>
-                   <button onClick={() => setFilterType('ONEOFF')} className={`px-3 py-1.5 text-xs font-bold rounded ${filterType === 'ONEOFF' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Pontuais</button>
-               </div>
-           </div>
-           <button onClick={handleCreateNew} className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-lg shadow-pink-500/20 w-full md:w-auto justify-center">
-             <Plus size={18} /> Novo Cliente
-           </button>
-       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredClients.map(client => {
-              const assignedSquad = squads.find(s => s.id === client.squadId);
-              // Count Accesses
-              const accessCount = users.filter(u => u.clientId === client.id).length;
-
-              return (
-                <div key={client.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition-all flex flex-col ${client.status === 'INACTIVE' ? 'opacity-60 border-slate-200' : 'border-slate-200'}`}>
-                    <div className="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
-                        <div className="flex items-start gap-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg ${client.isRecurring ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                                {client.name.charAt(0)}
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-slate-800 leading-tight">{client.name}</h3>
-                                <p className="text-xs text-slate-500 mt-0.5">{client.legalName}</p>
-                            </div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getLevelColor(client.level)}`}>
-                            {client.level}
-                        </span>
-                    </div>
-
-                    <div className="p-4 space-y-4 flex-1">
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-slate-500 flex items-center gap-1"><DollarSign size={14}/> Valor Mensal</span>
-                            <span className="font-bold text-slate-800">R$ {client.monthlyValue ? client.monthlyValue.toLocaleString() : '0,00'}</span>
-                        </div>
-                        
-                         {assignedSquad ? (
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500 flex items-center gap-1"><Shield size={14}/> Squad</span>
-                                <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-medium text-slate-700">{assignedSquad.name}</span>
-                            </div>
-                        ) : (
-                             <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500 flex items-center gap-1"><Shield size={14}/> Squad</span>
-                                <span className="bg-red-50 px-2 py-0.5 rounded text-xs font-medium text-red-500 border border-red-100 flex items-center gap-1"><AlertCircle size={10}/> Não definida</span>
-                            </div>
-                        )}
-
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-slate-500 flex items-center gap-1"><Users size={14}/> Acessos Ativos</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${accessCount > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
-                                {accessCount}
-                            </span>
-                        </div>
-                        
-                        {/* Contracted Services Tags */}
-                        {client.serviceIds && client.serviceIds.length > 0 && (
-                            <div>
-                                <p className="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1"><ShoppingBag size={10}/> Serviços</p>
-                                <div className="flex flex-wrap gap-1">
-                                    {client.serviceIds.map(sid => {
-                                        const svc = services.find(s => s.id === sid);
-                                        return svc ? (
-                                            <span key={sid} className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100">
-                                                {svc.name}
-                                            </span>
-                                        ) : null;
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {client.summary && (
-                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                <p className="text-xs text-slate-600 italic line-clamp-3">
-                                    "{client.summary}"
-                                </p>
-                            </div>
-                        )}
-
-                        <div className="flex gap-2 text-xs pt-2">
-                            {client.contractUrl ? (
-                                <a href={client.contractUrl} target="_blank" className="flex-1 flex items-center justify-center gap-1 bg-blue-50 text-blue-600 py-1.5 rounded hover:bg-blue-100 transition-colors">
-                                    <FileText size={14}/> Contrato
-                                </a>
-                            ) : (
-                                <span className="flex-1 flex items-center justify-center gap-1 bg-slate-50 text-slate-300 py-1.5 rounded cursor-not-allowed"><FileText size={14}/> Sem Contrato</span>
-                            )}
-                            {client.assetsFolderUrl ? (
-                                <a href={client.assetsFolderUrl} target="_blank" className="flex-1 flex items-center justify-center gap-1 bg-amber-50 text-amber-600 py-1.5 rounded hover:bg-amber-100 transition-colors">
-                                    <Folder size={14}/> Materiais
-                                </a>
-                            ) : (
-                                <span className="flex-1 flex items-center justify-center gap-1 bg-slate-50 text-slate-300 py-1.5 rounded cursor-not-allowed"><Folder size={14}/> Sem Pasta</span>
-                            )}
-                        </div>
-                    </div>
-                    
-                    <div className="p-3 border-t border-slate-100 flex justify-between items-center bg-slate-50/50">
-                        <div className="flex -space-x-2">
-                             {client.contacts.slice(0, 3).map((c, i) => (
-                                 <div key={i} className="w-6 h-6 rounded-full bg-slate-200 border border-white flex items-center justify-center text-[10px] text-slate-600" title={c.name}>
-                                     {c.name.charAt(0)}
-                                 </div>
-                             ))}
-                             {client.contacts.length === 0 && <span className="text-xs text-slate-400 italic">Sem contatos</span>}
-                        </div>
-                        <button onClick={() => { setEditingClient(client); setIsModalOpen(true)}} className="text-slate-400 hover:text-blue-600 p-1 hover:bg-white rounded transition-colors"><Edit2 size={16}/></button>
-                    </div>
-                </div>
-              );
-          })}
-      </div>
-
-      {isModalOpen && (
-        <div 
-            className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm p-4"
-            onClick={() => setIsModalOpen(false)}
-        >
-            <div 
-                className="bg-white rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-pop"
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
-                    <div className="w-full mr-8">
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Nome do Cliente <span className="text-red-500">*</span></label>
-                        <input 
-                            className="text-2xl font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-pink-500 w-full"
-                            placeholder="Digite o nome da empresa..."
-                            value={editingClient.name || ''}
-                            onChange={e => setEditingClient({...editingClient, name: e.target.value})}
-                            autoFocus
-                        />
-                        <div className="flex items-center gap-4 mt-3">
-                             <select 
-                                className="bg-white border border-slate-300 text-xs rounded px-2 py-1 outline-none"
-                                value={editingClient.status}
-                                onChange={e => setEditingClient({...editingClient, status: e.target.value as any})}
-                             >
-                                 <option value="ACTIVE">Ativo</option>
-                                 <option value="INACTIVE">Inativo</option>
-                                 <option value="CHURNED">Churn (Cancelado)</option>
-                             </select>
-                             <div className="flex items-center gap-2">
-                                <input type="checkbox" id="isRec" checked={editingClient.isRecurring} onChange={e => setEditingClient({...editingClient, isRecurring: e.target.checked})} className="rounded text-pink-600 focus:ring-pink-500" />
-                                <label htmlFor="isRec" className="text-sm text-slate-600">Cliente Recorrente</label>
-                            </div>
-                        </div>
-                    </div>
-                    <button onClick={() => setIsModalOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
-                </div>
-
-                <div className="flex border-b border-slate-200">
-                    <button 
-                        onClick={() => setActiveTab('GENERAL')}
-                        className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'GENERAL' ? 'border-pink-600 text-pink-600 bg-pink-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Visão Geral
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('CONTRACT')}
-                        className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'CONTRACT' ? 'border-pink-600 text-pink-600 bg-pink-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Contrato & Financeiro
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('CONTACTS')}
-                        className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'CONTACTS' ? 'border-pink-600 text-pink-600 bg-pink-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Contatos ({editingClient.contacts?.length || 0})
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('ACCESS')}
-                        className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'ACCESS' ? 'border-pink-600 text-pink-600 bg-pink-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Acessos do Portal ({linkedUsers.length})
-                    </button>
-                </div>
-                
-                <div className="p-8 overflow-y-auto flex-1 bg-slate-50/30">
-                    
-                    {activeTab === 'GENERAL' && (
-                        <div className="space-y-6 max-w-2xl">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Razão Social</label>
-                                    <input className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" value={editingClient.legalName || ''} onChange={e => setEditingClient({...editingClient, legalName: e.target.value})} placeholder="Nome Legal da Empresa" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nível de Maturidade</label>
-                                    <select className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" value={editingClient.level} onChange={e => setEditingClient({...editingClient, level: e.target.value as any})}>
-                                        <option value="BASIC">Básico (Start)</option>
-                                        <option value="INTERMEDIATE">Intermediário (Growth)</option>
-                                        <option value="ADVANCED">Avançado (Scale)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Squad Responsável <span className="text-red-500">*</span></label>
-                                    <select 
-                                        className={`w-full border rounded-lg p-2.5 text-sm ${!editingClient.squadId ? 'border-red-300 bg-red-50' : 'border-slate-300'}`}
-                                        value={editingClient.squadId || ''}
-                                        onChange={e => setEditingClient({...editingClient, squadId: e.target.value})}
-                                    >
-                                        <option value="">Selecione...</option>
-                                        {squads.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                    {!editingClient.squadId && <p className="text-[10px] text-red-500 mt-1">Obrigatório para gestão de tarefas</p>}
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Resumo do Cliente</label>
-                                    <textarea 
-                                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm h-32 resize-none focus:ring-2 focus:ring-blue-100 outline-none" 
-                                        placeholder="Descreva o negócio do cliente, objetivos e informações chave..."
-                                        value={editingClient.summary || ''} 
-                                        onChange={e => setEditingClient({...editingClient, summary: e.target.value})} 
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'CONTRACT' && (
-                        <div className="space-y-6 max-w-2xl">
-                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Mensal (R$)</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700"
-                                        value={editingClient.monthlyValue || ''}
-                                        onChange={e => setEditingClient({...editingClient, monthlyValue: parseFloat(e.target.value)})}
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Início do Contrato</label>
-                                    <input 
-                                        type="date"
-                                        className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
-                                        value={editingClient.contractStartDate || ''}
-                                        onChange={e => setEditingClient({...editingClient, contractStartDate: e.target.value})}
-                                    />
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Link do Contrato (Drive/Doc)</label>
-                                    <div className="flex gap-2">
-                                        <input className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" value={editingClient.contractUrl || ''} onChange={e => setEditingClient({...editingClient, contractUrl: e.target.value})} placeholder="https://..." />
-                                        {editingClient.contractUrl && (
-                                            <a href={editingClient.contractUrl} target="_blank" className="p-2.5 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 hover:bg-blue-100"><ExternalLink size={18}/></a>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Link Pasta de Materiais</label>
-                                    <div className="flex gap-2">
-                                        <input className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" value={editingClient.assetsFolderUrl || ''} onChange={e => setEditingClient({...editingClient, assetsFolderUrl: e.target.value})} placeholder="https://..." />
-                                        {editingClient.assetsFolderUrl && (
-                                            <a href={editingClient.assetsFolderUrl} target="_blank" className="p-2.5 bg-amber-50 text-amber-600 rounded-lg border border-amber-100 hover:bg-amber-100"><Folder size={18}/></a>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {/* Service Selection */}
-                            <div>
-                                <h4 className="font-bold text-slate-700 mb-2 border-t pt-4 border-slate-200">Serviços Contratados</h4>
-                                <div className="bg-white border border-slate-200 rounded-lg p-4 max-h-48 overflow-y-auto">
-                                    {services.length === 0 && <p className="text-xs text-slate-400">Nenhum serviço cadastrado no catálogo.</p>}
-                                    {services.map(svc => (
-                                        <label key={svc.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded cursor-pointer transition-colors">
-                                            <input 
-                                                type="checkbox"
-                                                className="rounded text-pink-600 focus:ring-pink-500"
-                                                checked={editingClient.serviceIds?.includes(svc.id) || false}
-                                                onChange={() => toggleService(svc.id)}
-                                            />
-                                            <div className="flex-1">
-                                                <p className="text-sm font-medium text-slate-700">{svc.name}</p>
-                                                <p className="text-xs text-slate-400 truncate">{svc.description}</p>
-                                            </div>
-                                            <span className="text-xs font-bold text-slate-600">R$ {svc.basePrice}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'CONTACTS' && (
-                        <div>
-                            <div className="flex justify-between items-center mb-4">
-                                <h4 className="font-bold text-slate-700">Pessoas Chave</h4>
-                                <button onClick={addContact} className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
-                                    <Plus size={16}/> Adicionar Contato
-                                </button>
-                            </div>
-                            
-                            {editingClient.contacts?.length === 0 && (
-                                <div className="text-center p-8 border-2 border-dashed border-slate-200 rounded-xl text-slate-400">
-                                    Nenhum contato cadastrado.
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {editingClient.contacts?.map((contact, idx) => (
-                                    <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group">
-                                        <button onClick={() => removeContact(idx)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Trash2 size={16}/>
-                                        </button>
-                                        <div className="space-y-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold border border-slate-200">
-                                                    {contact.name ? contact.name.charAt(0) : '?'}
-                                                </div>
-                                                <input 
-                                                    className="font-bold text-sm text-slate-800 border-b border-transparent focus:border-blue-300 outline-none w-full"
-                                                    placeholder="Nome Completo"
-                                                    value={contact.name} 
-                                                    onChange={e => updateContact(idx, 'name', e.target.value)} 
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <input className="border border-slate-200 rounded p-1.5 text-xs w-full" placeholder="Cargo (Ex: CEO)" value={contact.role} onChange={e => updateContact(idx, 'role', e.target.value)} />
-                                                <div className="flex items-center gap-2">
-                                                    <Mail size={14} className="text-slate-400"/>
-                                                    <input className="border border-slate-200 rounded p-1.5 text-xs w-full" placeholder="Email" value={contact.email} onChange={e => updateContact(idx, 'email', e.target.value)} />
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Phone size={14} className="text-slate-400"/>
-                                                    <input className="border border-slate-200 rounded p-1.5 text-xs w-full" placeholder="Telefone" value={contact.phone} onChange={e => updateContact(idx, 'phone', e.target.value)} />
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar size={14} className="text-slate-400"/>
-                                                    <input type="date" className="border border-slate-200 rounded p-1.5 text-xs w-full text-slate-500" value={contact.birthDate || ''} onChange={e => updateContact(idx, 'birthDate', e.target.value)} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'ACCESS' && (
-                        <div>
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h4 className="font-bold text-slate-700">Acessos do Portal</h4>
-                                    <p className="text-xs text-slate-500">Crie logins para que membros da equipe do cliente acessem o portal.</p>
-                                </div>
-                            </div>
-                            
-                            {/* Lista de Acessos Existentes */}
-                            <div className="space-y-3 mb-8">
-                                {linkedUsers.length === 0 && (
-                                    <div className="p-4 bg-slate-100 rounded-lg text-center text-sm text-slate-500 border border-slate-200 border-dashed">
-                                        Nenhum acesso criado para este cliente.
-                                    </div>
-                                )}
-                                {linkedUsers.map(u => (
-                                    <div key={u.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
-                                        <div className="flex items-center gap-3">
-                                            <img src={u.avatar} className="w-10 h-10 rounded-full bg-slate-100" />
-                                            <div>
-                                                <p className="font-bold text-sm text-slate-800">{u.name}</p>
-                                                <p className="text-xs text-slate-500">{u.email}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-right">
-                                                <p className="text-[10px] uppercase font-bold text-slate-400">Senha</p>
-                                                <p className="text-xs font-mono bg-slate-100 px-1 rounded">{u.password}</p>
-                                            </div>
-                                            <button 
-                                                onClick={() => handleDeleteUserLogin(u.id)}
-                                                className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 rounded transition-colors"
-                                                title="Remover acesso"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Formulário de Novo Acesso */}
-                            {editingClient.id ? (
-                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                                    <h5 className="font-bold text-sm text-slate-700 mb-4 flex items-center gap-2">
-                                        <Key size={16} className="text-pink-600"/>
-                                        Novo Acesso
-                                    </h5>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        <input 
-                                            className="border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-pink-500"
-                                            placeholder="Nome do Usuário"
-                                            value={newUserLogin.name}
-                                            onChange={e => setNewUserLogin({...newUserLogin, name: e.target.value})}
-                                        />
-                                        <input 
-                                            className="border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-pink-500"
-                                            placeholder="Email de Login"
-                                            value={newUserLogin.email}
-                                            onChange={e => setNewUserLogin({...newUserLogin, email: e.target.value})}
-                                        />
-                                        <div className="flex gap-2">
-                                            <input 
-                                                className="flex-1 border border-slate-200 rounded-lg p-2 text-sm outline-none focus:border-pink-500"
-                                                placeholder="Senha"
-                                                value={newUserLogin.password}
-                                                onChange={e => setNewUserLogin({...newUserLogin, password: e.target.value})}
-                                            />
-                                            <button 
-                                                type="button"
-                                                onClick={handleAddUserLogin}
-                                                className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-900 transition-colors"
-                                            >
-                                                Criar
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="p-4 bg-amber-50 text-amber-700 text-sm rounded-lg border border-amber-200 flex items-center gap-2">
-                                    <Lock size={16} />
-                                    Salve o cliente antes de criar acessos ao portal.
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-white">
-                    <button onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 text-slate-500 hover:bg-slate-100 rounded-lg font-medium transition-colors">Cancelar</button>
-                    <button onClick={handleSave} className="px-8 py-2.5 bg-pink-600 text-white font-bold rounded-lg hover:bg-pink-700 shadow-md shadow-pink-500/20 transition-colors">Salvar Cliente</button>
+                    />
                 </div>
             </div>
+            <button 
+                onClick={() => { 
+                    setEditingClient({ status: 'ACTIVE', level: 'BASIC', isRecurring: true, systemAccesses: [] }); 
+                    setActiveTab('GENERAL');
+                    setIsModalOpen(true); 
+                }} 
+                className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
+            >
+                <Plus size={18} strokeWidth={3} /> Novo Cliente
+            </button>
         </div>
-      )}
+
+        {/* CLIENT GRID */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredClients.map(client => (
+                    <div 
+                        key={client.id} 
+                        onClick={() => { setViewingClient(client); setActiveViewTab('SUMMARY'); }}
+                        className="bg-white rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:border-pink-100 transition-all cursor-pointer group flex flex-col overflow-hidden"
+                    >
+                        <div className="p-6 flex-1">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                    client.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                    client.status === 'LEAD' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                    'bg-slate-50 text-slate-500 border border-slate-100'
+                                }`}>
+                                    {client.status}
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setEditingClient({ ...client, systemAccesses: client.systemAccesses || [] }); setActiveTab('GENERAL'); setIsModalOpen(true); }} 
+                                        className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
+                                    >
+                                        <Edit2 size={14}/>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <h3 className="font-black text-slate-800 text-lg leading-tight mb-1 group-hover:text-pink-600 transition-colors">{client.name}</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">{client.legalName || 'Razão Social não inf.'}</p>
+                            
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <UserCheck size={14} className="text-slate-300"/>
+                                    <span className="text-[11px] font-bold">{users.find(u => u.id === client.responsibleId)?.name || 'Sem responsável'}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <Users size={14} className="text-slate-300"/>
+                                    <span className="text-[11px] font-bold">{squads.find(s => s.id === client.squadId)?.name || 'Sem squad'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                            <div className="flex -space-x-2">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-black text-slate-500">
+                                        {i}
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-1 text-pink-600 font-black text-xs">
+                                <span className="text-[10px] text-slate-400">R$</span>
+                                {client.monthlyValue?.toLocaleString() || '0'}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+
+        {/* REGISTRATION MODAL */}
+        {isModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 transition-all duration-300" onClick={() => setIsModalOpen(false)}>
+                <div className="bg-white rounded-[32px] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-pop border border-slate-100" onClick={e => e.stopPropagation()}>
+                    <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-pink-600 text-white rounded-2xl shadow-lg shadow-pink-200">
+                                <Building2 size={20}/>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tighter leading-none">
+                                    {editingClient.id ? 'Editar Cliente' : 'Novo Cliente'}
+                                </h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Preencha os dados do parceiro</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-100 rounded-full transition-colors"><X size={24}/></button>
+                    </div>
+
+                    <div className="flex flex-1 overflow-hidden">
+                        {/* SIDE TABS */}
+                        <div className="w-48 bg-slate-50 border-r border-slate-100 p-4 space-y-2 shrink-0">
+                            <button onClick={() => setActiveTab('GENERAL')} className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'GENERAL' ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:bg-white/50'}`}>
+                                <Info size={16}/> Dados Gerais
+                            </button>
+                            <button onClick={() => setActiveTab('CONTACTS')} className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'CONTACTS' ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:bg-white/50'}`}>
+                                <Phone size={16}/> Contatos
+                            </button>
+                            <button onClick={() => setActiveTab('SERVICES')} className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'SERVICES' ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:bg-white/50'}`}>
+                                <ShoppingBag size={16}/> Serviços
+                            </button>
+                            <button onClick={() => setActiveTab('PASSWORDS')} className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'PASSWORDS' ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:bg-white/50'}`}>
+                                <Key size={16}/> Senhas
+                            </button>
+                            <button onClick={() => setActiveTab('DOCS')} className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'DOCS' ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:bg-white/50'}`}>
+                                <Folder size={16}/> Docs
+                            </button>
+                            <button onClick={() => setActiveTab('INTERNAL')} className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'INTERNAL' ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:bg-white/50'}`}>
+                                <Shield size={16}/> Acessos / Interno
+                            </button>
+                        </div>
+
+                        {/* CONTENT AREA */}
+                        <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                            {activeTab === 'GENERAL' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="col-span-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Nome / Empresa</label>
+                                            <input className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all" placeholder="Ex: Agência Chan OS" value={editingClient.name || ''} onChange={e => setEditingClient({...editingClient, name: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Razão Social</label>
+                                            <input className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all" placeholder="Razão Social completa" value={editingClient.legalName || ''} onChange={e => setEditingClient({...editingClient, legalName: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">CNPJ / CPF</label>
+                                            <input className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all" placeholder="00.000.000/0001-00" value={editingClient.document || ''} onChange={e => setEditingClient({...editingClient, document: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Status</label>
+                                            <select className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all appearance-none" value={editingClient.status} onChange={e => setEditingClient({...editingClient, status: e.target.value as any})}>
+                                                <option value="LEAD">Lead</option>
+                                                <option value="ACTIVE">Ativo</option>
+                                                <option value="INACTIVE">Inativo</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Data de Entrada</label>
+                                            <input type="date" className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all" value={editingClient.entryDate || ''} onChange={e => setEditingClient({...editingClient, entryDate: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Responsável Interno</label>
+                                            <select className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all appearance-none" value={editingClient.responsibleId || ''} onChange={e => setEditingClient({...editingClient, responsibleId: e.target.value})}>
+                                                <option value="">Selecione...</option>
+                                                {users.filter(u => u.role !== 'CLIENT').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Squad</label>
+                                            <select className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all appearance-none" value={editingClient.squadId || ''} onChange={e => setEditingClient({...editingClient, squadId: e.target.value})}>
+                                                <option value="">Selecione...</option>
+                                                {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Valor Mensal (Fee)</label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">R$</span>
+                                                <input 
+                                                    type="number" 
+                                                    className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl pl-10 pr-4 py-4 text-sm font-bold outline-none transition-all" 
+                                                    placeholder="0,00" 
+                                                    value={editingClient.monthlyValue || ''} 
+                                                    onChange={e => setEditingClient({...editingClient, monthlyValue: parseFloat(e.target.value)})} 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {activeTab === 'CONTACTS' && (
+                                <div className="space-y-8">
+                                    <div className="bg-slate-50 p-6 rounded-[24px] border border-slate-100">
+                                        <h4 className="text-[10px] font-black text-pink-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><Phone size={14}/> Contato Principal</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="col-span-2">
+                                                <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Nome do Contato" value={editingClient.contact?.name || ''} onChange={e => setEditingClient({...editingClient, contact: {...(editingClient.contact || {name:'', email:'', phone:'', whatsapp:''}), name: e.target.value}})} />
+                                            </div>
+                                            <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Email" value={editingClient.contact?.email || ''} onChange={e => setEditingClient({...editingClient, contact: {...(editingClient.contact || {name:'', email:'', phone:'', whatsapp:''}), email: e.target.value}})} />
+                                            <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Telefone" value={editingClient.contact?.phone || ''} onChange={e => setEditingClient({...editingClient, contact: {...(editingClient.contact || {name:'', email:'', phone:'', whatsapp:''}), phone: e.target.value}})} />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-50 p-6 rounded-[24px] border border-slate-100">
+                                        <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2"><CreditCard size={14}/> Contato Financeiro</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="col-span-2">
+                                                <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Nome do Contato Financeiro" value={editingClient.financialContact?.name || ''} onChange={e => setEditingClient({...editingClient, financialContact: {...(editingClient.financialContact || {name:'', email:'', phone:''}), name: e.target.value}})} />
+                                            </div>
+                                            <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Email Financeiro" value={editingClient.financialContact?.email || ''} onChange={e => setEditingClient({...editingClient, financialContact: {...(editingClient.financialContact || {name:'', email:'', phone:''}), email: e.target.value}})} />
+                                            <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Telefone / WhatsApp" value={editingClient.financialContact?.phone || ''} onChange={e => setEditingClient({...editingClient, financialContact: {...(editingClient.financialContact || {name:'', email:'', phone:''}), phone: e.target.value}})} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'SERVICES' && (
+                                <div className="space-y-6">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Serviços Contratados</h4>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {services.map(service => (
+                                            <button
+                                                key={service.id}
+                                                onClick={() => {
+                                                    const currentIds = editingClient.serviceIds || [];
+                                                    const newIds = currentIds.includes(service.id)
+                                                        ? currentIds.filter(id => id !== service.id)
+                                                        : [...currentIds, service.id];
+                                                    setEditingClient({ ...editingClient, serviceIds: newIds });
+                                                }}
+                                                className={`p-4 rounded-2xl border-2 text-left transition-all flex items-center justify-between ${
+                                                    (editingClient.serviceIds || []).includes(service.id)
+                                                        ? 'border-pink-200 bg-pink-50/50'
+                                                        : 'border-slate-100 hover:border-slate-200'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                                        (editingClient.serviceIds || []).includes(service.id) ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400'
+                                                    }`}>
+                                                        <ShoppingBag size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-black text-slate-800">{service.name}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{service.category}</p>
+                                                    </div>
+                                                </div>
+                                                {(editingClient.serviceIds || []).includes(service.id) && (
+                                                    <div className="w-6 h-6 bg-pink-600 text-white rounded-full flex items-center justify-center">
+                                                        <Check size={14} strokeWidth={3} />
+                                                    </div>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'PASSWORDS' && (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Banco de Senhas</h4>
+                                        <button 
+                                            onClick={() => setEditingClient({...editingClient, passwords: [...(editingClient.passwords || []), { id: Date.now().toString(), platform: '', login: '', password: '', link: '', observations: '' }]})}
+                                            className="text-[10px] font-black text-pink-600 uppercase tracking-widest hover:bg-pink-50 px-3 py-1.5 rounded-lg transition-all"
+                                        >
+                                            + Adicionar Plataforma
+                                        </button>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {(editingClient.passwords || []).map((p, idx) => (
+                                            <div key={p.id} className="bg-slate-50 p-6 rounded-[24px] border border-slate-100 relative group">
+                                                <button 
+                                                    onClick={() => setEditingClient({...editingClient, passwords: editingClient.passwords?.filter(x => x.id !== p.id)})}
+                                                    className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                                >
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="col-span-2">
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block ml-1">Plataforma</label>
+                                                        <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Ex: Facebook Ads" value={p.platform} onChange={e => {
+                                                            const newPass = [...(editingClient.passwords || [])];
+                                                            newPass[idx].platform = e.target.value;
+                                                            setEditingClient({...editingClient, passwords: newPass});
+                                                        }} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block ml-1">Login / Usuário</label>
+                                                        <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Login" value={p.login} onChange={e => {
+                                                            const newPass = [...(editingClient.passwords || [])];
+                                                            newPass[idx].login = e.target.value;
+                                                            setEditingClient({...editingClient, passwords: newPass});
+                                                        }} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block ml-1">Senha</label>
+                                                        <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" placeholder="Senha" value={p.password} onChange={e => {
+                                                            const newPass = [...(editingClient.passwords || [])];
+                                                            newPass[idx].password = e.target.value;
+                                                            setEditingClient({...editingClient, passwords: newPass});
+                                                        }} />
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block ml-1">Link da Plataforma</label>
+                                                        <div className="relative">
+                                                            <Link size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300"/>
+                                                            <input className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl pl-10 pr-3 py-3 text-sm font-bold outline-none transition-all" placeholder="https://..." value={p.link || ''} onChange={e => {
+                                                                const newPass = [...(editingClient.passwords || [])];
+                                                                newPass[idx].link = e.target.value;
+                                                                setEditingClient({...editingClient, passwords: newPass});
+                                                            }} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block ml-1">Observações</label>
+                                                        <textarea className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all h-20 resize-none" placeholder="Detalhes adicionais..." value={p.observations || ''} onChange={e => {
+                                                            const newPass = [...(editingClient.passwords || [])];
+                                                            newPass[idx].observations = e.target.value;
+                                                            setEditingClient({...editingClient, passwords: newPass});
+                                                        }} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'DOCS' && (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Documentação</h4>
+                                        <button 
+                                            onClick={() => setEditingClient({...editingClient, documentationLinks: [...(editingClient.documentationLinks || []), '']})}
+                                            className="text-[10px] font-black text-pink-600 uppercase tracking-widest hover:bg-pink-50 px-3 py-1.5 rounded-lg transition-all"
+                                        >
+                                            + Adicionar Link
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {(editingClient.documentationLinks || []).map((link, idx) => (
+                                            <div key={idx} className="flex gap-2">
+                                                <div className="flex-1 relative">
+                                                    <Globe size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                                    <input className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-xl pl-11 pr-4 py-3 text-sm font-bold outline-none transition-all" placeholder="Link do Google Drive / Notion / etc" value={link} onChange={e => {
+                                                        const newLinks = [...(editingClient.documentationLinks || [])];
+                                                        newLinks[idx] = e.target.value;
+                                                        setEditingClient({...editingClient, documentationLinks: newLinks});
+                                                    }} />
+                                                </div>
+                                                <button 
+                                                    onClick={() => setEditingClient({...editingClient, documentationLinks: editingClient.documentationLinks?.filter((_, i) => i !== idx)})}
+                                                    className="p-3 text-slate-300 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 size={18}/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'INTERNAL' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Classificação</label>
+                                            <div className="flex gap-2">
+                                                {['A', 'B', 'C'].map(c => (
+                                                    <button 
+                                                        key={c}
+                                                        onClick={() => setEditingClient({...editingClient, classification: c as any})}
+                                                        className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${editingClient.classification === c ? 'bg-pink-600 text-white shadow-lg shadow-pink-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                                    >
+                                                        {c}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Tags (Separadas por vírgula)</label>
+                                            <input className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all" placeholder="SaaS, B2B, High Ticket..." value={editingClient.tags?.join(', ') || ''} onChange={e => setEditingClient({...editingClient, tags: e.target.value.split(',').map(t => t.trim())})} />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Observações Internas</label>
+                                            <textarea className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-pink-200 rounded-2xl p-4 text-sm font-bold outline-none transition-all h-32 resize-none" placeholder="Notas estratégicas sobre o cliente..." value={editingClient.internalNotes || ''} onChange={e => setEditingClient({...editingClient, internalNotes: e.target.value})} />
+                                        </div>
+                                    </div>
+
+                                    {canManageAccess && (
+                                        <div className="pt-6 border-t border-slate-100">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Shield size={14} className="text-pink-600"/> Acessos ao Sistema</h4>
+                                                <button 
+                                                    onClick={() => {
+                                                        const newAccess = { id: Math.random().toString(36).substring(2, 9), username: '', email: '', password: '', label: '' };
+                                                        setEditingClient({
+                                                            ...editingClient,
+                                                            systemAccesses: [...(editingClient.systemAccesses || []), newAccess]
+                                                        });
+                                                    }}
+                                                    className="text-[10px] font-black text-pink-600 uppercase tracking-widest flex items-center gap-1 hover:text-pink-700 transition-colors"
+                                                >
+                                                    <Plus size={12} strokeWidth={3}/> Adicionar Acesso
+                                                </button>
+                                            </div>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-6">Gerencie aqui os usuários que o cliente utilizará para acessar o sistema da agência.</p>
+                                            
+                                            <div className="space-y-4">
+                                                {(editingClient.systemAccesses || []).map((access, index) => (
+                                                    <div key={access.id} className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 relative group">
+                                                        <button 
+                                                            onClick={() => {
+                                                                const newAccesses = editingClient.systemAccesses?.filter(a => a.id !== access.id);
+                                                                setEditingClient({ ...editingClient, systemAccesses: newAccesses });
+                                                            }}
+                                                            className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <Trash2 size={14}/>
+                                                        </button>
+                                                        
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="col-span-2">
+                                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Identificação (Ex: Admin, Financeiro...)</label>
+                                                                <input 
+                                                                    className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" 
+                                                                    placeholder="Nome do Acesso" 
+                                                                    value={access.label || ''} 
+                                                                    onChange={e => {
+                                                                        const newAccesses = [...(editingClient.systemAccesses || [])];
+                                                                        newAccesses[index] = { ...access, label: e.target.value };
+                                                                        setEditingClient({ ...editingClient, systemAccesses: newAccesses });
+                                                                    }} 
+                                                                />
+                                                            </div>
+                                                            <input 
+                                                                className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" 
+                                                                placeholder="Usuário / Login" 
+                                                                value={access.username || ''} 
+                                                                onChange={e => {
+                                                                    const newAccesses = [...(editingClient.systemAccesses || [])];
+                                                                    newAccesses[index] = { ...access, username: e.target.value };
+                                                                    setEditingClient({ ...editingClient, systemAccesses: newAccesses });
+                                                                }} 
+                                                            />
+                                                            <input 
+                                                                className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" 
+                                                                placeholder="Email de Acesso" 
+                                                                value={access.email || ''} 
+                                                                onChange={e => {
+                                                                    const newAccesses = [...(editingClient.systemAccesses || [])];
+                                                                    newAccesses[index] = { ...access, email: e.target.value };
+                                                                    setEditingClient({ ...editingClient, systemAccesses: newAccesses });
+                                                                }} 
+                                                            />
+                                                            <div className="col-span-2">
+                                                                <input 
+                                                                    className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all" 
+                                                                    placeholder="Senha de Acesso" 
+                                                                    type="text" 
+                                                                    value={access.password || ''} 
+                                                                    onChange={e => {
+                                                                        const newAccesses = [...(editingClient.systemAccesses || [])];
+                                                                        newAccesses[index] = { ...access, password: e.target.value };
+                                                                        setEditingClient({ ...editingClient, systemAccesses: newAccesses });
+                                                                    }} 
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {(editingClient.systemAccesses || []).length === 0 && (
+                                                    <div className="p-10 text-center border-2 border-dashed border-slate-100 rounded-[32px]">
+                                                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhum acesso configurado</p>
+                                                    </div>
+                                                )}
+                                                {(editingClient.systemAccesses || []).length > 0 && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            const newAccess = { id: Math.random().toString(36).substring(2, 9), username: '', email: '', password: '', label: '' };
+                                                            setEditingClient({
+                                                                ...editingClient,
+                                                                systemAccesses: [...(editingClient.systemAccesses || []), newAccess]
+                                                            });
+                                                        }}
+                                                        className="w-full py-4 border-2 border-dashed border-slate-100 rounded-[32px] text-slate-400 hover:border-pink-200 hover:text-pink-600 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                                                    >
+                                                        <Plus size={16}/> Adicionar Outro Acesso
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="p-6 border-t border-slate-50 flex justify-end gap-3 bg-slate-50 shrink-0">
+                        <button onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600 transition-colors">Cancelar</button>
+                        <button onClick={handleSave} className="bg-pink-600 hover:bg-pink-700 text-white px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-pink-200 transition-all active:scale-95 flex items-center gap-2">
+                            <Check size={18} strokeWidth={3}/> Salvar Cliente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* 360 VIEW MODAL */}
+        {viewingClient && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[99999] flex items-center justify-center p-2 md:p-6 transition-all duration-300" onClick={() => setViewingClient(null)}>
+                <div className="bg-white rounded-[40px] w-full max-w-6xl h-full max-h-[95vh] flex flex-col shadow-2xl overflow-hidden animate-pop border border-slate-100" onClick={e => e.stopPropagation()}>
+                    {/* 360 HEADER */}
+                    <div className="p-8 bg-slate-900 text-white shrink-0 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-pink-600/20 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                            <div className="flex items-center gap-6">
+                                <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-[28px] flex items-center justify-center text-3xl font-black border border-white/20">
+                                    {viewingClient.name.charAt(0)}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <h2 className="text-3xl font-black tracking-tighter">{viewingClient.name}</h2>
+                                        <span className="px-3 py-1 bg-pink-600 rounded-full text-[10px] font-black uppercase tracking-widest">Classe {viewingClient.classification || 'C'}</span>
+                                    </div>
+                                    <p className="text-slate-400 text-sm font-medium flex items-center gap-2">
+                                        <Building2 size={14}/> {viewingClient.legalName || 'Razão Social não informada'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => { 
+                                    setViewingClient(null);
+                                    setEditingClient({ ...viewingClient, systemAccesses: viewingClient.systemAccesses || [] }); 
+                                    setActiveTab('GENERAL'); 
+                                    setIsModalOpen(true); 
+                                }} className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all backdrop-blur-md border border-white/10">Editar Cadastro</button>
+                                <button onClick={() => setViewingClient(null)} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all backdrop-blur-md border border-white/10"><X size={20}/></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 360 TABS */}
+                    <div className="flex border-b border-slate-100 px-8 bg-white shrink-0 overflow-x-auto hide-scrollbar">
+                        {[
+                            { id: 'SUMMARY', label: 'Resumo', icon: LayoutDashboard },
+                            { id: 'SERVICES', label: 'Serviços', icon: ShoppingBag },
+                            { id: 'REQUISITIONS', label: 'Solicitações', icon: ShoppingBag },
+                            { id: 'TASKS', label: 'Tarefas', icon: ClipboardList },
+                            { id: 'HISTORY', label: 'Histórico', icon: History },
+                            { id: 'FILES', label: 'Arquivos', icon: HardDrive },
+                            { id: 'PASSWORDS', label: 'Senhas', icon: Key },
+                        ].map(tab => (
+                            <button 
+                                key={tab.id}
+                                onClick={() => setActiveViewTab(tab.id as any)}
+                                className={`px-6 py-5 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${activeViewTab === tab.id ? 'text-pink-600 border-pink-600' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
+                            >
+                                <tab.icon size={16}/> {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* 360 CONTENT */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-8 bg-slate-50/30">
+                        {activeViewTab === 'SUMMARY' && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="md:col-span-2 space-y-8">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Contato Principal</p>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-pink-50 text-pink-600 rounded-xl flex items-center justify-center"><UserIcon size={14}/></div>
+                                                    <span className="text-sm font-bold text-slate-700">{viewingClient.contact?.name || 'Não inf.'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><Mail size={14}/></div>
+                                                    <span className="text-sm font-bold text-slate-700">{viewingClient.contact?.email || 'Não inf.'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><MessageSquare size={14}/></div>
+                                                    <span className="text-sm font-bold text-slate-700">{viewingClient.contact?.whatsapp || 'Não inf.'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Financeiro</p>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center"><CreditCard size={14}/></div>
+                                                    <span className="text-sm font-bold text-slate-700">{viewingClient.financialContact?.name || 'Não inf.'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center"><DollarSign size={14}/></div>
+                                                    <span className="text-sm font-bold text-slate-700">Mensal: R$ {viewingClient.monthlyValue?.toLocaleString() || '0'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Observações Internas</h4>
+                                        <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                                            {viewingClient.internalNotes || 'Nenhuma observação interna registrada para este cliente.'}
+                                        </p>
+                                    </div>
+
+                                    {viewingClient.systemAccesses && viewingClient.systemAccesses.length > 0 && (
+                                        <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Shield size={14} className="text-pink-600"/> Acessos ao Sistema</h4>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {viewingClient.systemAccesses.map(access => (
+                                                    <div key={access.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 relative group">
+                                                        <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{access.label || 'Acesso'}</p>
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between text-[11px]">
+                                                                <span className="text-slate-400 font-bold uppercase">Login:</span>
+                                                                <span className="text-slate-700 font-black">{access.username || access.email || 'N/A'}</span>
+                                                            </div>
+                                                            <div className="flex justify-between text-[11px]">
+                                                                <span className="text-slate-400 font-bold uppercase">Senha:</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-slate-700 font-black font-mono">
+                                                                        {visiblePasswords[access.id] ? access.password : '••••••••'}
+                                                                    </span>
+                                                                    <button 
+                                                                        onClick={() => togglePassword(access.id, `Acesso: ${access.label}`)}
+                                                                        className="text-slate-300 hover:text-pink-600 transition-colors"
+                                                                    >
+                                                                        {visiblePasswords[access.id] ? <EyeOff size={12}/> : <Eye size={12}/>}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-8">
+                                    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Organização</p>
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[11px] font-bold text-slate-400 uppercase">Squad</span>
+                                                <span className="text-xs font-black text-slate-800">{squads.find(s => s.id === viewingClient.squadId)?.name || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[11px] font-bold text-slate-400 uppercase">Responsável</span>
+                                                <span className="text-xs font-black text-slate-800">{users.find(u => u.id === viewingClient.responsibleId)?.name || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[11px] font-bold text-slate-400 uppercase">Entrada</span>
+                                                <span className="text-xs font-black text-slate-800">{viewingClient.entryDate || 'N/A'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Tags</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {(viewingClient.tags || []).map(tag => (
+                                                <span key={tag} className="px-3 py-1 bg-slate-50 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-100">{tag}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                         {activeViewTab === 'SERVICES' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {(viewingClient.serviceIds || []).length === 0 ? (
+                                    <div className="col-span-full p-20 text-center bg-white rounded-[40px] border border-slate-100">
+                                        <ShoppingBag size={48} className="mx-auto text-slate-200 mb-4"/>
+                                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhum serviço contratado</p>
+                                    </div>
+                                ) : (
+                                    (viewingClient.serviceIds || []).map(sid => {
+                                        const service = services.find(s => s.id === sid);
+                                        if (!service) return null;
+                                        return (
+                                            <div key={service.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col group hover:shadow-xl hover:shadow-pink-500/5 transition-all duration-300">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest ${
+                                                        service.type === 'RECURRENT' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
+                                                    }`}>
+                                                        {service.type === 'RECURRENT' ? 'Recorrente' : 'Pontual'}
+                                                    </div>
+                                                    <div className={`w-2 h-2 rounded-full ${service.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                                                </div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-1">{service.name}</h5>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">{service.category}</p>
+                                                
+                                                <div className="space-y-2 mb-6">
+                                                    {service.deliveries.slice(0, 2).map((delivery, i) => (
+                                                        <div key={i} className="flex items-center gap-2 text-[10px] text-slate-500 font-bold">
+                                                            <div className="w-1 h-1 bg-pink-400 rounded-full"></div>
+                                                            <span className="truncate">{delivery.quantity}x {delivery.description}</span>
+                                                        </div>
+                                                    ))}
+                                                    {service.deliveries.length > 2 && (
+                                                        <p className="text-[9px] text-pink-600 font-black uppercase tracking-widest">+{service.deliveries.length - 2} entregas</p>
+                                                    )}
+                                                </div>
+
+                                                <div className="mt-auto pt-4 border-t border-slate-50 flex justify-between items-center">
+                                                    <div className="flex items-center gap-1 text-slate-700 font-black text-xs">
+                                                        <span className="text-[9px] text-slate-400">R$</span>
+                                                        {service.basePrice.toLocaleString()}
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-pink-600">
+                                                        <ListChecks size={12} />
+                                                        <span className="text-[10px] font-black">{service.deliveries.length}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
+
+                        {activeViewTab === 'REQUISITIONS' && (
+                            <div className="space-y-4">
+                                {getClientRequisitions(viewingClient.id).length === 0 ? (
+                                    <div className="p-20 text-center">
+                                        <ShoppingBag size={48} className="mx-auto text-slate-200 mb-4"/>
+                                        <p className="text-slate-400 font-bold uppercase text-xs">Nenhuma solicitação encontrada</p>
+                                    </div>
+                                ) : (
+                                    getClientRequisitions(viewingClient.id).map(req => (
+                                        <div key={req.id} className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex justify-between items-center">
+                                            <div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-1">{req.title}</h5>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{req.category} • {req.date}</p>
+                                            </div>
+                                            <div className="flex items-center gap-6">
+                                                <span className="text-sm font-black text-slate-800">R$ {req.estimatedCost.toLocaleString()}</span>
+                                                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                                    req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600' :
+                                                    req.status === 'REJECTED' ? 'bg-red-50 text-red-600' :
+                                                    'bg-amber-50 text-amber-600'
+                                                }`}>{req.status}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {activeViewTab === 'TASKS' && (
+                            <div className="space-y-4">
+                                {getClientTasks(viewingClient.id).length === 0 ? (
+                                    <div className="p-20 text-center">
+                                        <ClipboardList size={48} className="mx-auto text-slate-200 mb-4"/>
+                                        <p className="text-slate-400 font-bold uppercase text-xs">Nenhuma tarefa encontrada</p>
+                                    </div>
+                                ) : (
+                                    getClientTasks(viewingClient.id).map(task => (
+                                        <div key={task.id} className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex justify-between items-center">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-2 h-10 rounded-full ${
+                                                    task.status === 'DONE' ? 'bg-emerald-500' :
+                                                    task.status === 'IN_PROGRESS' ? 'bg-indigo-500' :
+                                                    'bg-slate-300'
+                                                }`}></div>
+                                                <div>
+                                                    <h5 className="font-black text-slate-800 text-sm mb-1">{task.title}</h5>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{task.status} • Prazo: {task.dueDate}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex -space-x-2">
+                                                {task.assigneeIds.map(uid => (
+                                                    <div key={uid} className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 overflow-hidden" title={users.find(u => u.id === uid)?.name}>
+                                                        <img src={users.find(u => u.id === uid)?.avatar} alt="" />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {activeViewTab === 'PASSWORDS' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {currentUser.role === 'FREELANCER' ? (
+                                    <div className="col-span-2 p-20 text-center bg-red-50 rounded-[32px] border border-red-100">
+                                        <Lock size={48} className="mx-auto text-red-200 mb-4"/>
+                                        <p className="text-red-600 font-black uppercase text-xs tracking-widest">Acesso Restrito</p>
+                                        <p className="text-red-400 text-[10px] font-bold mt-2">Freelancers não possuem permissão para visualizar o banco de senhas.</p>
+                                    </div>
+                                ) : (
+                                    (viewingClient.passwords || []).length === 0 ? (
+                                        <div className="col-span-2 p-20 text-center">
+                                            <Key size={48} className="mx-auto text-slate-200 mb-4"/>
+                                            <p className="text-slate-400 font-bold uppercase text-xs">Nenhuma senha registrada</p>
+                                        </div>
+                                    ) : (
+                                        (viewingClient.passwords || []).map(p => (
+                                            <div key={p.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-3">
+                                                        <h5 className="font-black text-slate-800 text-sm uppercase tracking-tighter">{p.platform}</h5>
+                                                        {p.link && (
+                                                            <a href={p.link} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:text-pink-700 transition-colors">
+                                                                <ExternalLink size={14}/>
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => togglePassword(p.id, p.platform)}
+                                                        className={`p-2 rounded-xl transition-all ${visiblePasswords[p.id] ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                                    >
+                                                        {visiblePasswords[p.id] ? <EyeOff size={16}/> : <Eye size={16}/>}
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase">Login</span>
+                                                        <span className="text-xs font-bold text-slate-700">{p.login}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase">Senha</span>
+                                                        <span className="text-xs font-black text-slate-700 font-mono">
+                                                            {visiblePasswords[p.id] ? p.password : '••••••••••••'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {p.observations && (
+                                                    <div className="p-3 bg-slate-50/50 rounded-xl border border-slate-100">
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Observações</p>
+                                                        <p className="text-[11px] text-slate-600 font-medium leading-relaxed">{p.observations}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    )
+                                )}
+                            </div>
+                        )}
+
+                        {activeViewTab === 'FILES' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {(viewingClient.documentationLinks || []).length === 0 ? (
+                                    <div className="col-span-2 p-20 text-center">
+                                        <HardDrive size={48} className="mx-auto text-slate-200 mb-4"/>
+                                        <p className="text-slate-400 font-bold uppercase text-xs">Nenhum diretório vinculado</p>
+                                    </div>
+                                ) : (
+                                    (viewingClient.documentationLinks || []).map((link, idx) => (
+                                        <a key={idx} href={link} target="_blank" rel="noopener noreferrer" className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center justify-between hover:border-pink-200 transition-all group">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><Folder size={20}/></div>
+                                                <div>
+                                                    <h5 className="font-black text-slate-800 text-sm mb-0.5">Diretório de Arquivos {idx + 1}</h5>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[200px]">{link}</p>
+                                                </div>
+                                            </div>
+                                            <ExternalLink size={18} className="text-slate-300 group-hover:text-pink-600 transition-colors"/>
+                                        </a>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {activeViewTab === 'HISTORY' && (
+                            <div className="space-y-6">
+                                {(viewingClient.passwordLogs || []).length === 0 ? (
+                                    <div className="p-20 text-center">
+                                        <History size={48} className="mx-auto text-slate-200 mb-4"/>
+                                        <p className="text-slate-400 font-bold uppercase text-xs">Nenhum log de atividade</p>
+                                    </div>
+                                ) : (
+                                    [...(viewingClient.passwordLogs || [])].reverse().map(log => (
+                                        <div key={log.id} className="flex gap-4">
+                                            <div className="w-10 h-10 rounded-full border-2 border-white bg-slate-100 overflow-hidden shrink-0">
+                                                <img src={users.find(u => u.id === log.userId)?.avatar} alt="" />
+                                            </div>
+                                            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex-1">
+                                                <p className="text-xs text-slate-600">
+                                                    <span className="font-black text-slate-800">{users.find(u => u.id === log.userId)?.name}</span> visualizou a senha da plataforma <span className="font-black text-pink-600">{log.platform}</span>
+                                                </p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{new Date(log.timestamp).toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };

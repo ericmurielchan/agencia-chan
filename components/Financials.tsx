@@ -1,622 +1,1344 @@
 
-import React, { useState, useMemo } from 'react';
-import { FinancialRecord, Asset, StockItem, Requisition, User, Notification } from '../types';
-import { initialStock, initialRequisitions } from '../utils/mockData';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, Wallet, ArrowUpRight, ArrowDownLeft, Package, Plus, Check, X, Trash2, ShoppingCart, FileText, AlertTriangle, Search, Filter, Clock, CheckCircle, Edit2, Calendar, Archive, Layout, RotateCcw, History } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Modal } from './Modal';
+import { 
+    BankAccount, 
+    CreditCard, 
+    FinancialTransaction, 
+    CardInvoice, 
+    User, 
+    Client, 
+    Squad,
+    FinancialCategory,
+    ConfirmOptions
+} from '../types';
+import { 
+    Wallet, 
+    CreditCard as CardIcon, 
+    ArrowUpCircle, 
+    ArrowDownCircle, 
+    Plus, 
+    Search, 
+    Filter, 
+    TrendingUp, 
+    TrendingDown, 
+    DollarSign, 
+    Calendar,
+    ChevronRight,
+    MoreVertical,
+    PieChart,
+    Building2,
+    Users,
+    X,
+    Edit2,
+    Repeat,
+    AlertCircle,
+    CheckCircle2,
+    FileText,
+    History
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { initialCategories } from '../utils/mockData';
 
 interface FinancialsProps {
-  transactions: FinancialRecord[];
-  setTransactions?: React.Dispatch<React.SetStateAction<FinancialRecord[]>>;
-  assets: Asset[];
-  setAssets?: React.Dispatch<React.SetStateAction<Asset[]>>;
-  currentUser: User;
-  users: User[];
-  setNotifications?: React.Dispatch<React.SetStateAction<Notification[]>>;
+    bankAccounts: BankAccount[];
+    setBankAccounts: React.Dispatch<React.SetStateAction<BankAccount[]>>;
+    creditCards: CreditCard[];
+    setCreditCards: React.Dispatch<React.SetStateAction<CreditCard[]>>;
+    transactions: FinancialTransaction[];
+    setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
+    cardInvoices: CardInvoice[];
+    setCardInvoices: React.Dispatch<React.SetStateAction<CardInvoice[]>>;
+    currentUser: User;
+    users: User[];
+    clients: Client[];
+    squads: Squad[];
+    openConfirm: (options: ConfirmOptions) => Promise<boolean>;
+    selectedTransactionId?: string | null;
+    onClearSelectedTransaction?: () => void;
+    selectedInvoiceId?: string | null;
+    onClearSelectedInvoice?: () => void;
 }
 
-type TabType = 'DASHBOARD' | 'TRANSACTIONS' | 'PAYABLES' | 'RECEIVABLES' | 'STOCK' | 'ASSETS';
+type TabType = 'DASHBOARD' | 'ACCOUNTS' | 'CARDS' | 'TRANSACTIONS' | 'INVOICES';
 
-export const Financials: React.FC<FinancialsProps> = ({ 
-    transactions: propTransactions, 
-    setTransactions: propSetTransactions,
-    assets: propAssets,
-    setAssets: propSetAssets,
+export const Financials: React.FC<FinancialsProps> = ({
+    bankAccounts,
+    setBankAccounts,
+    creditCards,
+    setCreditCards,
+    transactions,
+    setTransactions,
+    cardInvoices,
+    setCardInvoices,
     currentUser,
     users,
-    setNotifications
+    clients,
+    squads,
+    openConfirm,
+    selectedTransactionId,
+    onClearSelectedTransaction,
+    selectedInvoiceId,
+    onClearSelectedInvoice
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
-  
-  // Filtros de Data
-  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [typeFilter, setTypeFilter] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
+    
+    // Period Filter State
+    const [startDate, setStartDate] = useState(() => {
+        const d = new Date();
+        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+    });
+    const [endDate, setEndDate] = useState(() => {
+        const d = new Date();
+        return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+    });
 
-  // Gestão de estado local/prop
-  const [localTransactions, setLocalTransactions] = useState(propTransactions);
-  const [localAssets, setLocalAssets] = useState(propAssets);
-  
-  const transactions = propSetTransactions ? propTransactions : localTransactions;
-  const setTransactions = propSetTransactions || setLocalTransactions;
-  const assets = propSetAssets ? propAssets : localAssets;
-  const setAssets = propSetAssets || setLocalAssets;
+    const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+    const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+    const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+    const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+    const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
-  const [stock, setStock] = useState<StockItem[]>(initialStock);
-  
-  // Modo de visualização do Estoque (Ativo vs Histórico)
-  const [showStockHistory, setShowStockHistory] = useState(false);
+    useEffect(() => {
+        if (selectedTransactionId) {
+            setActiveTab('TRANSACTIONS');
+            // We could also set a search term or highlight it
+            setSearchTerm(selectedTransactionId); 
+            if (onClearSelectedTransaction) onClearSelectedTransaction();
+        }
+    }, [selectedTransactionId, onClearSelectedTransaction]);
 
-  // Busca
-  const [searchTerm, setSearchTerm] = useState('');
+    useEffect(() => {
+        if (selectedInvoiceId) {
+            setActiveTab('INVOICES');
+            if (onClearSelectedInvoice) onClearSelectedInvoice();
+        }
+    }, [selectedInvoiceId, onClearSelectedInvoice]);
+    
+    // Form States
+    const [newTransaction, setNewTransaction] = useState<Partial<FinancialTransaction & { isRecurring?: boolean; recurrenceMonths?: number }>>({
+        type: 'EXPENSE',
+        status: 'PAID',
+        date: new Date().toISOString().split('T')[0],
+        isRecurring: false,
+        recurrenceMonths: 1
+    });
 
-  // Modais
-  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
-  const [editingTx, setEditingTx] = useState<Partial<FinancialRecord>>({});
-  const [isInstallment, setIsInstallment] = useState(false);
-  const [installmentCount, setInstallmentCount] = useState(2);
+    const [newAccount, setNewAccount] = useState<Partial<BankAccount>>({
+        type: 'CHECKING',
+        status: 'ACTIVE',
+        balance: 0,
+        color: '#3b82f6'
+    });
 
-  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
-  const [editingStock, setEditingStock] = useState<Partial<StockItem>>({});
+    const [newCard, setNewCard] = useState<Partial<CreditCard>>({
+        status: 'ACTIVE',
+        limit: 0,
+        availableLimit: 0,
+        color: '#000000',
+        brand: 'Visa'
+    });
 
-  const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
-  const [editingAsset, setEditingAsset] = useState<Partial<Asset>>({});
+    // Access Control Filtering
+    const filteredTransactions = useMemo(() => {
+        let base = transactions;
+        
+        if (currentUser.role === 'MANAGER') {
+            const userSquad = squads.find(s => s.members.includes(currentUser.id));
+            base = transactions.filter(t => 
+                t.responsibleId === currentUser.id || 
+                (userSquad && t.squadId === userSquad.id)
+            );
+        } else if (currentUser.role === 'EMPLOYEE') {
+            return []; // Should not have access anyway
+        }
 
-  // --- Lógica de Filtro ---
-  const filteredTransactions = useMemo(() => {
-      return transactions.filter(t => {
-          const tDate = new Date(t.dueDate);
-          const sDate = new Date(startDate);
-          const eDate = new Date(endDate);
-          eDate.setHours(23, 59, 59);
-          
-          return tDate >= sDate && tDate <= eDate;
-      }).sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [transactions, startDate, endDate]);
+        if (searchTerm) {
+            base = base.filter(t => 
+                t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                clients.find(c => c.id === t.clientId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
 
-  // --- Lógica Financeira ---
-  const handleSaveTransaction = () => {
-      if (!editingTx.description || !editingTx.amount || !editingTx.dueDate) return;
+        if (typeFilter !== 'ALL') {
+            base = base.filter(t => t.type === typeFilter);
+        }
 
-      const baseTx = {
-          ...editingTx,
-          status: editingTx.status || 'PENDING',
-          category: editingTx.category || 'Outros',
-          entity: editingTx.entity || 'Diversos',
-          type: editingTx.type || 'EXPENSE'
-      } as FinancialRecord;
+        // Period Filter
+        if (startDate && endDate) {
+            base = base.filter(t => t.date >= startDate && t.date <= endDate);
+        }
 
-      let newRecords: FinancialRecord[] = [];
+        return base.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [transactions, currentUser, squads, searchTerm, clients, typeFilter, startDate, endDate]);
 
-      if (isInstallment && !editingTx.id) { 
-          const groupId = Date.now().toString();
-          const baseDate = new Date(baseTx.dueDate);
+    // Stats
+    const stats = useMemo(() => {
+        const totalBalance = bankAccounts.reduce((acc, curr) => acc + curr.balance, 0);
+        
+        const filteredTxs = transactions.filter(t => 
+            t.status === 'PAID' && 
+            t.date >= startDate && 
+            t.date <= endDate
+        );
 
-          for (let i = 0; i < installmentCount; i++) {
-              const date = new Date(baseDate);
-              date.setMonth(date.getMonth() + i);
-              
-              newRecords.push({
-                  ...baseTx,
-                  id: `${groupId}-${i}`,
-                  description: `${baseTx.description} (${i+1}/${installmentCount})`,
-                  dueDate: date.toISOString().split('T')[0],
-                  installment: {
-                      current: i + 1,
-                      total: installmentCount,
-                      groupId
-                  }
-              });
-          }
-      } else {
-          newRecords.push({
-              ...baseTx,
-              id: editingTx.id || Date.now().toString()
-          });
-      }
+        const monthlyIncome = filteredTxs
+            .filter(t => t.type === 'INCOME')
+            .reduce((acc, curr) => acc + curr.amount, 0);
+            
+        const monthlyExpense = filteredTxs
+            .filter(t => t.type === 'EXPENSE')
+            .reduce((acc, curr) => acc + curr.amount, 0);
+            
+        const cardDebt = creditCards.reduce((acc, curr) => acc + (curr.limit - curr.availableLimit), 0);
 
-      if (editingTx.id) {
-          setTransactions(prev => prev.map(t => t.id === editingTx.id ? newRecords[0] : t));
-      } else {
-          setTransactions(prev => [...newRecords, ...prev]);
-      }
+        return { totalBalance, monthlyIncome, monthlyExpense, cardDebt };
+    }, [bankAccounts, transactions, creditCards, startDate, endDate]);
 
-      setIsTxModalOpen(false);
-      setEditingTx({});
-      setIsInstallment(false);
-  };
+    const filteredInvoices = useMemo(() => {
+        return cardInvoices
+            .filter(inv => inv.dueDate >= startDate && inv.dueDate <= endDate)
+            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    }, [cardInvoices, startDate, endDate]);
 
-  const deleteTransaction = (id: string) => {
-      if (confirm("Tem certeza que deseja excluir permanentemente este lançamento?")) {
-          setTransactions(prev => prev.filter(t => t.id !== id));
-      }
-  };
+    const toggleTransactionStatus = (tx: FinancialTransaction) => {
+        const newStatus = tx.status === 'PAID' ? 'PENDING' : 'PAID';
+        
+        // Update Transactions
+        setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: newStatus } : t));
 
-  const updateStatus = (id: string, status: 'PAID' | 'PENDING' | 'CANCELLED') => {
-      setTransactions(prev => prev.map(t => t.id === id ? { 
-          ...t, 
-          status,
-          paymentDate: status === 'PAID' ? new Date().toISOString().split('T')[0] : undefined
-      } : t));
-  };
+        // Update Account Balance if Bank Account
+        if (tx.bankAccountId) {
+            setBankAccounts(prev => prev.map(acc => {
+                if (acc.id === tx.bankAccountId) {
+                    const amount = tx.type === 'INCOME' ? tx.amount : -tx.amount;
+                    // If changing to PAID, add the amount. If changing to PENDING, subtract it.
+                    const adjustment = newStatus === 'PAID' ? amount : -amount;
+                    return { ...acc, balance: acc.balance + adjustment };
+                }
+                return acc;
+            }));
+        }
 
-  // --- Lógica de Estoque ---
-  const handleSaveStock = () => {
-      if(!editingStock.name) return;
-      if(editingStock.id) {
-          setStock(prev => prev.map(s => s.id === editingStock.id ? { ...s, ...editingStock } as StockItem : s));
-      } else {
-          setStock(prev => [...prev, { ...editingStock, id: Date.now().toString(), lastRestock: new Date().toISOString().split('T')[0] } as StockItem]);
-      }
-      setIsStockModalOpen(false);
-  };
+        // Update Card Limit and Invoices if Credit Card
+        if (tx.type === 'EXPENSE' && tx.creditCardId) {
+            const currentMonth = tx.date.slice(0, 7);
+            const adjustment = newStatus === 'PAID' ? -tx.amount : tx.amount;
 
-  const deleteStock = (id: string) => {
-      const reason = prompt("Informe o motivo da exclusão para o histórico (Ex: Danificado, Obsoleto, Erro):");
-      if (reason) {
-          setStock(prev => prev.map(s => s.id === id ? { 
-              ...s, 
-              deletedAt: new Date().toISOString(),
-              deletionReason: reason,
-              deletedBy: currentUser.name
-          } : s));
-      }
-  };
+            setCreditCards(prev => prev.map(card => {
+                if (card.id === tx.creditCardId) {
+                    return { ...card, availableLimit: card.availableLimit + adjustment };
+                }
+                return card;
+            }));
 
-  const adjustStock = (id: string, delta: number) => {
-      setStock(prev => prev.map(s => s.id === id ? { ...s, quantity: Math.max(0, (s.quantity || 0) + delta) } : s));
-  };
+            setCardInvoices(prev => {
+                const invoiceIndex = prev.findIndex(inv => inv.creditCardId === tx.creditCardId && inv.month === currentMonth);
+                if (invoiceIndex >= 0) {
+                    const updatedInvoices = [...prev];
+                    updatedInvoices[invoiceIndex] = {
+                        ...updatedInvoices[invoiceIndex],
+                        amount: updatedInvoices[invoiceIndex].amount - adjustment // adjustment is negative if PAID, so we subtract negative (add)
+                    };
+                    return updatedInvoices;
+                } else if (newStatus === 'PAID') {
+                    // This case shouldn't really happen if we follow the logic, but just in case
+                    const card = creditCards.find(c => c.id === tx.creditCardId);
+                    const newInvoice: CardInvoice = {
+                        id: `inv-${Date.now()}`,
+                        creditCardId: tx.creditCardId!,
+                        month: currentMonth,
+                        amount: tx.amount,
+                        status: 'OPEN',
+                        dueDate: `${currentMonth}-${card?.dueDate.toString().padStart(2, '0') || '05'}`
+                    };
+                    return [...prev, newInvoice];
+                }
+                return prev;
+            });
+        }
+    };
 
-  // --- Lógica de Ativos ---
-  const handleSaveAsset = () => {
-      if(!editingAsset.name) return;
-      if(editingAsset.id) {
-          setAssets(prev => prev.map(a => a.id === editingAsset.id ? { ...a, ...editingAsset } as Asset : a));
-      } else {
-          setAssets(prev => [...prev, { ...editingAsset, id: Date.now().toString() } as Asset]);
-      }
-      setIsAssetModalOpen(false);
-  };
+    const handleAddTransaction = () => {
+        if (!newTransaction.description || !newTransaction.amount) return;
+        
+        const recurrenceId = newTransaction.isRecurring ? `rec-${Date.now()}` : undefined;
+        const months = newTransaction.isRecurring ? (newTransaction.recurrenceMonths || 1) : 1;
+        
+        const newTransactions: FinancialTransaction[] = [];
+        const baseDate = new Date(newTransaction.date || new Date().toISOString().split('T')[0]);
 
-  const deleteAsset = (id: string) => {
-      if (confirm("Excluir ativo?")) setAssets(prev => prev.filter(a => a.id !== id));
-  };
+        for (let i = 0; i < months; i++) {
+            const txDate = new Date(baseDate);
+            txDate.setMonth(baseDate.getMonth() + i);
+            
+            // Handle day overflow (e.g., Jan 31 -> Feb 28)
+            if (txDate.getDate() !== baseDate.getDate()) {
+                txDate.setDate(0);
+            }
 
-  // --- Métricas e Gráficos ---
-  const income = filteredTransactions.filter(t => t.type === 'INCOME' && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0);
-  const expense = filteredTransactions.filter(t => t.type === 'EXPENSE' && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0);
-  const balance = income - expense;
-  
-  const pendingIncome = filteredTransactions.filter(t => t.type === 'INCOME' && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0);
-  const pendingExpense = filteredTransactions.filter(t => t.type === 'EXPENSE' && (t.status === 'PENDING' || t.status === 'OVERDUE')).reduce((acc, t) => acc + t.amount, 0);
+            const transaction: FinancialTransaction = {
+                id: `${Date.now()}-${i}`,
+                description: newTransaction.description,
+                amount: newTransaction.amount,
+                type: newTransaction.type as 'INCOME' | 'EXPENSE',
+                date: txDate.toISOString().split('T')[0],
+                status: i === 0 ? (newTransaction.status as 'PAID' | 'PENDING') : 'PENDING',
+                categoryId: newTransaction.categoryId || 'cat1',
+                bankAccountId: newTransaction.bankAccountId,
+                creditCardId: newTransaction.creditCardId,
+                clientId: newTransaction.clientId,
+                squadId: newTransaction.squadId,
+                responsibleId: currentUser.id,
+                recurrenceId,
+                createdAt: Date.now()
+            };
+            newTransactions.push(transaction);
+        }
 
-  // Dados para Gráfico Comparativo
-  const chartData = useMemo(() => {
-      const grouped: Record<string, { date: string, income: number, expense: number }> = {};
-      
-      filteredTransactions.forEach(t => {
-           const key = t.dueDate.substring(5); // MM-DD
-           if (!grouped[key]) grouped[key] = { date: key, income: 0, expense: 0 };
-           
-           if (t.type === 'INCOME') grouped[key].income += t.amount;
-           else grouped[key].expense += t.amount;
-      });
+        setTransactions(prev => [...newTransactions, ...prev]);
 
-      return Object.values(grouped).sort((a,b) => a.date.localeCompare(b.date));
-  }, [filteredTransactions]);
+        // Update Account Balance/Card Limit ONLY for the first transaction if PAID
+        const firstTx = newTransactions[0];
+        if (firstTx.status === 'PAID' && firstTx.bankAccountId) {
+            setBankAccounts(prev => prev.map(acc => {
+                if (acc.id === firstTx.bankAccountId) {
+                    return {
+                        ...acc,
+                        balance: firstTx.type === 'INCOME' ? acc.balance + firstTx.amount : acc.balance - firstTx.amount
+                    };
+                }
+                return acc;
+            }));
+        }
 
-  // --- Renderers ---
+        if (firstTx.type === 'EXPENSE' && firstTx.creditCardId) {
+            const currentMonth = firstTx.date.slice(0, 7); // YYYY-MM
+            
+            setCreditCards(prev => prev.map(card => {
+                if (card.id === firstTx.creditCardId) {
+                    return {
+                        ...card,
+                        availableLimit: card.availableLimit - firstTx.amount
+                    };
+                }
+                return card;
+            }));
 
-  const renderDashboard = () => (
-      <div className="space-y-6 animate-pop">
-          {/* Filtro de Data */}
-          <div className="flex flex-col md:flex-row gap-4 items-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">Data Início</label>
-                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border border-slate-300 rounded-lg p-2 text-sm text-slate-700 outline-none focus:border-blue-500"/>
-              </div>
-              <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">Data Fim</label>
-                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border border-slate-300 rounded-lg p-2 text-sm text-slate-700 outline-none focus:border-blue-500"/>
-              </div>
-              <div className="flex-1 text-right">
-                  <p className="text-xs text-slate-400">Analisando dados do período</p>
-              </div>
-          </div>
+            setCardInvoices(prev => {
+                const invoiceIndex = prev.findIndex(inv => inv.creditCardId === firstTx.creditCardId && inv.month === currentMonth);
+                if (invoiceIndex >= 0) {
+                    const updatedInvoices = [...prev];
+                    updatedInvoices[invoiceIndex] = {
+                        ...updatedInvoices[invoiceIndex],
+                        amount: updatedInvoices[invoiceIndex].amount + firstTx.amount
+                    };
+                    return updatedInvoices;
+                } else {
+                    const card = creditCards.find(c => c.id === firstTx.creditCardId);
+                    const newInvoice: CardInvoice = {
+                        id: `inv-${Date.now()}`,
+                        creditCardId: firstTx.creditCardId!,
+                        month: currentMonth,
+                        amount: firstTx.amount,
+                        status: 'OPEN',
+                        dueDate: `${currentMonth}-${card?.dueDate.toString().padStart(2, '0') || '05'}`
+                    };
+                    return [...prev, newInvoice];
+                }
+            });
+        }
 
-          {/* Cards KPI */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Saldo (Período)</p>
-                  <div className="flex items-end justify-between mt-1">
-                      <h3 className={`text-2xl font-bold ${balance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>R$ {balance.toLocaleString()}</h3>
-                      <div className={`p-2 rounded-full ${balance >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                          <Wallet size={20}/>
-                      </div>
-                  </div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Receitas (Realizado)</p>
-                  <div className="flex items-end justify-between mt-1">
-                      <h3 className="text-2xl font-bold text-emerald-600">R$ {income.toLocaleString()}</h3>
-                      <div className="p-2 rounded-full bg-emerald-50 text-emerald-600"><ArrowDownLeft size={20}/></div>
-                  </div>
-                  <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><Plus size={10}/> R$ {pendingIncome.toLocaleString()} previsto</p>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Despesas (Realizado)</p>
-                  <div className="flex items-end justify-between mt-1">
-                      <h3 className="text-2xl font-bold text-red-600">R$ {expense.toLocaleString()}</h3>
-                      <div className="p-2 rounded-full bg-red-50 text-red-600"><ArrowUpRight size={20}/></div>
-                  </div>
-                  <p className="text-xs text-red-600 mt-2 flex items-center gap-1"><Clock size={10} /> R$ {pendingExpense.toLocaleString()} a pagar</p>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Estoque Ativo</p>
-                  <div className="flex items-end justify-between mt-1">
-                      <h3 className="text-2xl font-bold text-blue-600">{stock.filter(s => !s.deletedAt).length} Itens</h3>
-                      <div className="p-2 rounded-full bg-blue-50 text-blue-600"><Package size={20}/></div>
-                  </div>
-                  <p className="text-xs text-orange-500 mt-2 flex items-center gap-1">
-                      <AlertTriangle size={10}/> {stock.filter(s => !s.deletedAt && s.quantity <= s.minQuantity).length} itens baixos
-                  </p>
-              </div>
-          </div>
+        setIsTransactionModalOpen(false);
+        setNewTransaction({ 
+            type: 'EXPENSE', 
+            status: 'PAID', 
+            date: new Date().toISOString().split('T')[0],
+            isRecurring: false,
+            recurrenceMonths: 1
+        });
+    };
 
-          {/* Gráfico Comparativo */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2"><TrendingUp size={18}/> Comparativo Receita vs Despesa</h3>
-              <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                          <XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={12} stroke="#64748b" />
-                          <YAxis axisLine={false} tickLine={false} fontSize={12} stroke="#64748b" />
-                          <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
-                          <Legend />
-                          <Bar name="Receitas" dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
-                          <Bar name="Despesas" dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={20} />
-                      </BarChart>
-                  </ResponsiveContainer>
-              </div>
-          </div>
-      </div>
-  );
+    const handleAddAccount = () => {
+        if (!newAccount.name || !newAccount.bankName) return;
 
-  const renderTransactions = (filter?: 'PENDING_PAY' | 'PENDING_REC') => {
-      let filtered = filteredTransactions; 
-      if (filter === 'PENDING_PAY') filtered = filtered.filter(t => t.type === 'EXPENSE' && (t.status === 'PENDING' || t.status === 'OVERDUE'));
-      if (filter === 'PENDING_REC') filtered = filtered.filter(t => t.type === 'INCOME' && (t.status === 'PENDING' || t.status === 'OVERDUE'));
-      if (searchTerm) filtered = filtered.filter(t => t.description.toLowerCase().includes(searchTerm.toLowerCase()));
+        if (editingAccountId) {
+            setBankAccounts(prev => prev.map(acc => acc.id === editingAccountId ? { ...acc, ...newAccount } as BankAccount : acc));
+        } else {
+            const account: BankAccount = {
+                id: Date.now().toString(),
+                name: newAccount.name,
+                type: newAccount.type as any,
+                bankName: newAccount.bankName,
+                balance: newAccount.balance || 0,
+                color: newAccount.color || '#3b82f6',
+                status: 'ACTIVE'
+            };
+            setBankAccounts(prev => [...prev, account]);
+        }
 
-      return (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-pop">
-              <div className="flex justify-between p-6 border-b border-slate-100 bg-slate-50/50">
-                  <div className="flex items-center gap-4">
-                      <h3 className="font-bold text-lg text-slate-800">Lançamentos</h3>
-                      <div className="relative">
-                          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                          <input 
-                            className="pl-9 pr-4 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-400" 
-                            placeholder="Buscar..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                          />
-                      </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                     <div className="text-xs text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                         <Calendar size={14}/> {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}
-                     </div>
-                     <button onClick={() => { setEditingTx({}); setIsInstallment(false); setIsTxModalOpen(true); }} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-slate-900 transition-colors">
-                        <Plus size={16}/> Lançamento
-                     </button>
-                  </div>
-              </div>
-              <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                      <tr>
-                          <th className="p-4">Descrição</th>
-                          <th className="p-4">Vencimento</th>
-                          <th className="p-4">Categoria/Entidade</th>
-                          <th className="p-4">Status</th>
-                          <th className="p-4 text-right">Valor</th>
-                          <th className="p-4 text-center">Ações</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                      {filtered.map(t => (
-                          <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
-                              <td className="p-4">
-                                  <p className="font-medium text-slate-700">{t.description}</p>
-                                  {t.installment && <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded">Parcela {t.installment.current}/{t.installment.total}</span>}
-                              </td>
-                              <td className="p-4 text-slate-500">{t.dueDate.split('-').reverse().join('/')}</td>
-                              <td className="p-4 text-slate-500">
-                                  <p>{t.category}</p>
-                                  <p className="text-xs">{t.entity}</p>
-                              </td>
-                              <td className="p-4">
-                                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-                                      t.status === 'PAID' ? 'bg-emerald-50 text-emerald-700' :
-                                      t.status === 'OVERDUE' ? 'bg-red-50 text-red-700' : 
-                                      t.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' : 'bg-yellow-50 text-yellow-700'
-                                  }`}>
-                                      {t.status === 'PAID' ? 'Pago' : t.status === 'PENDING' ? 'Pendente' : t.status === 'OVERDUE' ? 'Vencido' : 'Cancelado'}
-                                  </span>
-                              </td>
-                              <td className={`p-4 text-right font-bold ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                  {t.type === 'EXPENSE' ? '-' : '+'} R$ {t.amount.toLocaleString()}
-                              </td>
-                              <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  {t.status !== 'CANCELLED' ? (
-                                    <>
-                                        {t.status !== 'PAID' ? (
-                                            <button onClick={() => updateStatus(t.id, 'PAID')} title="Marcar Pago" className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={16}/></button>
-                                        ) : (
-                                            <button onClick={() => updateStatus(t.id, 'PENDING')} title="Marcar Pendente" className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded"><Clock size={16}/></button>
-                                        )}
-                                        <button onClick={() => { setEditingTx(t); setIsTxModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Edit2 size={16}/></button>
-                                        <button onClick={() => updateStatus(t.id, 'CANCELLED')} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="Cancelar"><Archive size={16}/></button>
-                                    </>
-                                  ) : (
-                                      <button onClick={() => updateStatus(t.id, 'PENDING')} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded flex items-center gap-1 text-xs" title="Desfazer Cancelamento">
-                                          <RotateCcw size={16}/> Reverter
-                                      </button>
-                                  )}
-                                  <button onClick={() => deleteTransaction(t.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
-                              </td>
-                          </tr>
-                      ))}
-                      {filtered.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-400">Nenhum registro encontrado no período.</td></tr>}
-                  </tbody>
-              </table>
-          </div>
-      );
-  };
+        setIsAccountModalOpen(false);
+        setEditingAccountId(null);
+        setNewAccount({ type: 'CHECKING', status: 'ACTIVE', balance: 0, color: '#3b82f6' });
+    };
 
-  const renderStock = () => {
-      const displayStock = stock.filter(s => showStockHistory ? !!s.deletedAt : !s.deletedAt);
+    const handleAddCard = () => {
+        if (!newCard.name || !newCard.limit) return;
 
-      return (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-pop">
-           <div className="flex justify-between p-6 border-b border-slate-100 bg-slate-50/50">
-                  <div className="flex items-center gap-4">
-                      <h3 className="font-bold text-lg text-slate-800">{showStockHistory ? 'Histórico de Exclusões' : 'Inventário e Estoque'}</h3>
-                      <button 
-                        onClick={() => setShowStockHistory(!showStockHistory)}
-                        className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 border transition-colors ${showStockHistory ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border-slate-300'}`}
-                      >
-                          <History size={14}/> {showStockHistory ? 'Ver Estoque Ativo' : 'Ver Histórico'}
-                      </button>
-                  </div>
-                  {!showStockHistory && (
-                    <button onClick={() => { setEditingStock({}); setIsStockModalOpen(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-blue-700 transition-colors">
-                        <Plus size={16}/> Novo Item
-                    </button>
-                  )}
+        if (editingCardId) {
+            setCreditCards(prev => prev.map(card => card.id === editingCardId ? { ...card, ...newCard } as CreditCard : card));
+        } else {
+            const card: CreditCard = {
+                id: Date.now().toString(),
+                name: newCard.name,
+                brand: newCard.brand || 'Visa',
+                limit: newCard.limit,
+                availableLimit: newCard.limit,
+                closingDay: newCard.closingDay || 25,
+                dueDate: newCard.dueDate || 5,
+                color: newCard.color || '#000000',
+                status: 'ACTIVE'
+            };
+            setCreditCards(prev => [...prev, card]);
+        }
+
+        setIsCardModalOpen(false);
+        setEditingCardId(null);
+        setNewCard({ status: 'ACTIVE', limit: 0, availableLimit: 0, color: '#000000', brand: 'Visa' });
+    };
+
+    const startEditAccount = (acc: BankAccount) => {
+        setEditingAccountId(acc.id);
+        setNewAccount(acc);
+        setIsAccountModalOpen(true);
+    };
+
+    const startEditCard = (card: CreditCard) => {
+        setEditingCardId(card.id);
+        setNewCard(card);
+        setIsCardModalOpen(true);
+    };
+
+    const handleDeleteTransaction = async (tx: FinancialTransaction) => {
+        const revertBalance = (t: FinancialTransaction) => {
+            if (t.status !== 'PAID') return;
+            
+            if (t.bankAccountId) {
+                setBankAccounts(prev => prev.map(acc => {
+                    if (acc.id === t.bankAccountId) {
+                        const amount = t.type === 'INCOME' ? t.amount : -t.amount;
+                        return { ...acc, balance: acc.balance - amount };
+                    }
+                    return acc;
+                }));
+            }
+
+            if (t.type === 'EXPENSE' && t.creditCardId) {
+                const currentMonth = t.date.slice(0, 7);
+                setCreditCards(prev => prev.map(card => {
+                    if (card.id === t.creditCardId) {
+                        return { ...card, availableLimit: card.availableLimit + t.amount };
+                    }
+                    return card;
+                }));
+
+                setCardInvoices(prev => {
+                    const invoiceIndex = prev.findIndex(inv => inv.creditCardId === t.creditCardId && inv.month === currentMonth);
+                    if (invoiceIndex >= 0) {
+                        const updatedInvoices = [...prev];
+                        updatedInvoices[invoiceIndex] = {
+                            ...updatedInvoices[invoiceIndex],
+                            amount: updatedInvoices[invoiceIndex].amount - t.amount
+                        };
+                        return updatedInvoices;
+                    }
+                    return prev;
+                });
+            }
+        };
+
+        if (tx.recurrenceId) {
+            const deleteType = await openConfirm({
+                title: 'Excluir Transação Recorrente',
+                description: 'Esta transação faz parte de uma recorrência. O que você deseja excluir?',
+                confirmText: 'Toda a Recorrência',
+                cancelText: 'Apenas Esta',
+                variant: 'danger'
+            });
+
+            if (deleteType === true) {
+                // Delete all with same recurrenceId
+                const toDelete = transactions.filter(t => t.recurrenceId === tx.recurrenceId);
+                toDelete.forEach(revertBalance);
+                setTransactions(prev => prev.filter(t => t.recurrenceId !== tx.recurrenceId));
+            } else if (deleteType === false) {
+                // Delete only this one
+                revertBalance(tx);
+                setTransactions(prev => prev.filter(t => t.id !== tx.id));
+            }
+        } else {
+            const confirm = await openConfirm({
+                title: 'Excluir Transação',
+                description: 'Tem certeza que deseja excluir esta transação?',
+                variant: 'danger'
+            });
+            if (confirm) {
+                revertBalance(tx);
+                setTransactions(prev => prev.filter(t => t.id !== tx.id));
+            }
+        }
+    };
+
+    return (
+        <div className="flex flex-col h-full space-y-6 animate-pop">
+            {/* Header with Tabs */}
+            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-4 md:p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-pink-50 text-pink-600 rounded-2xl">
+                            <DollarSign size={28} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black tracking-tight text-slate-800">Financeiro</h2>
+                            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Gestão de Fluxo de Caixa</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4">
+                        {/* Period Filter UI */}
+                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+                            <div className="flex items-center gap-2 px-3 py-1.5">
+                                <Calendar size={14} className="text-slate-400" />
+                                <input 
+                                    type="date" 
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
+                                />
+                                <span className="text-slate-300 font-bold text-[10px]">ATÉ</span>
+                                <input 
+                                    type="date" 
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+                            {[
+                                { id: 'DASHBOARD', label: 'Resumo', icon: PieChart },
+                                { id: 'ACCOUNTS', label: 'Contas', icon: Wallet },
+                                { id: 'CARDS', label: 'Cartões', icon: CardIcon },
+                                { id: 'TRANSACTIONS', label: 'Transações', icon: History },
+                                { id: 'INVOICES', label: 'Faturas', icon: FileText },
+                            ].map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id as TabType)}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        activeTab === tab.id 
+                                        ? 'bg-white shadow-md text-pink-600' 
+                                        : 'text-slate-400 hover:text-slate-600'
+                                    }`}
+                                >
+                                    <tab.icon size={14} />
+                                    <span className="hidden sm:inline">{tab.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
-            <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                      <tr>
-                          <th className="p-4">Item</th>
-                          <th className="p-4">Categoria</th>
-                          <th className="p-4">Qtd. {showStockHistory ? 'Excluída' : 'Atual'}</th>
-                          {showStockHistory ? (
-                              <>
-                                <th className="p-4">Motivo</th>
-                                <th className="p-4">Data Exclusão</th>
-                                <th className="p-4">Quem Excluiu</th>
-                              </>
-                          ) : (
-                              <>
-                                <th className="p-4">Status</th>
-                                <th className="p-4 text-right">Valor Unit.</th>
-                                <th className="p-4 text-center">Ações</th>
-                              </>
-                          )}
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                      {displayStock.map(s => (
-                          <tr key={s.id} className="hover:bg-slate-50 transition-colors group">
-                              <td className="p-4 font-medium text-slate-700">{s.name}</td>
-                              <td className="p-4"><span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">{s.category}</span></td>
-                              <td className="p-4">
-                                  {!showStockHistory ? (
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => adjustStock(s.id, -1)} className="w-5 h-5 flex items-center justify-center bg-slate-200 rounded hover:bg-slate-300">-</button>
-                                        <span className="font-bold w-6 text-center">{s.quantity}</span>
-                                        <button onClick={() => adjustStock(s.id, 1)} className="w-5 h-5 flex items-center justify-center bg-slate-200 rounded hover:bg-slate-300">+</button>
+
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <AnimatePresence mode="wait">
+                    {activeTab === 'DASHBOARD' && (
+                        <motion.div 
+                            key="dashboard"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            className="space-y-6"
+                        >
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Wallet size={80} className="text-blue-500" /></div>
+                                    <p className="text-blue-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Saldo em Contas</p>
+                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {stats.totalBalance.toLocaleString('pt-BR')}</h3>
+                                    <div className="mt-4 h-1 w-12 bg-blue-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingUp size={80} className="text-emerald-500" /></div>
+                                    <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Receita no Período</p>
+                                    <h3 className="text-3xl font-black text-emerald-600 tracking-tighter">R$ {stats.monthlyIncome.toLocaleString('pt-BR')}</h3>
+                                    <div className="mt-4 h-1 w-12 bg-emerald-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingDown size={80} className="text-red-500" /></div>
+                                    <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Despesa no Período</p>
+                                    <h3 className="text-3xl font-black text-red-600 tracking-tighter">R$ {stats.monthlyExpense.toLocaleString('pt-BR')}</h3>
+                                    <div className="mt-4 h-1 w-12 bg-red-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                                </div>
+
+                                <div className="bg-slate-900 p-6 rounded-[32px] border border-slate-800 shadow-xl relative overflow-hidden group text-white">
+                                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><CardIcon size={80} className="text-pink-400" /></div>
+                                    <p className="text-pink-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Dívida Cartões</p>
+                                    <h3 className="text-3xl font-black tracking-tighter">R$ {stats.cardDebt.toLocaleString('pt-BR')}</h3>
+                                    <div className="mt-4 h-1 w-12 bg-pink-400 rounded-full opacity-40 group-hover:w-full transition-all duration-500" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
+                                    <div className="flex items-center justify-between mb-8">
+                                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                            <Wallet size={18} className="text-blue-500" /> Contas Bancárias
+                                        </h3>
+                                        <button onClick={() => setActiveTab('ACCOUNTS')} className="text-[10px] font-black text-pink-600 uppercase tracking-widest hover:underline">Ver todas</button>
                                     </div>
-                                  ) : (
-                                    <span className="text-slate-500">{s.quantity}</span>
-                                  )}
-                              </td>
-                              
-                              {showStockHistory ? (
-                                  <>
-                                    <td className="p-4"><span className="text-xs bg-red-50 text-red-600 px-2 py-1 rounded font-bold">{s.deletionReason}</span></td>
-                                    <td className="p-4 text-slate-500">{s.deletedAt ? new Date(s.deletedAt).toLocaleDateString() : '-'}</td>
-                                    <td className="p-4 text-slate-500">{s.deletedBy || '-'}</td>
-                                  </>
-                              ) : (
-                                  <>
-                                    <td className="p-4">
-                                        {s.quantity <= s.minQuantity ? 
-                                            <span className="text-xs text-red-600 font-bold bg-red-50 px-2 py-1 rounded flex w-fit items-center gap-1"><AlertTriangle size={12}/> Repor</span> : 
-                                            <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded flex w-fit items-center gap-1"><CheckCircle size={12}/> OK</span>
-                                        }
-                                    </td>
-                                    <td className="p-4 text-right">R$ {s.unitPrice.toFixed(2)}</td>
-                                    <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => { setEditingStock(s); setIsStockModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Edit2 size={16}/></button>
-                                        <button onClick={() => deleteStock(s.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
-                                    </td>
-                                  </>
-                              )}
-                          </tr>
-                      ))}
-                      {displayStock.length === 0 && (
-                          <tr><td colSpan={showStockHistory ? 6 : 6} className="p-8 text-center text-slate-400">
-                              {showStockHistory ? 'Nenhum item excluído no histórico.' : 'Estoque vazio.'}
-                          </td></tr>
-                      )}
-                  </tbody>
-            </table>
-      </div>
-      );
-  };
+                                    <div className="space-y-4">
+                                        {bankAccounts.slice(0, 3).map(acc => (
+                                            <div key={acc.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: acc.color }}>
+                                                        <Building2 size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-black text-slate-800">{acc.name}</p>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{acc.bankName}</p>
+                                                    </div>
+                                                </div>
+                                                <p className="text-sm font-black text-slate-700">R$ {acc.balance.toLocaleString('pt-BR')}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
 
-  const renderAssets = () => (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-pop">
-           <div className="flex justify-between p-6 border-b border-slate-100 bg-slate-50/50">
-                  <h3 className="font-bold text-lg text-slate-800">Ativos Imobilizados</h3>
-                  <button onClick={() => { setEditingAsset({}); setIsAssetModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-purple-700 transition-colors">
-                      <Plus size={16}/> Novo Ativo
-                  </button>
+                                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
+                                    <div className="flex items-center justify-between mb-8">
+                                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                            <History size={18} className="text-emerald-500" /> Últimas Transações
+                                        </h3>
+                                        <button onClick={() => setActiveTab('TRANSACTIONS')} className="text-[10px] font-black text-pink-600 uppercase tracking-widest hover:underline">Ver todas</button>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {filteredTransactions.slice(0, 5).map(tx => (
+                                            <div key={tx.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-colors">
+                                                <div className="flex items-center gap-4">
+                                                    <button 
+                                                        onClick={() => toggleTransactionStatus(tx)}
+                                                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110 active:scale-90 ${
+                                                            tx.status === 'PAID' 
+                                                            ? (tx.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600') 
+                                                            : 'bg-amber-50 text-amber-600'
+                                                        }`}
+                                                        title={tx.status === 'PAID' ? 'Marcar como Pendente' : 'Marcar como Pago'}
+                                                    >
+                                                        {tx.status === 'PAID' ? (tx.type === 'INCOME' ? <TrendingUp size={16} /> : <TrendingDown size={16} />) : <AlertCircle size={16} />}
+                                                    </button>
+                                                    <div>
+                                                        <p className="text-xs font-black text-slate-800 truncate max-w-[150px]">{tx.description}</p>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">{tx.date.split('-').reverse().join('/')}</p>
+                                                    </div>
+                                                </div>
+                                                <p className={`text-xs font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {tx.amount.toLocaleString('pt-BR')}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'ACCOUNTS' && (
+                        <motion.div 
+                            key="accounts"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className="space-y-6"
+                        >
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Suas Contas</h3>
+                                <button 
+                                    onClick={() => setIsAccountModalOpen(true)}
+                                    className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+                                >
+                                    <Plus size={16} /> Nova Conta
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {bankAccounts.map(acc => (
+                                    <div key={acc.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium hover:shadow-premium-hover transition-all group">
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: acc.color }}>
+                                                <Building2 size={28} />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    onClick={() => startEditAccount(acc)}
+                                                    className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${acc.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                    {acc.status === 'ACTIVE' ? 'Ativa' : 'Inativa'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <h4 className="text-xl font-black text-slate-800 mb-1">{acc.name}</h4>
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-6">{acc.bankName}</p>
+                                        <div className="pt-6 border-t border-slate-50">
+                                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Saldo Atual</p>
+                                            <p className="text-2xl font-black text-slate-800">R$ {acc.balance.toLocaleString('pt-BR')}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'CARDS' && (
+                        <motion.div 
+                            key="cards"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className="space-y-6"
+                        >
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Cartões de Crédito</h3>
+                                <button 
+                                    onClick={() => setIsCardModalOpen(true)}
+                                    className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+                                >
+                                    <Plus size={16} /> Novo Cartão
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {creditCards.map(card => (
+                                    <div key={card.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium hover:shadow-premium-hover transition-all relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -mr-16 -mt-16 opacity-50 group-hover:scale-110 transition-transform" />
+                                        <div className="flex justify-between items-start mb-8 relative">
+                                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md" style={{ backgroundColor: card.color }}>
+                                                <CardIcon size={24} />
+                                            </div>
+                                            <div className="flex gap-3 items-start">
+                                                <button 
+                                                    onClick={() => startEditCard(card)}
+                                                    className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <div className="text-right">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</p>
+                                                    <p className="text-sm font-black text-slate-800">Dia {card.dueDate}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <h4 className="text-2xl font-black text-slate-800 mb-1">{card.name}</h4>
+                                        <p className="text-xs font-bold text-slate-400 mb-8">{card.brand} •••• 4582</p>
+                                        
+                                        <div className="space-y-4">
+                                            <div>
+                                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2">
+                                                    <span className="text-slate-400">Limite Utilizado</span>
+                                                    <span className="text-slate-800">R$ {(card.limit - card.availableLimit).toLocaleString('pt-BR')}</span>
+                                                </div>
+                                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className="h-full bg-pink-500 rounded-full transition-all duration-1000" 
+                                                        style={{ width: `${((card.limit - card.availableLimit) / card.limit) * 100}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-between pt-4 border-t border-slate-50">
+                                                <div>
+                                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Disponível</p>
+                                                    <p className="text-lg font-black text-emerald-600">R$ {card.availableLimit.toLocaleString('pt-BR')}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Limite Total</p>
+                                                    <p className="text-lg font-black text-slate-800">R$ {card.limit.toLocaleString('pt-BR')}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'TRANSACTIONS' && (
+                        <motion.div 
+                            key="transactions"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className="space-y-6"
+                        >
+                            <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Buscar por descrição, cliente..." 
+                                        value={searchTerm}
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-transparent focus:bg-white focus:border-pink-200 rounded-2xl text-sm font-bold outline-none transition-all"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                                        {[
+                                            { id: 'ALL', label: 'Todas' },
+                                            { id: 'INCOME', label: 'Receitas' },
+                                            { id: 'EXPENSE', label: 'Despesas' },
+                                        ].map(type => (
+                                            <button
+                                                key={type.id}
+                                                onClick={() => setTypeFilter(type.id as any)}
+                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                                                    typeFilter === type.id 
+                                                    ? 'bg-white shadow-sm text-pink-600' 
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                                }`}
+                                            >
+                                                {type.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button 
+                                        onClick={() => setIsTransactionModalOpen(true)}
+                                        className="flex items-center gap-2 px-6 py-3 bg-pink-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-pink-700 transition-all shadow-xl shadow-pink-200"
+                                    >
+                                        <Plus size={16} /> Nova Transação
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-50/50">
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Origem/Destino</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {filteredTransactions.map(tx => {
+                                                const category = initialCategories.find(c => c.id === tx.categoryId);
+                                                const account = bankAccounts.find(a => a.id === tx.bankAccountId);
+                                                const card = creditCards.find(c => c.id === tx.creditCardId);
+                                                
+                                                return (
+                                                    <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                        <td className="px-6 py-4">
+                                                            <p className="text-xs font-black text-slate-800">{tx.date.split('-').reverse().join('/')}</p>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-xs font-black text-slate-800">{tx.description}</p>
+                                                                {tx.recurrenceId && (
+                                                                    <div className="p-1 bg-blue-50 text-blue-500 rounded-lg" title="Transação Recorrente">
+                                                                        <Repeat size={10} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {tx.clientId && (
+                                                                <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
+                                                                    <Building2 size={10} /> {clients.find(c => c.id === tx.clientId)?.name}
+                                                                </p>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border" style={{ color: category?.color, borderColor: category?.color + '40', backgroundColor: category?.color + '10' }}>
+                                                                {category?.name}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-2">
+                                                                {account ? (
+                                                                    <>
+                                                                        <Wallet size={12} className="text-slate-400" />
+                                                                        <span className="text-[10px] font-bold text-slate-600">{account.name}</span>
+                                                                    </>
+                                                                ) : card ? (
+                                                                    <>
+                                                                        <CardIcon size={12} className="text-slate-400" />
+                                                                        <span className="text-[10px] font-bold text-slate-600">{card.name}</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-[10px] font-bold text-slate-300">N/A</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <button 
+                                                                onClick={() => toggleTransactionStatus(tx)}
+                                                                className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 ${
+                                                                    tx.status === 'PAID' 
+                                                                    ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' 
+                                                                    : 'bg-amber-50 text-amber-600 hover:bg-amber-100'
+                                                                }`}
+                                                                title={tx.status === 'PAID' ? 'Marcar como Pendente' : 'Marcar como Pago'}
+                                                            >
+                                                                {tx.status === 'PAID' ? 'Pago' : 'Pendente'}
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex items-center justify-end gap-3">
+                                                                <p className={`text-sm font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {tx.amount.toLocaleString('pt-BR')}
+                                                                </p>
+                                                                <button 
+                                                                    onClick={() => handleDeleteTransaction(tx)}
+                                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'INVOICES' && (
+                        <motion.div 
+                            key="invoices"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className="space-y-6"
+                        >
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {filteredInvoices.map(inv => {
+                                    const card = creditCards.find(c => c.id === inv.creditCardId);
+                                    return (
+                                        <div key={inv.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium flex items-center justify-between group">
+                                            <div className="flex items-center gap-6">
+                                                <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-pink-50 group-hover:text-pink-600 transition-colors">
+                                                    <FileText size={32} />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-lg font-black text-slate-800">{inv.month}</h4>
+                                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{card?.name || 'Cartão Desconhecido'}</p>
+                                                    <div className="flex items-center gap-3 mt-2">
+                                                        <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                                            inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-600' : 
+                                                            inv.status === 'OPEN' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'
+                                                        }`}>
+                                                            {inv.status === 'PAID' ? 'Paga' : inv.status === 'OPEN' ? 'Aberta' : 'Vencida'}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-400 font-bold">Vence em {inv.dueDate.split('-').reverse().join('/')}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Valor</p>
+                                                <p className="text-xl font-black text-slate-800">R$ {inv.amount.toLocaleString('pt-BR')}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {filteredInvoices.length === 0 && (
+                                    <div className="col-span-full py-20 text-center bg-white rounded-[40px] border border-slate-100">
+                                        <FileText size={48} className="mx-auto text-slate-200 mb-4" />
+                                        <p className="text-slate-400 font-black uppercase tracking-widest text-xs">Nenhuma fatura encontrada para este período</p>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
-            <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                      <tr>
-                          <th className="p-4">Nome</th>
-                          <th className="p-4">Tipo</th>
-                          <th className="p-4">Data Compra</th>
-                          <th className="p-4 text-right">Custo</th>
-                          <th className="p-4 text-center">Ações</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                      {assets.map(a => (
-                          <tr key={a.id} className="hover:bg-slate-50 transition-colors group">
-                              <td className="p-4 font-medium text-slate-700">{a.name}</td>
-                              <td className="p-4"><span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded">{a.type}</span></td>
-                              <td className="p-4 text-slate-500">{a.purchaseDate.split('-').reverse().join('/')}</td>
-                              <td className="p-4 text-right font-bold text-slate-700">R$ {a.cost.toLocaleString()}</td>
-                              <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button onClick={() => { setEditingAsset(a); setIsAssetModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Edit2 size={16}/></button>
-                                  <button onClick={() => deleteAsset(a.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
-                              </td>
-                          </tr>
-                      ))}
-                  </tbody>
-              </table>
-      </div>
-  );
 
-  return (
-    <div className="space-y-6">
-      <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-1">
-          <button onClick={() => setActiveTab('DASHBOARD')} className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'DASHBOARD' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <TrendingUp size={16}/> Visão Geral
-          </button>
-          <button onClick={() => setActiveTab('TRANSACTIONS')} className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'TRANSACTIONS' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <FileText size={16}/> Extrato
-          </button>
-          <button onClick={() => setActiveTab('PAYABLES')} className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'PAYABLES' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <ArrowUpRight size={16}/> A Pagar
-          </button>
-          <button onClick={() => setActiveTab('RECEIVABLES')} className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'RECEIVABLES' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <ArrowDownLeft size={16}/> A Receber
-          </button>
-          <button onClick={() => setActiveTab('STOCK')} className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'STOCK' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <Package size={16}/> Estoque
-          </button>
-          <button onClick={() => setActiveTab('ASSETS')} className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'ASSETS' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <Wallet size={16}/> Ativos
-          </button>
-      </div>
+            {/* MODALS */}
+            {/* Transaction Modal */}
+            {isTransactionModalOpen && (
+                <Modal 
+                    isOpen={isTransactionModalOpen} 
+                    onClose={() => setIsTransactionModalOpen(false)}
+                    maxWidth="500px"
+                    hideHeader={true}
+                    noPadding={true}
+                    scrollable={false}
+                >
+                    <div className="flex flex-col h-full">
+                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Nova Transação</h3>
+                            <button onClick={() => setIsTransactionModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
+                        </div>
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                            <div className="flex p-1 bg-slate-100 rounded-2xl">
+                                <button 
+                                    onClick={() => setNewTransaction({...newTransaction, type: 'INCOME'})}
+                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newTransaction.type === 'INCOME' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}
+                                >
+                                    Receita
+                                </button>
+                                <button 
+                                    onClick={() => setNewTransaction({...newTransaction, type: 'EXPENSE'})}
+                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newTransaction.type === 'EXPENSE' ? 'bg-red-500 text-white shadow-lg' : 'text-slate-400'}`}
+                                >
+                                    Despesa
+                                </button>
+                            </div>
 
-      <div className="min-h-[500px]">
-          {activeTab === 'DASHBOARD' && renderDashboard()}
-          {activeTab === 'TRANSACTIONS' && renderTransactions()}
-          {activeTab === 'PAYABLES' && renderTransactions('PENDING_PAY')}
-          {activeTab === 'RECEIVABLES' && renderTransactions('PENDING_REC')}
-          {activeTab === 'STOCK' && renderStock()}
-          {activeTab === 'ASSETS' && renderAssets()}
-      </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Valor (R$)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xl font-black outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        placeholder="0,00"
+                                        value={newTransaction.amount || ''}
+                                        onChange={e => setNewTransaction({...newTransaction, amount: parseFloat(e.target.value)})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Data</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        value={newTransaction.date}
+                                        onChange={e => setNewTransaction({...newTransaction, date: e.target.value})}
+                                    />
+                                </div>
+                            </div>
 
-      {isTxModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm" onClick={() => setIsTxModalOpen(false)}>
-              <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl animate-pop" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-xl font-bold mb-4">{editingTx.id ? 'Editar Lançamento' : 'Novo Lançamento'}</h3>
-                  <div className="space-y-4">
-                      <div className="flex gap-2 mb-2">
-                           <button onClick={() => setEditingTx({...editingTx, type: 'INCOME'})} className={`flex-1 py-2 rounded text-sm font-bold border ${editingTx.type === 'INCOME' ? 'bg-emerald-50 border-emerald-500 text-emerald-600' : 'border-slate-200 text-slate-500'}`}>Receita</button>
-                           <button onClick={() => setEditingTx({...editingTx, type: 'EXPENSE'})} className={`flex-1 py-2 rounded text-sm font-bold border ${editingTx.type === 'EXPENSE' ? 'bg-red-50 border-red-500 text-red-600' : 'border-slate-200 text-slate-500'}`}>Despesa</button>
-                      </div>
-                      <input className="w-full border p-2 rounded text-sm" placeholder="Descrição" value={editingTx.description || ''} onChange={e => setEditingTx({...editingTx, description: e.target.value})} />
-                      <div className="grid grid-cols-2 gap-3">
-                          <input type="number" className="w-full border p-2 rounded text-sm" placeholder="Valor (R$)" value={editingTx.amount || ''} onChange={e => setEditingTx({...editingTx, amount: parseFloat(e.target.value)})} />
-                          <input type="date" className="w-full border p-2 rounded text-sm" value={editingTx.dueDate || ''} onChange={e => setEditingTx({...editingTx, dueDate: e.target.value})} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                          <input className="w-full border p-2 rounded text-sm" placeholder="Categoria" value={editingTx.category || ''} onChange={e => setEditingTx({...editingTx, category: e.target.value})} />
-                          <input className="w-full border p-2 rounded text-sm" placeholder="Entidade/Cliente" value={editingTx.entity || ''} onChange={e => setEditingTx({...editingTx, entity: e.target.value})} />
-                      </div>
-                      
-                      {!editingTx.id && (
-                          <div className="bg-slate-50 p-3 rounded border border-slate-100">
-                              <div className="flex items-center gap-2 mb-2">
-                                  <input type="checkbox" checked={isInstallment} onChange={e => setIsInstallment(e.target.checked)} id="installCheck" />
-                                  <label htmlFor="installCheck" className="text-sm text-slate-700">Lançamento Parcelado (Recorrente)</label>
-                              </div>
-                              {isInstallment && (
-                                  <div className="flex items-center gap-2">
-                                      <span className="text-xs text-slate-500">Repetir por:</span>
-                                      <input type="number" className="w-16 border p-1 rounded text-sm" value={installmentCount} onChange={e => setInstallmentCount(parseInt(e.target.value))} min={2} />
-                                      <span className="text-xs text-slate-500">meses</span>
-                                  </div>
-                              )}
-                          </div>
-                      )}
+                            <div>
+                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Descrição</label>
+                                <input 
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                    placeholder="Ex: Pagamento Fornecedor X"
+                                    value={newTransaction.description || ''}
+                                    onChange={e => setNewTransaction({...newTransaction, description: e.target.value})}
+                                />
+                            </div>
 
-                      <button onClick={handleSaveTransaction} className="w-full bg-slate-800 text-white py-2 rounded font-bold hover:bg-slate-900">Salvar</button>
-                  </div>
-              </div>
-          </div>
-      )}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Categoria</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        value={newTransaction.categoryId}
+                                        onChange={e => setNewTransaction({...newTransaction, categoryId: e.target.value})}
+                                    >
+                                        {initialCategories.filter(c => c.type === 'BOTH' || c.type === newTransaction.type).map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Status</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        value={newTransaction.status}
+                                        onChange={e => setNewTransaction({...newTransaction, status: e.target.value as any})}
+                                    >
+                                        <option value="PAID">Pago / Recebido</option>
+                                        <option value="PENDING">Pendente</option>
+                                    </select>
+                                </div>
+                            </div>
 
-      {isStockModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm" onClick={() => setIsStockModalOpen(false)}>
-              <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl animate-pop" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-xl font-bold mb-4">{editingStock.id ? 'Editar Item' : 'Novo Item'}</h3>
-                  <div className="space-y-3">
-                      <input className="w-full border p-2 rounded text-sm" placeholder="Nome do Item" value={editingStock.name || ''} onChange={e => setEditingStock({...editingStock, name: e.target.value})} />
-                      <select className="w-full border p-2 rounded text-sm" value={editingStock.category} onChange={e => setEditingStock({...editingStock, category: e.target.value as any})}>
-                          <option value="OFFICE">Escritório</option>
-                          <option value="IT">TI / Hardware</option>
-                          <option value="CLEANING">Limpeza</option>
-                          <option value="MARKETING">Marketing / Brindes</option>
-                      </select>
-                      <div className="grid grid-cols-2 gap-3">
-                          <div><label className="text-xs text-slate-500">Qtd Atual</label><input type="number" className="w-full border p-2 rounded text-sm" value={editingStock.quantity || ''} onChange={e => setEditingStock({...editingStock, quantity: parseInt(e.target.value)})} /></div>
-                          <div><label className="text-xs text-slate-500">Qtd Mínima</label><input type="number" className="w-full border p-2 rounded text-sm" value={editingStock.minQuantity || ''} onChange={e => setEditingStock({...editingStock, minQuantity: parseInt(e.target.value)})} /></div>
-                      </div>
-                      <div><label className="text-xs text-slate-500">Valor Unitário</label><input type="number" className="w-full border p-2 rounded text-sm" value={editingStock.unitPrice || ''} onChange={e => setEditingStock({...editingStock, unitPrice: parseFloat(e.target.value)})} /></div>
-                      <button onClick={handleSaveStock} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Salvar Item</button>
-                  </div>
-              </div>
-          </div>
-      )}
+                            <div>
+                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">
+                                    {newTransaction.type === 'INCOME' ? 'Conta de Destino' : 'Forma de Pagamento'}
+                                </label>
+                                <select 
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                    value={newTransaction.bankAccountId || newTransaction.creditCardId || ''}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val.startsWith('ba-')) {
+                                            setNewTransaction({...newTransaction, bankAccountId: val.replace('ba-', ''), creditCardId: undefined});
+                                        } else if (val.startsWith('cc-')) {
+                                            setNewTransaction({...newTransaction, creditCardId: val.replace('cc-', ''), bankAccountId: undefined});
+                                        } else {
+                                            setNewTransaction({...newTransaction, bankAccountId: undefined, creditCardId: undefined});
+                                        }
+                                    }}
+                                >
+                                    <option value="">Nenhum</option>
+                                    <optgroup label="Contas Bancárias">
+                                        {bankAccounts.map(acc => <option key={acc.id} value={`ba-${acc.id}`}>{acc.name}</option>)}
+                                    </optgroup>
+                                    {newTransaction.type === 'EXPENSE' && (
+                                        <optgroup label="Cartões de Crédito">
+                                            {creditCards.map(card => <option key={card.id} value={`cc-${card.id}`}>{card.name}</option>)}
+                                        </optgroup>
+                                    )}
+                                </select>
+                            </div>
 
-      {isAssetModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm" onClick={() => setIsAssetModalOpen(false)}>
-              <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl animate-pop" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-xl font-bold mb-4">{editingAsset.id ? 'Editar Ativo' : 'Novo Ativo'}</h3>
-                  <div className="space-y-3">
-                      <input className="w-full border p-2 rounded text-sm" placeholder="Nome do Ativo" value={editingAsset.name || ''} onChange={e => setEditingAsset({...editingAsset, name: e.target.value})} />
-                      <select className="w-full border p-2 rounded text-sm" value={editingAsset.type} onChange={e => setEditingAsset({...editingAsset, type: e.target.value as any})}>
-                          <option value="HARDWARE">Hardware</option>
-                          <option value="SOFTWARE">Software (Licença)</option>
-                          <option value="OFFICE">Mobiliário</option>
-                      </select>
-                      <input type="date" className="w-full border p-2 rounded text-sm" value={editingAsset.purchaseDate || ''} onChange={e => setEditingAsset({...editingAsset, purchaseDate: e.target.value})} />
-                      <input type="number" className="w-full border p-2 rounded text-sm" placeholder="Custo de Aquisição" value={editingAsset.cost || ''} onChange={e => setEditingAsset({...editingAsset, cost: parseFloat(e.target.value)})} />
-                      <button onClick={handleSaveAsset} className="w-full bg-purple-600 text-white py-2 rounded font-bold hover:bg-purple-700">Salvar Ativo</button>
-                  </div>
-              </div>
-          </div>
-      )}
-    </div>
-  );
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Cliente (Opcional)</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        value={newTransaction.clientId || ''}
+                                        onChange={e => setNewTransaction({...newTransaction, clientId: e.target.value})}
+                                    >
+                                        <option value="">Sem Cliente</option>
+                                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Squad (Opcional)</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        value={newTransaction.squadId || ''}
+                                        onChange={e => setNewTransaction({...newTransaction, squadId: e.target.value})}
+                                    >
+                                        <option value="">Sem Squad</option>
+                                        {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Recurrence Section */}
+                            <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-white rounded-xl text-blue-500 shadow-sm">
+                                            <Repeat size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Transação Recorrente</p>
+                                            <p className="text-[9px] text-slate-400 font-bold uppercase">Repetir mensalmente</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setNewTransaction({...newTransaction, isRecurring: !newTransaction.isRecurring})}
+                                        className={`w-12 h-6 rounded-full transition-all relative ${newTransaction.isRecurring ? 'bg-blue-500' : 'bg-slate-200'}`}
+                                    >
+                                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${newTransaction.isRecurring ? 'left-7' : 'left-1'}`} />
+                                    </button>
+                                </div>
+
+                                {newTransaction.isRecurring && (
+                                    <motion.div 
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        className="pt-4 border-t border-slate-200"
+                                    >
+                                        <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Quantidade de meses</label>
+                                        <div className="flex items-center gap-4">
+                                            <input 
+                                                type="range" 
+                                                min="2" 
+                                                max="24" 
+                                                value={newTransaction.recurrenceMonths || 2}
+                                                onChange={e => setNewTransaction({...newTransaction, recurrenceMonths: parseInt(e.target.value)})}
+                                                className="flex-1 accent-blue-500"
+                                            />
+                                            <span className="w-12 text-center text-sm font-black text-slate-800 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                                                {newTransaction.recurrenceMonths || 2}
+                                            </span>
+                                        </div>
+                                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 italic">
+                                            Serão criadas {newTransaction.recurrenceMonths || 2} transações idênticas.
+                                        </p>
+                                    </motion.div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 sticky bottom-0 z-20 flex justify-end gap-3">
+                            <button onClick={() => setIsTransactionModalOpen(false)} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
+                            <button onClick={handleAddTransaction} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">Salvar Transação</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Account Modal */}
+            {isAccountModalOpen && (
+                <Modal 
+                    isOpen={isAccountModalOpen} 
+                    onClose={() => {
+                        setIsAccountModalOpen(false);
+                        setEditingAccountId(null);
+                    }}
+                    maxWidth="500px"
+                    hideHeader={true}
+                    noPadding={true}
+                    scrollable={false}
+                >
+                    <div className="flex flex-col h-full">
+                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingAccountId ? 'Editar Conta' : 'Nova Conta'}</h3>
+                            <button onClick={() => { setIsAccountModalOpen(false); setEditingAccountId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
+                        </div>
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                            <div>
+                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome da Conta</label>
+                                <input 
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                    placeholder="Ex: Itaú Empresa"
+                                    value={newAccount.name || ''}
+                                    onChange={e => setNewAccount({...newAccount, name: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Banco / Instituição</label>
+                                <input 
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                    placeholder="Ex: Banco Itaú"
+                                    value={newAccount.bankName || ''}
+                                    onChange={e => setNewAccount({...newAccount, bankName: e.target.value})}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Tipo</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        value={newAccount.type}
+                                        onChange={e => setNewAccount({...newAccount, type: e.target.value as any})}
+                                    >
+                                        <option value="CHECKING">Corrente</option>
+                                        <option value="SAVINGS">Poupança</option>
+                                        <option value="CASH">Dinheiro</option>
+                                        <option value="INVESTMENT">Investimento</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Saldo Inicial</label>
+                                    <input 
+                                        type="number"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        placeholder="0,00"
+                                        value={newAccount.balance || ''}
+                                        onChange={e => setNewAccount({...newAccount, balance: parseFloat(e.target.value)})}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Cor de Identificação</label>
+                                <div className="flex gap-3">
+                                    {['#3b82f6', '#ec6608', '#8a05be', '#10b981', '#ef4444', '#000000'].map(color => (
+                                        <button 
+                                            key={color}
+                                            onClick={() => setNewAccount({...newAccount, color})}
+                                            className={`w-10 h-10 rounded-xl border-4 transition-all ${newAccount.color === color ? 'border-pink-200 scale-110 shadow-lg' : 'border-transparent'}`}
+                                            style={{ backgroundColor: color }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 sticky bottom-0 z-20 flex justify-end gap-3">
+                            <button onClick={() => { setIsAccountModalOpen(false); setEditingAccountId(null); }} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
+                            <button onClick={handleAddAccount} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">{editingAccountId ? 'Salvar Alterações' : 'Criar Conta'}</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Card Modal */}
+            {isCardModalOpen && (
+                <Modal 
+                    isOpen={isCardModalOpen} 
+                    onClose={() => {
+                        setIsCardModalOpen(false);
+                        setEditingCardId(null);
+                    }}
+                    maxWidth="500px"
+                    hideHeader={true}
+                    noPadding={true}
+                    scrollable={false}
+                >
+                    <div className="flex flex-col h-full">
+                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingCardId ? 'Editar Cartão' : 'Novo Cartão'}</h3>
+                            <button onClick={() => { setIsCardModalOpen(false); setEditingCardId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
+                        </div>
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                            <div>
+                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome do Cartão</label>
+                                <input 
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                    placeholder="Ex: Visa Platinum Business"
+                                    value={newCard.name || ''}
+                                    onChange={e => setNewCard({...newCard, name: e.target.value})}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Bandeira</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        value={newCard.brand}
+                                        onChange={e => setNewCard({...newCard, brand: e.target.value})}
+                                    >
+                                        <option value="Visa">Visa</option>
+                                        <option value="Mastercard">Mastercard</option>
+                                        <option value="Amex">American Express</option>
+                                        <option value="Elo">Elo</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Limite Total</label>
+                                    <input 
+                                        type="number"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        placeholder="0,00"
+                                        value={newCard.limit || ''}
+                                        onChange={e => setNewCard({...newCard, limit: parseFloat(e.target.value)})}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Dia Fechamento</label>
+                                    <input 
+                                        type="number"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        placeholder="25"
+                                        value={newCard.closingDay || ''}
+                                        onChange={e => setNewCard({...newCard, closingDay: parseInt(e.target.value)})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Dia Vencimento</label>
+                                    <input 
+                                        type="number"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
+                                        placeholder="5"
+                                        value={newCard.dueDate || ''}
+                                        onChange={e => setNewCard({...newCard, dueDate: parseInt(e.target.value)})}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 z-20">
+                            <button onClick={() => { setIsCardModalOpen(false); setEditingCardId(null); }} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
+                            <button onClick={handleAddCard} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">{editingCardId ? 'Salvar Alterações' : 'Criar Cartão'}</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
 };

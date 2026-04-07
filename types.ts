@@ -1,11 +1,19 @@
 
 export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'FREELANCER' | 'CLIENT' | 'FINANCE';
 
+export interface ConfirmOptions {
+    title: string;
+    description: string;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'info';
+}
+
 export interface SystemSettings {
     agencyName: string;
-    logo: string; // URL ou Base64
-    primaryColor: string; // Hex Code (ex: #db2777)
-    sidebarColor: string; // Hex Code (ex: #0f172a)
+    logo: string;
+    primaryColor: string;
+    sidebarColor: string;
 }
 
 export interface UserPreferences {
@@ -48,6 +56,7 @@ export interface ChecklistItem {
   text: string;
   isCompleted: boolean;
   dueDate?: string;
+  assigneeId?: string;
 }
 
 export interface HistoryLog {
@@ -71,6 +80,7 @@ export interface TaskCover {
 
 export interface Task {
   id: string;
+  clientId?: string;
   title: string;
   description: string;
   status: string;
@@ -78,16 +88,20 @@ export interface Task {
   squadId?: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   dueDate: string;
+  completedAt?: number;
   estimatedTime: number;
   timeLogs: TimeLog[];
   isTracking: boolean;
   clientRequest?: boolean;
-  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED'; // Novo campo
+  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
   checklists: ChecklistItem[];
   comments: Comment[];
   history: HistoryLog[];
   archived?: boolean;
+  createdAt: number;
   cover?: TaskCover;
+  coverType?: 'color' | 'image' | null;
+  coverValue?: string | null;
 }
 
 export interface LeadTask {
@@ -95,7 +109,17 @@ export interface LeadTask {
     text: string;
     completed: boolean;
     dueDate?: string;
+    time?: string;
     type?: 'CALL' | 'MEETING' | 'EMAIL' | 'TASK';
+    createdAt: number;
+}
+
+export interface LeadHistory {
+    id: string;
+    userId: string;
+    action: string;
+    timestamp: number;
+    details?: string;
 }
 
 export interface Lead {
@@ -103,7 +127,9 @@ export interface Lead {
   name: string;
   company: string;
   value: number;
-  stage: string;
+  stageId: string;
+  status: 'OPEN' | 'WON' | 'LOST';
+  lossReasonId?: string;
   email: string;
   phone?: string;
   lastContact: string;
@@ -111,6 +137,26 @@ export interface Lead {
   rating?: number;
   tasks?: LeadTask[];
   notes?: string;
+  responsibleId?: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  temperature: 'COLD' | 'WARM' | 'HOT';
+  createdAt: number;
+  updatedAt: number;
+  history: LeadHistory[];
+  tags?: string[];
+}
+
+export interface LossReason {
+    id: string;
+    label: string;
+    isActive: boolean;
+}
+
+export interface PipelineStage {
+    id: string;
+    label: string;
+    color: string;
+    order: number;
 }
 
 export interface ClientContact {
@@ -121,73 +167,178 @@ export interface ClientContact {
     birthDate?: string;
 }
 
+export interface PasswordEntry {
+    id: string;
+    platform: string;
+    login: string;
+    password: string;
+    link?: string;
+    observations?: string;
+}
+
+export interface PasswordLog {
+    id: string;
+    userId: string;
+    timestamp: number;
+    platform: string;
+}
+
+export interface SystemAccess {
+    id: string;
+    username?: string;
+    email?: string;
+    password?: string;
+    label?: string;
+}
+
 export interface Client {
     id: string;
-    name: string;
+    name: string; // Nome / Empresa
     legalName?: string;
-    status: 'ACTIVE' | 'INACTIVE' | 'CHURNED';
+    document?: string; // CNPJ/CPF
+    status: 'LEAD' | 'ACTIVE' | 'INACTIVE';
+    entryDate?: string;
+    responsibleId?: string;
+    squadId?: string;
+    
+    contact?: {
+        name: string;
+        email: string;
+        phone: string;
+        whatsapp: string;
+    };
+    
+    financialContact?: {
+        name: string;
+        email: string;
+        phone: string;
+    };
+    
+    passwords?: PasswordEntry[];
+    passwordLogs?: PasswordLog[];
+    
+    documentationLinks?: string[];
+    
+    tags?: string[];
+    internalNotes?: string;
+    classification?: 'A' | 'B' | 'C';
+    
+    systemAccesses?: SystemAccess[];
+    serviceIds?: string[];
+
     isRecurring: boolean;
     level: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED'; 
     summary?: string; 
     contractUrl?: string;
     assetsFolderUrl?: string;
     contacts: ClientContact[];
-    squadId?: string;
     monthlyValue?: number;
     contractStartDate?: string;
-    serviceIds?: string[];
+}
+
+export interface ServiceDelivery {
+    id: string;
+    description: string;
+    quantity: number;
+    frequency: 'WEEKLY' | 'MONTHLY' | 'ONEOFF';
+}
+
+export interface TaskTemplate {
+    id: string;
+    title: string;
+    description?: string;
+    estimatedTime?: number;
+    priority: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
 export interface AgencyService {
     id: string;
     name: string;
     description: string;
+    type: 'RECURRENT' | 'ONEOFF';
+    category: string;
+    status: 'ACTIVE' | 'INACTIVE';
     basePrice: number;
-    active: boolean;
+    deliveries: ServiceDelivery[];
+    taskTemplates: TaskTemplate[];
+    tags: string[];
+    observations?: string;
 }
 
-export interface FinancialRecord {
-  id: string;
-  description: string;
-  amount: number;
-  type: 'INCOME' | 'EXPENSE';
-  status: 'PAID' | 'PENDING' | 'OVERDUE' | 'CANCELLED';
-  dueDate: string;
-  paymentDate?: string;
-  category: string;
-  entity: string;
-  installment?: { // Novo: Suporte a parcelamento
-      current: number;
-      total: number;
-      groupId: string;
-  };
-}
-
-export interface Asset {
-  id: string;
-  name: string;
-  type: 'SOFTWARE' | 'HARDWARE' | 'OFFICE';
-  cost: number;
-  purchaseDate: string;
-  assignedTo?: string;
-  condition?: 'NEW' | 'USED' | 'DAMAGED';
-}
-
-export interface StockItem {
+export interface FinancialCategory {
     id: string;
     name: string;
-    category: 'OFFICE' | 'IT' | 'MARKETING' | 'CLEANING';
-    quantity: number;
-    minQuantity: number;
-    unitPrice: number;
-    lastRestock: string;
-    deletedAt?: string; // Novo: Data da exclusão (Soft Delete)
-    deletionReason?: string; // Novo: Motivo da exclusão
-    deletedBy?: string; // Novo: Quem excluiu
+    type: 'INCOME' | 'EXPENSE' | 'BOTH';
+    color: string;
+}
+
+export interface BankAccount {
+    id: string;
+    name: string;
+    type: 'CHECKING' | 'SAVINGS' | 'CASH' | 'INVESTMENT';
+    bankName: string;
+    balance: number;
+    color: string;
+    status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface CreditCard {
+    id: string;
+    name: string;
+    brand: string;
+    limit: number;
+    availableLimit: number;
+    closingDay: number;
+    dueDate: number;
+    color: string;
+    status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface FinancialTransaction {
+    id: string;
+    description: string;
+    amount: number;
+    type: 'INCOME' | 'EXPENSE';
+    date: string;
+    status: 'PAID' | 'PENDING';
+    categoryId: string;
+    bankAccountId?: string;
+    creditCardId?: string;
+    clientId?: string;
+    squadId?: string;
+    responsibleId: string;
+    installments?: {
+        current: number;
+        total: number;
+        groupId: string;
+    };
+    recurrenceId?: string;
+    createdAt: number;
+}
+
+export interface CardInvoice {
+    id: string;
+    creditCardId: string;
+    month: string; // YYYY-MM
+    amount: number;
+    status: 'OPEN' | 'CLOSED' | 'PAID' | 'OVERDUE';
+    dueDate: string;
+}
+
+export interface Supplier {
+    id: string;
+    name: string;
+    legalName?: string;
+    document?: string;
+    email?: string;
+    phone?: string;
+    bankDetails?: string;
+    category?: string;
 }
 
 export interface Requisition {
     id: string;
+    clientId?: string;
     requesterId: string;
     title: string;
     description: string;
@@ -195,8 +346,6 @@ export interface Requisition {
     status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PURCHASED';
     date: string;
     category: string;
-    
-    // Audit Fields
     approvedBy?: string;
     approvedAt?: string;
     rejectedBy?: string;
@@ -214,18 +363,86 @@ export interface ColumnConfig {
     id: string;
     label: string;
     color: string;
+    order: number;
+    wipLimit?: number | null;
+    isArchived: boolean;
+}
+
+export type NotificationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+export type NotificationStatus = 'UNREAD' | 'READ' | 'ARCHIVED';
+export type SystemModule = 'KANBAN' | 'CRM' | 'FINANCE' | 'REQUISITIONS' | 'CLIENTS' | 'ADMIN' | 'HELP' | 'DASHBOARD' | 'APPROVALS';
+
+export type ApprovalCategory = 'SOCIAL_MEDIA' | 'DESIGN' | 'PDF' | 'TRAFFIC' | 'VIDEO' | 'SHOOTING' | 'OTHERS';
+export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ADJUSTMENT';
+
+export interface ApprovalComment {
+    id: string;
+    userId: string;
+    text: string;
+    timestamp: number;
+    pageNumber?: number; // For PDF
+}
+
+export interface ApprovalItem {
+    id: string;
+    title: string;
+    description?: string;
+    category: ApprovalCategory;
+    status: ApprovalStatus;
+    files: string[]; // URLs
+    caption?: string; // For Social Media
+    comments: ApprovalComment[];
+    pages?: { // For PDF
+        number: number;
+        status: ApprovalStatus;
+        comments: ApprovalComment[];
+    }[];
+    taskId?: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface ApprovalBatch {
+    id: string;
+    title: string;
+    clientId: string;
+    status: 'OPEN' | 'SENT' | 'COMPLETED';
+    items: ApprovalItem[];
+    createdAt: number;
+    updatedAt: number;
 }
 
 export interface Notification {
     id: string;
     title: string;
     message: string;
-    type: 'INFO' | 'WARNING' | 'SUCCESS' | 'Birthday' | 'REJECTED';
-    read: boolean;
+    type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ALERT' | 'Birthday' | 'REJECTED' | 'SECURITY';
+    priority: NotificationPriority;
+    status: NotificationStatus;
+    originModule: SystemModule;
     timestamp: number;
-    link?: string;
-    targetUserId?: string; // Novo: Direcionamento da notificação
-    navToView?: string; // Novo: ID da view para navegação (ex: 'kanban', 'crm')
+    targetUserId?: string;
+    targetRole?: Role;
+    navToView?: string;
+    actionLabel?: string;
+    metadata?: {
+        referenceId?: string;
+        module?: string;
+        action?: string;
+        [key: string]: any;
+    };
+}
+
+export interface ProductivityGoal {
+    id: string;
+    title: string;
+    type: 'PRODUCTION' | 'HOURS';
+    period: 'MONTHLY';
+    targetValue: number;
+    squadId?: string; // If squad goal
+    userId?: string;  // If individual goal
+    month: string;    // YYYY-MM
+    createdAt: number;
 }
 
 export type RolePermissions = Record<Role, string[]>;

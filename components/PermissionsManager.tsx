@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Role, RolePermissions } from '../types';
+import { Role, RolePermissions, ConfirmOptions } from '../types';
 import { 
     Shield, Check, X, Lock, Users, LayoutDashboard, Settings, 
     AlertTriangle, Eye, MousePointerClick, RotateCcw,
@@ -10,10 +10,10 @@ import {
 interface PermissionsManagerProps {
   permissions: RolePermissions;
   setPermissions: React.Dispatch<React.SetStateAction<RolePermissions>>;
+  openConfirm: (options: ConfirmOptions) => Promise<boolean>;
 }
 
 // 1. DEFINIÇÃO DOS PADRÕES DE FÁBRICA
-// Esta constante dita exatamente quais checkboxes devem estar marcados por padrão.
 const DEFAULT_PERMISSIONS: RolePermissions = {
     'ADMIN': [
         'dashboard', 'kanban', 'productivity', 'teams', 'clients', 'catalog', 
@@ -37,7 +37,7 @@ const DEFAULT_PERMISSIONS: RolePermissions = {
         'action:approve_budget', 'action:export'
     ],
     'CLIENT': [
-        'client-portal', 'requisitions', 'help'
+        'client-portal', 'help'
     ]
 };
 
@@ -92,7 +92,7 @@ const ROLE_CONFIG: Record<Role, { label: string, color: string }> = {
     'CLIENT': { label: 'Cliente', color: 'bg-pink-100 text-pink-700' }
 };
 
-export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissions, setPermissions }) => {
+export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissions, setPermissions, openConfirm }) => {
   const [viewMode, setViewMode] = useState<'MATRIX' | 'ROLES'>('MATRIX');
   const [lastChange, setLastChange] = useState<{msg: string, type: 'info' | 'success'} | null>(null);
 
@@ -118,19 +118,24 @@ export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissi
       setLastChange({ msg: `${moduleId} ${action} ${role} às ${timestamp}`, type: 'info' });
   };
 
-  // 2. LÓGICA DE RESTAURAÇÃO
-  const handleResetDefaults = () => {
-      if (window.confirm(
-          "RESTAURAR PADRÕES DO SISTEMA?\n\n" +
-          "• Todas as permissões personalizadas serão perdidas.\n" +
-          "• Módulos desativados incorretamente serão reativados.\n" +
-          "• Acessos indevidos adicionados manualmente serão removidos.\n\n" +
-          "Deseja confirmar o reset para as configurações de fábrica?"
-      )) {
-          // Deep clone para garantir que não haja referência de memória e o React detecte a mudança
-          const factorySettings = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS));
-          setPermissions(factorySettings);
-          setLastChange({ msg: 'Sistema restaurado para as definições originais de fábrica.', type: 'success' });
+  const handleResetDefaults = async () => {
+      console.log("DELETE_CLICK");
+      const ok = await openConfirm({
+          title: "Restaurar Padrões?",
+          description: "Todas as permissões personalizadas serão perdidas e o sistema voltará para as configurações de fábrica.",
+          variant: "danger",
+          confirmText: "Resetar Sistema"
+      });
+
+      if (ok) {
+          try {
+              const factorySettings = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS));
+              setPermissions(factorySettings);
+              setLastChange({ msg: 'Sistema restaurado para as definições originais.', type: 'success' });
+              console.log("DELETE_SUCCESS");
+          } catch (e) {
+              console.error("DELETE_ERROR", e);
+          }
       }
   };
 
@@ -364,7 +369,7 @@ export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissi
                           <div className={`p-4 border-b border-slate-100 flex justify-between items-center ${isAdmin ? 'bg-slate-800' : 'bg-slate-50'}`}>
                               <div>
                                   <h3 className={`font-bold ${isAdmin ? 'text-white' : 'text-slate-800'}`}>{ROLE_CONFIG[role].label}</h3>
-                                  <p className={`text-xs ${isAdmin ? 'text-slate-400' : 'text-slate-500'}`}>{role}</p>
+                                  <p className={`text-xs ${isAdmin ? 'text-slate-400' : 'text-slate-50'}`}>{role}</p>
                               </div>
                               {isAdmin ? <Shield size={20} className="text-pink-500"/> : <Users size={20} className="text-slate-300"/>}
                           </div>

@@ -1,148 +1,146 @@
 
-import React, { useState } from 'react';
-import { Lead, ColumnConfig, LeadTask } from '../types';
-import { DollarSign, Plus, Star, CheckSquare, Calendar, Phone, Mail, MessageSquare, Trash2, Clock, User, Briefcase } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Modal } from './Modal';
+import { Lead, ColumnConfig, LeadTask, ConfirmOptions, User } from '../types';
+import { 
+    DollarSign, Plus, Star, CheckSquare, Calendar, Phone, Mail, MessageSquare, 
+    Trash2, Clock, User as UserIcon, Briefcase, AlertCircle, Save, X, Settings,
+    GripHorizontal, Edit2, ArchiveRestore, Info, Tag, Search, Filter, Rocket
+} from 'lucide-react';
 
 interface CRMProps {
   leads: Lead[];
   setLeads: React.Dispatch<React.SetStateAction<Lead[]>>;
   columns: ColumnConfig[];
   setColumns: React.Dispatch<React.SetStateAction<ColumnConfig[]>>;
+  openConfirm: (options: ConfirmOptions) => Promise<boolean>;
+  leadSources: string[];
+  setLeadSources: React.Dispatch<React.SetStateAction<string[]>>;
+  currentUser: User;
 }
 
-export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns }) => {
+export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, openConfirm, leadSources, setLeadSources, currentUser }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState<Partial<Lead>>({ stage: 'NEW', rating: 0, tasks: [] });
+  const [editingLead, setEditingLead] = useState<Partial<Lead>>({ stage: columns[0]?.id || 'NEW', rating: 0, tasks: [] });
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'ACTIVITIES'>('DETAILS');
+  const [showValidation, setShowValidation] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Drag and Drop State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [editingColumn, setEditingColumn] = useState<Partial<ColumnConfig> | null>(null);
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
 
-  // Task Form State
-  const [newTaskText, setNewTaskText] = useState('');
-  const [newTaskDate, setNewTaskDate] = useState('');
-  const [newTaskType, setNewTaskType] = useState<'CALL' | 'EMAIL' | 'MEETING' | 'TASK'>('TASK');
+  const isAdmin = currentUser.role === 'ADMIN';
+  const activeColumns = useMemo(() => columns.filter(c => !c.isArchived).sort((a,b) => a.order - b.order), [columns]);
+
+  const totalValue = leads.reduce((acc, lead) => acc + (lead.value || 0), 0);
+
+  const resetForm = () => {
+    setEditingLead({ stage: activeColumns[0]?.id || 'NEW', rating: 0, tasks: [] });
+    setActiveTab('DETAILS');
+    setShowValidation(false);
+  };
 
   const handleSave = () => {
-      if(!editingLead.company) return;
-      if(editingLead.id) {
-          setLeads(prev => prev.map(l => l.id === editingLead.id ? { ...l, ...editingLead } as Lead : l));
-      } else {
-          setLeads(prev => [...prev, { ...editingLead, id: Date.now().toString() } as Lead]);
+      if (!editingLead.company || !editingLead.name || (!editingLead.value && editingLead.value !== 0)) {
+          setShowValidation(true);
+          return;
       }
+      if(editingLead.id) setLeads(prev => prev.map(l => l.id === editingLead.id ? { ...l, ...editingLead } as Lead : l));
+      else setLeads(prev => [...prev, { ...editingLead, id: Date.now().toString(), lastContact: new Date().toISOString() } as Lead]);
       setIsModalOpen(false);
       resetForm();
   };
 
-  const resetForm = () => {
-    setEditingLead({ stage: 'NEW', rating: 0, tasks: [] });
-    setActiveTab('DETAILS');
-  };
-
-  const addTaskToLead = () => {
-      if(!newTaskText) return;
-      const newTask: LeadTask = { 
-          id: Date.now().toString(), 
-          text: newTaskText, 
-          completed: false,
-          dueDate: newTaskDate || new Date().toISOString().split('T')[0],
-          type: newTaskType
-      };
-      setEditingLead({ ...editingLead, tasks: [newTask, ...(editingLead.tasks || [])] });
-      setNewTaskText('');
-      setNewTaskDate('');
-  };
-
-  const toggleTask = (taskId: string) => {
-      const updatedTasks = editingLead.tasks?.map(t => t.id === taskId ? {...t, completed: !t.completed} : t);
-      setEditingLead({...editingLead, tasks: updatedTasks});
-  };
-
-  const deleteTask = (taskId: string) => {
-      const updatedTasks = editingLead.tasks?.filter(t => t.id !== taskId);
-      setEditingLead({...editingLead, tasks: updatedTasks});
-  };
-
-  const getTaskIcon = (type: string) => {
-      switch(type) {
-          case 'CALL': return <Phone size={14} className="text-blue-500"/>;
-          case 'EMAIL': return <Mail size={14} className="text-yellow-500"/>;
-          case 'MEETING': return <User size={14} className="text-purple-500"/>;
-          default: return <CheckSquare size={14} className="text-emerald-500"/>;
-      }
-  };
-
-  // --- Drag and Drop Logic ---
-  const handleDragStart = (e: React.DragEvent, leadId: string) => {
-      setDraggedLeadId(leadId);
-      e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-  };
-
-  const handleDrop = (e: React.DragEvent, targetStage: string) => {
-      e.preventDefault();
-      if (!draggedLeadId) return;
-
-      const lead = leads.find(l => l.id === draggedLeadId);
-      if (lead && lead.stage !== targetStage) {
-          setLeads(prev => prev.map(l => l.id === draggedLeadId ? { ...l, stage: targetStage } : l));
-      }
-      setDraggedLeadId(null);
-  };
-
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Pipeline de Vendas</h2>
-          <p className="text-slate-500">Gestão de oportunidades e previsão de fechamento</p>
+    <div className="h-full flex flex-col overflow-hidden relative">
+      {/* FLOATING ACTION BAR CRM */}
+      <div className="sticky top-2 z-30 mb-6 mx-2">
+        <div className="bg-white border border-slate-200 shadow-2xl shadow-slate-200/50 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4 pl-2">
+            <div className="bg-indigo-600 p-2.5 rounded-xl text-white shadow-lg shadow-indigo-200">
+              <Rocket size={20} />
+            </div>
+            <div className="hidden sm:block">
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-tighter leading-none">Pipeline</h2>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">R$ {totalValue.toLocaleString()} total</p>
+            </div>
+            
+            <div className="h-8 w-px bg-slate-200 mx-2 hidden md:block"></div>
+            
+            <div className="relative group">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              <input 
+                type="text" 
+                placeholder="Buscar prospect..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-9 pr-4 py-2 bg-slate-100/50 border border-transparent focus:bg-white focus:border-indigo-200 rounded-xl text-xs font-bold outline-none w-32 md:w-64 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button 
+                onClick={() => setIsSettingsOpen(true)} 
+                className="p-2.5 bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 rounded-xl transition-all shadow-sm"
+                title="Configurações do CRM"
+              >
+                <Settings size={18}/>
+              </button>
+            )}
+
+            <div className="w-px h-8 bg-slate-200 mx-1"></div>
+
+            <button 
+              onClick={() => { resetForm(); setIsModalOpen(true)}} 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-200 transition-all transform hover:scale-[1.02] active:scale-95"
+            >
+              <Plus size={18} strokeWidth={3} />
+              <span className="hidden md:inline">Novo Lead</span>
+            </button>
+          </div>
         </div>
-        <button onClick={() => { resetForm(); setIsModalOpen(true)}} className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-lg shadow-pink-500/20">
-            <Plus size={18} /> Nova Oportunidade
-        </button>
       </div>
 
-      <div className="flex-1 flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
-          {columns.map(col => (
-              <div 
-                key={col.id} 
-                className={`flex-shrink-0 w-80 flex flex-col rounded-xl border bg-opacity-50 transition-colors ${col.color} ${draggedLeadId ? 'border-dashed border-2 border-slate-400/50' : ''}`}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, col.id)}
-              >
-                  <div className="p-4 flex items-center justify-between border-b border-black/5">
-                      <h3 className="font-semibold text-slate-700">{col.label}</h3>
-                      <span className="text-xs bg-white px-2 py-0.5 rounded-full font-bold text-slate-500">
-                          {leads.filter(l => l.stage === col.id).length}
+      <div className="flex-1 flex gap-5 overflow-x-auto pb-6 px-2 hide-scrollbar items-start">
+          {activeColumns.map(col => (
+              <div key={col.id} className={`flex-shrink-0 w-84 flex flex-col rounded-[32px] border transition-all ${col.color} bg-opacity-30 shadow-premium`}>
+                  <div className="p-6 flex items-center justify-between border-b border-black/5">
+                      <div className="flex items-center gap-3">
+                         <div className="w-2 h-2 rounded-full bg-slate-400 animate-pulse" />
+                         <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-600">{col.label}</h3>
+                      </div>
+                      <span className="text-[10px] bg-white/90 px-2.5 py-1 rounded-full font-black text-slate-500 shadow-sm border border-white">
+                          {leads.filter(l => l.stage === col.id && l.company.toLowerCase().includes(searchTerm.toLowerCase())).length}
                       </span>
                   </div>
-                  <div className="p-3 flex-1 overflow-y-auto space-y-3 custom-scrollbar">
-                      {leads.filter(l => l.stage === col.id).map(lead => (
+                  <div className="p-4 flex-1 overflow-y-auto space-y-4 custom-scrollbar min-h-[200px]">
+                      {leads.filter(l => l.stage === col.id && l.company.toLowerCase().includes(searchTerm.toLowerCase())).map(lead => (
                           <div 
                             key={lead.id} 
                             draggable
-                            onDragStart={(e) => handleDragStart(e, lead.id)}
                             onClick={() => { setEditingLead(lead); setIsModalOpen(true) }} 
-                            className="bg-white p-4 rounded-lg shadow-sm border border-slate-100 hover:shadow-md transition-all cursor-grab active:cursor-grabbing group"
+                            className="bg-white p-6 rounded-[28px] shadow-sm border-2 border-white hover:border-indigo-200 transition-all cursor-grab active:cursor-grabbing group hover:shadow-premium-hover"
                           >
-                                <h4 className="font-bold text-slate-800 group-hover:text-pink-600 transition-colors">{lead.company}</h4>
-                                <p className="text-xs text-slate-500 mb-2">{lead.name}</p>
-                                
-                                <div className="flex items-center gap-1 text-amber-400 mb-2">
-                                    {[1,2,3,4,5].map(s => <Star key={s} size={10} fill={s <= (lead.rating || 0) ? "currentColor" : "none"} />)}
+                                <div className="flex justify-between items-start mb-3">
+                                    <h4 className="font-bold text-[13px] text-slate-800 group-hover:text-indigo-600 transition-colors leading-tight flex-1 tracking-tight">{lead.company}</h4>
+                                    <div className="flex gap-0.5 text-amber-400 transition-transform group-hover:scale-110">
+                                        {[1,2,3].map(s => <Star key={s} size={10} fill={s <= (lead.rating || 0) ? "currentColor" : "none"} />)}
+                                    </div>
                                 </div>
-                                
-                                <div className="flex justify-between items-center pt-2 border-t border-slate-50">
-                                    <p className="text-sm font-bold text-slate-800 flex items-center gap-1"><DollarSign size={12}/> {lead.value.toLocaleString()}</p>
-                                    {lead.tasks && lead.tasks.filter(t => !t.completed).length > 0 && (
-                                        <div className="text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <Clock size={10}/>
-                                            {lead.tasks.filter(t => !t.completed).length} pendente(s)
-                                        </div>
+                                <p className="text-[11px] text-slate-400 font-medium mb-4">{lead.name}</p>
+                                <div className="flex justify-between items-center pt-4 border-t border-slate-50">
+                                    <div className="flex items-center gap-1 text-slate-800 font-black text-sm">
+                                        <span className="text-[10px] text-slate-400 font-bold">R$</span>
+                                        {lead.value.toLocaleString()}
+                                    </div>
+                                    {lead.source && (
+                                        <span className="text-[8px] font-black uppercase text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full tracking-widest">
+                                            {lead.source}
+                                        </span>
                                     )}
                                 </div>
                           </div>
@@ -150,185 +148,94 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns }) => {
                   </div>
               </div>
           ))}
-      </div>
 
+          {isAdmin && (
+               <button 
+                onClick={() => { setEditingColumn({ label: '', color: 'bg-slate-50 border-slate-200' }); setIsColumnModalOpen(true); }}
+                className="flex-shrink-0 w-80 h-16 bg-white/50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center gap-3 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-slate-600 transition-all"
+               >
+                   <Plus size={18}/> Nova Etapa
+               </button>
+          )}
+      </div>      {/* LEAD MODAL */}
       {isModalOpen && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center backdrop-blur-sm p-4" onClick={() => setIsModalOpen(false)}>
-              <div className="bg-white rounded-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden animate-pop shadow-2xl" onClick={e => e.stopPropagation()}>
-                  
-                  {/* Header */}
-                  <div className="p-6 border-b flex justify-between items-start bg-slate-50">
-                      <div>
-                          <div className="flex items-center gap-2 mb-1">
-                             <Briefcase size={20} className="text-slate-400"/>
-                             <input 
-                                className="font-bold text-xl bg-transparent border-none outline-none focus:ring-2 focus:ring-pink-200 rounded px-1 text-slate-800"
-                                placeholder="Nome da Empresa"
-                                value={editingLead.company || ''}
-                                onChange={e => setEditingLead({...editingLead, company: e.target.value})}
-                             />
-                          </div>
-                          <div className="flex gap-4 text-sm text-slate-500 ml-7">
-                              <span className="flex items-center gap-1"><User size={14}/> {editingLead.name || 'Sem contato'}</span>
-                              <span className="flex items-center gap-1"><DollarSign size={14}/> R$ {editingLead.value || 0}</span>
-                          </div>
+          <Modal 
+              isOpen={isModalOpen} 
+              onClose={() => setIsModalOpen(false)}
+              maxWidth="576px"
+              hideHeader={true}
+              noPadding={true}
+              scrollable={false}
+          >
+              <div className="flex flex-col h-full">
+                  <div className="p-6 border-b border-slate-50 flex justify-between items-start bg-slate-50 shrink-0">
+                      <div className="flex-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block ml-1">Empresa Prospectada</label>
+                          <input 
+                            className="font-bold text-xl bg-transparent outline-none w-full text-slate-800 placeholder:text-slate-200"
+                            placeholder="Nome da Empresa *"
+                            value={editingLead.company || ''}
+                            onChange={e => setEditingLead({...editingLead, company: e.target.value})}
+                            autoFocus
+                          />
                       </div>
-                      <div className="flex items-center gap-2">
-                          <select 
-                            className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 outline-none focus:border-pink-500"
-                            value={editingLead.stage}
-                            onChange={e => setEditingLead({...editingLead, stage: e.target.value})}
-                          >
-                              {columns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                          </select>
-                          <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><Trash2 size={20}/></button>
-                      </div>
+                      <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
                   </div>
-
                   <div className="flex flex-1 overflow-hidden">
-                      {/* Sidebar / Tabs */}
-                      <div className="w-48 bg-slate-50 border-r border-slate-200 p-4 space-y-2">
-                          <button 
-                            onClick={() => setActiveTab('DETAILS')}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'DETAILS' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-600 hover:bg-slate-200'}`}
-                          >
-                              Detalhes
-                          </button>
-                          <button 
-                            onClick={() => setActiveTab('ACTIVITIES')}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex justify-between items-center ${activeTab === 'ACTIVITIES' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-600 hover:bg-slate-200'}`}
-                          >
-                              Atividades
-                              {editingLead.tasks && editingLead.tasks.filter(t => !t.completed).length > 0 && (
-                                  <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{editingLead.tasks.filter(t => !t.completed).length}</span>
-                              )}
-                          </button>
+                      <div className="w-40 bg-slate-50 border-r border-slate-100 p-4 space-y-2 shrink-0">
+                          <button onClick={() => setActiveTab('DETAILS')} className={`w-full text-left px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'DETAILS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:bg-white/50'}`}>Info</button>
+                          <button onClick={() => setActiveTab('ACTIVITIES')} className={`w-full text-left px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ACTIVITIES' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:bg-white/50'}`}>Notas</button>
                       </div>
-
-                      {/* Content Area */}
-                      <div className="flex-1 overflow-y-auto p-8">
+                      <div className="flex-1 p-6 space-y-4 overflow-y-auto custom-scrollbar">
                           {activeTab === 'DETAILS' && (
-                              <div className="space-y-6 max-w-lg">
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contato Principal</label>
-                                          <input className="w-full border border-slate-200 rounded p-2 text-sm" placeholder="Nome Completo" value={editingLead.name || ''} onChange={e => setEditingLead({...editingLead, name: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Estimado</label>
-                                          <input className="w-full border border-slate-200 rounded p-2 text-sm" type="number" value={editingLead.value || ''} onChange={e => setEditingLead({...editingLead, value: parseFloat(e.target.value)})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
-                                          <input className="w-full border border-slate-200 rounded p-2 text-sm" value={editingLead.email || ''} onChange={e => setEditingLead({...editingLead, email: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone</label>
-                                          <input className="w-full border border-slate-200 rounded p-2 text-sm" value={editingLead.phone || ''} onChange={e => setEditingLead({...editingLead, phone: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Origem (Canal)</label>
-                                          <select className="w-full border border-slate-200 rounded p-2 text-sm" value={editingLead.source} onChange={e => setEditingLead({...editingLead, source: e.target.value})}>
-                                              <option value="">Selecione...</option>
-                                              <option value="Instagram">Instagram</option>
-                                              <option value="Linkedin">Linkedin</option>
-                                              <option value="Google Ads">Google Ads</option>
-                                              <option value="Indicação">Indicação</option>
-                                          </select>
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Qualificação</label>
-                                          <div className="flex gap-1 text-slate-300 pt-1">
-                                              {[1,2,3,4,5].map(s => (
-                                                  <button key={s} onClick={() => setEditingLead({...editingLead, rating: s})} className="hover:text-amber-400 transition-colors">
-                                                      <Star size={24} fill={s <= (editingLead.rating || 0) ? "#fbbf24" : "none"} stroke={s <= (editingLead.rating || 0) ? "#fbbf24" : "currentColor"} />
-                                                  </button>
-                                              ))}
-                                          </div>
-                                      </div>
+                              <div className="space-y-4">
+                                  <div>
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Contato Principal</label>
+                                      <input className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-sm font-bold outline-none" placeholder="Nome do Responsável *" value={editingLead.name || ''} onChange={e => setEditingLead({...editingLead, name: e.target.value})} />
                                   </div>
                                   <div>
-                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notas / Observações</label>
-                                      <textarea 
-                                        className="w-full border border-slate-200 rounded p-2 text-sm h-32 resize-none" 
-                                        placeholder="Detalhes sobre a negociação..."
-                                        value={editingLead.notes || ''}
-                                        onChange={e => setEditingLead({...editingLead, notes: e.target.value})}
-                                      />
-                                  </div>
-                              </div>
-                          )}
-
-                          {activeTab === 'ACTIVITIES' && (
-                              <div className="space-y-6">
-                                  {/* Add Task Form */}
-                                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                      <h4 className="font-bold text-sm text-slate-700 mb-3">Agendar Atividade</h4>
-                                      <div className="flex gap-2 mb-3">
-                                          <button onClick={() => setNewTaskType('CALL')} className={`flex-1 flex items-center justify-center gap-2 p-2 rounded text-xs font-medium border ${newTaskType === 'CALL' ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-600'}`}><Phone size={14}/> Ligação</button>
-                                          <button onClick={() => setNewTaskType('EMAIL')} className={`flex-1 flex items-center justify-center gap-2 p-2 rounded text-xs font-medium border ${newTaskType === 'EMAIL' ? 'bg-yellow-50 border-yellow-200 text-yellow-600' : 'bg-white border-slate-200 text-slate-600'}`}><Mail size={14}/> Email</button>
-                                          <button onClick={() => setNewTaskType('MEETING')} className={`flex-1 flex items-center justify-center gap-2 p-2 rounded text-xs font-medium border ${newTaskType === 'MEETING' ? 'bg-purple-50 border-purple-200 text-purple-600' : 'bg-white border-slate-200 text-slate-600'}`}><User size={14}/> Reunião</button>
-                                          <button onClick={() => setNewTaskType('TASK')} className={`flex-1 flex items-center justify-center gap-2 p-2 rounded text-xs font-medium border ${newTaskType === 'TASK' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-600'}`}><CheckSquare size={14}/> Tarefa</button>
-                                      </div>
-                                      <div className="flex gap-2">
-                                          <input 
-                                            className="flex-1 border border-slate-200 rounded p-2 text-sm" 
-                                            placeholder="Descreva a atividade..." 
-                                            value={newTaskText} 
-                                            onChange={e => setNewTaskText(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && addTaskToLead()}
-                                          />
-                                          <input 
-                                            type="date" 
-                                            className="w-32 border border-slate-200 rounded p-2 text-sm" 
-                                            value={newTaskDate}
-                                            onChange={e => setNewTaskDate(e.target.value)}
-                                          />
-                                          <button onClick={addTaskToLead} className="bg-slate-800 text-white px-4 rounded font-medium text-sm hover:bg-slate-900">Adicionar</button>
-                                      </div>
-                                  </div>
-
-                                  {/* Task List */}
-                                  <div className="space-y-2">
-                                      <h4 className="font-bold text-xs text-slate-500 uppercase">Planejado</h4>
-                                      {(!editingLead.tasks || editingLead.tasks.filter(t => !t.completed).length === 0) && (
-                                          <p className="text-sm text-slate-400 italic">Nenhuma atividade planejada.</p>
-                                      )}
-                                      {editingLead.tasks?.filter(t => !t.completed).map((task, idx) => (
-                                          <div key={task.id} className="flex items-center gap-3 bg-white p-3 rounded border border-slate-100 hover:border-pink-200 group transition-colors">
-                                              <button onClick={() => toggleTask(task.id)} className="text-slate-300 hover:text-emerald-500"><CheckSquare size={18}/></button>
-                                              <div className="flex-1">
-                                                  <div className="flex items-center gap-2 mb-1">
-                                                      {getTaskIcon(task.type || 'TASK')}
-                                                      <span className="text-sm font-medium text-slate-700">{task.text}</span>
-                                                  </div>
-                                                  <p className="text-xs text-slate-400 flex items-center gap-1"><Calendar size={10}/> {new Date(task.dueDate || '').toLocaleDateString()}</p>
-                                              </div>
-                                              <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button>
-                                          </div>
-                                      ))}
-                                  </div>
-
-                                  <div className="space-y-2 pt-4 border-t border-slate-100">
-                                      <h4 className="font-bold text-xs text-slate-500 uppercase">Histórico / Concluído</h4>
-                                       {editingLead.tasks?.filter(t => t.completed).map((task, idx) => (
-                                          <div key={task.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded opacity-70">
-                                              <button onClick={() => toggleTask(task.id)} className="text-emerald-500"><CheckSquare size={18}/></button>
-                                              <span className="text-sm text-slate-500 line-through flex-1">{task.text}</span>
-                                          </div>
-                                      ))}
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Valor Negócio (R$)</label>
+                                      <input className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-lg font-black outline-none" type="number" placeholder="0.00 *" value={editingLead.value || ''} onChange={e => setEditingLead({...editingLead, value: parseFloat(e.target.value)})} />
                                   </div>
                               </div>
                           )}
                       </div>
                   </div>
-
-                  <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-                      <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded text-slate-600 hover:bg-slate-200 font-medium">Cancelar</button>
-                      <button onClick={handleSave} className="px-6 py-2 rounded bg-pink-600 text-white font-bold hover:bg-pink-700 shadow-md">Salvar Oportunidade</button>
+                  <div className="p-6 border-t border-slate-50 flex justify-end gap-3 bg-slate-50 shrink-0">
+                      <button onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600">Sair</button>
+                      <button onClick={handleSave} className="h-10 px-6 rounded-xl bg-indigo-600 text-white font-bold text-xs uppercase tracking-widest shadow-lg shadow-indigo-600/10 hover:bg-indigo-700 transition-all flex items-center gap-2"><Save size={16}/> Salvar</button>
                   </div>
               </div>
-          </div>
+          </Modal>
+      )}
+
+      {/* CRM SETTINGS MODAL */}
+      {isSettingsOpen && (
+          <Modal 
+              isOpen={isSettingsOpen} 
+              onClose={() => setIsSettingsOpen(false)}
+              maxWidth="448px"
+              hideHeader={true}
+              noPadding={true}
+              scrollable={false}
+          >
+              <div className="flex flex-col h-full">
+                  <div className="p-6 border-b border-slate-50 bg-slate-50 flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><Settings size={18}/></div>
+                        <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Ajustes Pipeline</h3>
+                      </div>
+                      <button onClick={() => setIsSettingsOpen(false)} className="p-1.5 text-slate-300 hover:bg-slate-100 rounded-full transition-colors"><X size={18}/></button>
+                  </div>
+                  <div className="p-10 text-center space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Módulo de Configuração</p>
+                    <p className="text-slate-500 text-sm">Personalize as etapas e origens dos seus negócios.</p>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
+                    <button onClick={() => setIsSettingsOpen(false)} className="w-full h-11 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase tracking-widest">Fechar</button>
+                  </div>
+              </div>
+          </Modal>
       )}
     </div>
   );

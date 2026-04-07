@@ -1,8 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
-import { Task, User, Squad, Client } from '../types';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cell, LineChart, Line, CartesianGrid } from 'recharts';
-import { AlertTriangle, Target, Clock, Users, TrendingUp, CheckCircle2, User as UserIcon, List } from 'lucide-react';
+import { Task, User, Squad, Client, Notification, ProductivityGoal } from '../types';
+import { calculateKanbanMetrics } from '../utils/metrics';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cell, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
+import { Modal } from './Modal';
+import { AlertTriangle, Target, Clock, Users, TrendingUp, CheckCircle2, User as UserIcon, List, Gauge, Hourglass, Plus, Settings, Calendar, Info, X } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 
 interface ProductivityDashboardProps {
@@ -12,28 +14,53 @@ interface ProductivityDashboardProps {
   squads: Squad[];
   clients: Client[];
   currentUser: User;
+  setNotifications?: React.Dispatch<React.SetStateAction<Notification[]>>;
+  goals: ProductivityGoal[];
+  setGoals: React.Dispatch<React.SetStateAction<ProductivityGoal[]>>;
+  onNavigate?: (view: string, filter?: any) => void;
 }
 
-export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ tasks, setTasks, users, squads, clients, currentUser }) => {
+export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ 
+    tasks, 
+    setTasks, 
+    users, 
+    squads, 
+    clients, 
+    currentUser, 
+    setNotifications,
+    goals,
+    setGoals,
+    onNavigate
+}) => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [newGoal, setNewGoal] = useState<Partial<ProductivityGoal>>({
+      type: 'PRODUCTION',
+      period: 'MONTHLY',
+      targetValue: 0,
+      month: new Date().toISOString().substring(0, 7)
+  });
 
   // Filtros
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '90days'>('30days');
   const [selectedSquadId, setSelectedSquadId] = useState<string>('ALL');
   const [selectedUserId, setSelectedUserId] = useState<string>('ALL');
-  const [selectedClientId, setSelectedClientId] = useState<string>('ALL');
 
-  // Permissão: Se não for ADMIN/MANAGER, força o filtro de usuário para o próprio ID
   const isManagement = ['ADMIN', 'MANAGER', 'FINANCE'].includes(currentUser.role);
+  const isAdmin = currentUser.role === 'ADMIN';
   
-  // Efeito para forçar filtro de usuário se não for gestão
   React.useEffect(() => {
       if (!isManagement) {
           setSelectedUserId(currentUser.id);
-          // Se o usuário tem squad, força squad também para contexto
           if(currentUser.squad) setSelectedSquadId(currentUser.squad);
       }
   }, [currentUser, isManagement]);
+
+  const formatHours = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
+  };
 
   // --- Lógica de Filtragem ---
   const filteredTasks = useMemo(() => {
@@ -44,353 +71,523 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ ta
       if (dateRange === '90days') startDate.setDate(now.getDate() - 90);
 
       return tasks.filter(t => {
-          // Filtro de Data (Vencimento ou Criação dentro do range, ou ativa no momento)
-          const taskDate = new Date(t.dueDate);
-          const isDateInRange = taskDate >= startDate; // Simplificado para dueDate futura ou recente
-
-          // Filtro de Squad
+          const taskDueDate = t.dueDate ? new Date(t.dueDate) : null;
+          const taskCompletedDate = t.completedAt ? new Date(t.completedAt) : null;
+          
+          // Se está concluída, usamos a data de conclusão para o filtro de período
+          // Se não está concluída, usamos a data de entrega
+          const referenceDate = (t.status === 'DONE' && taskCompletedDate) ? taskCompletedDate : taskDueDate;
+          
+          const isDateInRange = referenceDate ? referenceDate >= startDate : true; // Se não tem data, incluímos (para não sumir do dashboard)
+          
           const isSquadMatch = selectedSquadId === 'ALL' || t.squadId === selectedSquadId;
-
-          // Filtro de Usuário (verifica se o usuário é um dos assignees)
-          // Se não for management, selectedUserId já está travado no currentUser.id
           const isUserMatch = selectedUserId === 'ALL' || t.assigneeIds.includes(selectedUserId);
-
-          // Filtro de Cliente (Baseado no Squad do Cliente)
-          let isClientMatch = true;
-          if (selectedClientId !== 'ALL') {
-              const client = clients.find(c => c.id === selectedClientId);
-              // Assume que tarefas do cliente estão na squad do cliente
-              // Ou se o título da tarefa contiver o nome do cliente (fallback simples)
-              if (client) {
-                  isClientMatch = (t.squadId === client.squadId) || t.title.toLowerCase().includes(client.name.toLowerCase());
-              }
-          }
-
-          return isDateInRange && isSquadMatch && isUserMatch && isClientMatch;
+          return isDateInRange && isSquadMatch && isUserMatch;
       });
-  }, [tasks, dateRange, selectedSquadId, selectedUserId, selectedClientId, clients]);
+  }, [tasks, dateRange, selectedSquadId, selectedUserId]);
 
-  // --- Cálculos de KPIs ---
-  const activeTasks = filteredTasks.filter(t => !t.archived && t.status !== 'DONE');
-  const pendingTasks = activeTasks.filter(t => t.status === 'BACKLOG' || t.status === 'TODO');
-  const inProgressTasks = activeTasks.filter(t => t.status === 'IN_PROGRESS' || t.status === 'REVIEW');
-  const doneTasks = filteredTasks.filter(t => t.status === 'DONE');
+  // --- Metas e Progresso ---
+  const currentMonth = new Date().toISOString().substring(0, 7);
   
-  const overdueTasks = filteredTasks.filter(t => {
-      return !t.archived && t.status !== 'DONE' && new Date(t.dueDate) < new Date(new Date().setHours(0,0,0,0));
-  });
+  const activeGoal = useMemo(() => {
+      // Prioridade: Individual > Squad > Global
+      if (selectedUserId !== 'ALL') {
+          return goals.find(g => g.userId === selectedUserId && g.month === currentMonth);
+      }
+      if (selectedSquadId !== 'ALL') {
+          return goals.find(g => g.squadId === selectedSquadId && g.month === currentMonth);
+      }
+      return goals.find(g => !g.userId && !g.squadId && g.month === currentMonth);
+  }, [goals, selectedUserId, selectedSquadId, currentMonth]);
 
-  // Taxa de Entrega no Prazo (On-time Delivery)
-  // Tarefas concluídas que não estouraram o prazo
-  const onTimeTasks = doneTasks.filter(t => new Date(t.dueDate) >= new Date()).length;
-  const onTimeRate = doneTasks.length > 0 ? Math.round((onTimeTasks / doneTasks.length) * 100) : 100;
+  const progressMetrics = useMemo(() => {
+      if (!activeGoal) return null;
+
+      const realized = activeGoal.type === 'PRODUCTION' 
+          ? filteredTasks.filter(t => t.status === 'DONE').length
+          : filteredTasks.reduce((acc, t) => acc + t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0), 0) / 3600;
+
+      const percent = (realized / activeGoal.targetValue) * 100;
+      
+      // Projeção
+      const now = new Date();
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const currentDay = now.getDate();
+      const dailyAvg = realized / Math.max(currentDay, 1);
+      const projection = dailyAvg * daysInMonth;
+      const projectionPercent = (projection / activeGoal.targetValue) * 100;
+
+      let status: 'ABOVE' | 'ON_TRACK' | 'BELOW' = 'ON_TRACK';
+      if (projectionPercent < 90) status = 'BELOW';
+      else if (projectionPercent > 110) status = 'ABOVE';
+
+      return {
+          realized,
+          percent: Math.min(Math.round(percent), 200),
+          dailyAvg,
+          projection,
+          projectionPercent,
+          status
+      };
+  }, [activeGoal, filteredTasks]);
+
+  // --- Cálculos de KPIs de Tempo ---
+  const totalSeconds = useMemo(() => {
+    return filteredTasks.reduce((acc, t) => {
+        return acc + t.timeLogs.reduce((sum, log) => sum + (log.duration || 0), 0);
+    }, 0);
+  }, [filteredTasks]);
+
+  const doneTasks = filteredTasks.filter(t => t.status === 'DONE');
+  const avgSecondsPerJob = doneTasks.length > 0 ? totalSeconds / doneTasks.length : 0;
+
+  // --- Eficiência (Tempo Estimado vs Real) ---
+  const efficiencyMetrics = useMemo(() => {
+    let totalEst = 0;
+    let totalReal = 0;
+    filteredTasks.forEach(t => {
+        if (t.estimatedTime > 0) {
+            totalEst += t.estimatedTime * 3600; // Converte horas estimadas para segundos
+            totalReal += t.timeLogs.reduce((sum, log) => sum + (log.duration || 0), 0);
+        }
+    });
+    const ratio = totalReal > 0 ? (totalEst / totalReal) * 100 : 0;
+    return { 
+        ratio: Math.min(Math.round(ratio), 200), // Cap em 200% para o gráfico
+        totalEst: totalEst / 3600,
+        totalReal: totalReal / 3600
+    };
+  }, [filteredTasks]);
+
+  // --- Métricas Kanban (Respeitando Usuário/Squad selecionados) ---
+  const kanbanMetrics = useMemo(() => {
+    return calculateKanbanMetrics(tasks, selectedUserId, selectedSquadId);
+  }, [tasks, selectedUserId, selectedSquadId]);
 
   // --- Rankings ---
-
-  // 1. Ranking Individual
   const individualRanking = users
-    .filter(u => u.role !== 'CLIENT' && u.role !== 'ADMIN') // Apenas produtivos
-    .filter(u => selectedUserId === 'ALL' || u.id === selectedUserId) // Respeita filtro
+    .filter(u => u.role !== 'CLIENT' && (selectedUserId === 'ALL' || u.id === selectedUserId))
     .map(user => {
         const userTasks = filteredTasks.filter(t => t.assigneeIds.includes(user.id));
+        const seconds = userTasks.reduce((acc, t) => acc + t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0), 0);
         const completed = userTasks.filter(t => t.status === 'DONE').length;
-        const overdue = userTasks.filter(t => !t.archived && t.status !== 'DONE' && new Date(t.dueDate) < new Date()).length;
         
-        let totalEst = 0; 
-        let totalAct = 0;
+        let est = 0; let act = 0;
         userTasks.forEach(t => {
-             totalEst += t.estimatedTime || 0;
-             const logSum = t.timeLogs.reduce((acc, l) => acc + l.duration, 0) / 3600;
-             totalAct += logSum;
+            if(t.estimatedTime > 0) {
+                est += t.estimatedTime;
+                act += t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0) / 3600;
+            }
         });
 
-        const efficiency = totalAct > 0 ? Math.round((totalEst / totalAct) * 100) : (totalEst > 0 ? 100 : 0);
+        const efficiency = act > 0 ? Math.round((est / act) * 100) : (est > 0 ? 100 : 0);
+
+        // Meta individual
+        const userGoal = goals.find(g => g.userId === user.id && g.month === currentMonth);
+        const goalProgress = userGoal ? (userGoal.type === 'PRODUCTION' ? (completed / userGoal.targetValue) * 100 : ((seconds / 3600) / userGoal.targetValue) * 100) : 0;
 
         return {
             id: user.id,
             name: user.name,
             avatar: user.avatar,
             completed,
-            overdue,
+            seconds,
             efficiency,
-            active: userTasks.filter(t => t.status !== 'DONE' && !t.archived).length
+            hours: seconds / 3600,
+            goalProgress: Math.min(Math.round(goalProgress), 100),
+            hasGoal: !!userGoal
         };
     })
-    .sort((a,b) => b.completed - a.completed); // Default sort by delivery
+    .sort((a,b) => b.seconds - a.seconds);
 
-  // 2. Ranking de Squads
-  const squadRanking = squads.map(squad => {
-      const squadTasks = filteredTasks.filter(t => t.squadId === squad.id);
-      const completed = squadTasks.filter(t => t.status === 'DONE').length;
-      const overdue = squadTasks.filter(t => !t.archived && t.status !== 'DONE' && new Date(t.dueDate) < new Date()).length;
-      
-      return {
-          id: squad.id,
-          name: squad.name,
-          completed,
-          overdue,
-          active: squadTasks.filter(t => t.status !== 'DONE' && !t.archived).length
-      };
-  }).sort((a,b) => b.completed - a.completed);
-
-  // --- Gráfico de Histórico (Simulado com dados disponíveis) ---
-  // Agrupar tarefas concluídas por data (nos últimos X dias)
-  const historyData = useMemo(() => {
+  const timeDistributionData = useMemo(() => {
       const data: Record<string, number> = {};
-      // Inicializa últimos 7 dias
       for(let i=6; i>=0; i--) {
           const d = new Date();
           d.setDate(d.getDate() - i);
           data[d.toISOString().split('T')[0].substring(5)] = 0;
       }
       
-      doneTasks.forEach(t => {
-           // Simulação: assume dueDate como data de entrega para fins de gráfico se não tiver logs
-           // O ideal seria pegar o timestamp do log de conclusão ou history
-           const dateKey = t.dueDate.substring(5); // MM-DD
-           if (data[dateKey] !== undefined) {
-               data[dateKey] += 1;
-           }
+      filteredTasks.forEach(t => {
+          t.timeLogs.forEach(log => {
+              const dateKey = new Date(log.startTime).toISOString().split('T')[0].substring(5);
+              if (data[dateKey] !== undefined) {
+                  data[dateKey] += (log.duration || 0) / 3600;
+              }
+          });
       });
 
-      return Object.entries(data).map(([key, value]) => ({ date: key, entregas: value }));
-  }, [doneTasks]);
+      return Object.entries(data).map(([key, value]) => ({ date: key, horas: Number(value.toFixed(1)) }));
+  }, [filteredTasks]);
 
   const updateTask = (updated: Task) => {
       setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
-      if (selectedTask && selectedTask.id === updated.id) {
-        setSelectedTask(updated);
-      }
+      if (selectedTask && selectedTask.id === updated.id) setSelectedTask(updated);
   };
 
-  const renderTaskList = (title: string, listTasks: Task[], icon: React.ReactNode, headerColor: string) => (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
-          <div className={`p-4 border-b border-slate-100 flex justify-between items-center ${headerColor}`}>
-              <h3 className="font-bold text-slate-700 flex items-center gap-2">{icon} {title}</h3>
-              <span className="text-xs bg-white/50 px-2 py-1 rounded font-bold text-slate-600">{listTasks.length}</span>
-          </div>
-          <div className="flex-1 overflow-y-auto max-h-[350px] p-2 space-y-2 custom-scrollbar bg-slate-50/50">
-              {listTasks.length === 0 && (
-                  <div className="text-center p-8 text-slate-400 text-sm italic">
-                      Nenhuma tarefa nesta categoria.
-                  </div>
-              )}
-              {listTasks.map(task => (
-                  <div 
-                    key={task.id} 
-                    onClick={() => setSelectedTask(task)}
-                    className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-pink-200 cursor-pointer transition-all group"
-                  >
-                      <div className="flex justify-between items-start mb-1">
-                          <h4 className="text-sm font-bold text-slate-700 line-clamp-1 group-hover:text-pink-600 transition-colors">{task.title}</h4>
-                          {task.priority === 'HIGH' && <span className="w-2 h-2 bg-red-500 rounded-full shrink-0"></span>}
-                      </div>
-                      <div className="flex justify-between items-end mt-2">
-                          <div className="flex -space-x-1.5">
-                              {task.assigneeIds.map(uid => {
-                                  const u = users.find(user => user.id === uid);
-                                  if(!u) return null;
-                                  return <img key={uid} src={u.avatar} className="w-5 h-5 rounded-full border border-white" title={u.name}/>
-                              })}
-                          </div>
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${new Date(task.dueDate) < new Date() && task.status !== 'DONE' ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
-                              {new Date(task.dueDate).toLocaleDateString(undefined, {day: '2-digit', month: '2-digit'})}
-                          </span>
-                      </div>
-                  </div>
-              ))}
-          </div>
-      </div>
-  );
+  const handleSaveGoal = () => {
+      if (!newGoal.targetValue || newGoal.targetValue <= 0) return;
+      
+      const goal: ProductivityGoal = {
+          id: Math.random().toString(36).substr(2, 9),
+          title: newGoal.title || 'Nova Meta',
+          type: newGoal.type as any,
+          period: 'MONTHLY',
+          targetValue: newGoal.targetValue,
+          month: newGoal.month!,
+          squadId: newGoal.squadId,
+          userId: newGoal.userId,
+          createdAt: Date.now()
+      };
+
+      setGoals(prev => [...prev.filter(g => 
+          !(g.month === goal.month && g.userId === goal.userId && g.squadId === goal.squadId)
+      ), goal]);
+      setShowGoalModal(false);
+  };
 
   return (
     <div className="space-y-6 animate-pop">
-      {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h2 className="text-2xl font-bold text-slate-800">Painel de Produtividade</h2>
-            <p className="text-slate-500 text-sm">Métricas de performance, gargalos e eficiência operacional.</p>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Produtividade & Metas</h2>
+            <p className="text-slate-500 text-sm font-medium">Gestão de performance e acompanhamento de objetivos.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-            {/* Filters */}
-            <select 
-                value={dateRange} 
-                onChange={e => setDateRange(e.target.value as any)}
-                className="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg p-2 outline-none focus:border-pink-500"
-            >
+            {isManagement && (
+                <button 
+                    onClick={() => setShowGoalModal(true)}
+                    className="bg-pink-600 text-white text-xs font-black px-4 py-2.5 rounded-xl flex items-center gap-2 hover:bg-pink-700 transition-all shadow-lg shadow-pink-200"
+                >
+                    <Target size={16} /> Definir Meta
+                </button>
+            )}
+            <select value={dateRange} onChange={e => setDateRange(e.target.value as any)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-100">
                 <option value="7days">Últimos 7 dias</option>
                 <option value="30days">Últimos 30 dias</option>
                 <option value="90days">Últimos 90 dias</option>
             </select>
-
             {isManagement && (
                 <>
-                    <select 
-                        value={selectedSquadId} 
-                        onChange={e => setSelectedSquadId(e.target.value)}
-                        className="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg p-2 outline-none focus:border-pink-500"
-                    >
+                    <select value={selectedSquadId} onChange={e => setSelectedSquadId(e.target.value)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-100">
                         <option value="ALL">Todas as Squads</option>
                         {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
-                    
-                    <select 
-                        value={selectedUserId} 
-                        onChange={e => setSelectedUserId(e.target.value)}
-                        className="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg p-2 outline-none focus:border-pink-500"
-                    >
-                        <option value="ALL">Todos Usuários</option>
+                    <select value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-100">
+                        <option value="ALL">Time Completo</option>
                         {users.filter(u => u.role !== 'CLIENT').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </select>
-
-                    <select 
-                        value={selectedClientId} 
-                        onChange={e => setSelectedClientId(e.target.value)}
-                        className="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg p-2 outline-none focus:border-pink-500"
-                    >
-                        <option value="ALL">Todos Clientes</option>
-                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                 </>
             )}
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Users size={12}/> Demandas Ativas</p>
-              <h3 className="text-2xl font-bold text-slate-800 mt-2">{activeTasks.length}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Total em aberto</p>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Clock size={12}/> Pendentes</p>
-              <h3 className="text-2xl font-bold text-orange-600 mt-2">{pendingTasks.length}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Backlog e A Fazer</p>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Target size={12}/> Em Produção</p>
-              <h3 className="text-2xl font-bold text-blue-600 mt-2">{inProgressTasks.length}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Execução e Revisão</p>
-          </div>
-           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><AlertTriangle size={12}/> Atrasadas</p>
-              <h3 className="text-2xl font-bold text-red-600 mt-2">{overdueTasks.length}</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Estouraram o prazo</p>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><CheckCircle2 size={12}/> Entregues</p>
-              <div className="flex items-end gap-2 mt-2">
-                  <h3 className="text-2xl font-bold text-emerald-600">{doneTasks.length}</h3>
-                  <span className={`text-xs font-bold mb-1 px-1.5 rounded ${onTimeRate >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                      {onTimeRate}% no prazo
-                  </span>
+      {/* Alertas de Meta */}
+      {isManagement && progressMetrics && progressMetrics.status === 'BELOW' && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl flex items-center gap-4 animate-pulse">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600 shrink-0">
+                  <AlertTriangle size={20} />
+              </div>
+              <div>
+                  <h4 className="text-sm font-black text-red-800">Alerta de Ritmo: Abaixo da Meta</h4>
+                  <p className="text-xs text-red-600 font-medium">A projeção atual indica que o atingimento será de apenas {progressMetrics.projectionPercent.toFixed(1)}%.</p>
               </div>
           </div>
-      </div>
+      )}
 
-      {/* --- TASK LISTS DETAILED --- */}
-      <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mt-4"><List size={20}/> Detalhamento de Tarefas</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {renderTaskList('Atrasadas', overdueTasks, <AlertTriangle size={18} className="text-red-500"/>, 'bg-red-50 border-red-100')}
-          {renderTaskList('Em Andamento', inProgressTasks, <Target size={18} className="text-blue-500"/>, 'bg-blue-50 border-blue-100')}
-          {renderTaskList('Pendentes', pendingTasks, <Clock size={18} className="text-orange-500"/>, 'bg-orange-50 border-orange-100')}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      {/* Kanban Metrics Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <button 
+            onClick={() => onNavigate?.('kanban', { inProgress: true, archived: false })}
+            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all text-left group"
+          >
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 group-hover:text-blue-600">Em Andamento</p>
+              <h4 className="text-2xl font-black text-slate-800">{kanbanMetrics.inProgress}</h4>
+              <div className="mt-2 w-8 h-1 bg-blue-500 rounded-full"></div>
+          </button>
           
-          {/* Ranking Individual */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
-              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                  <h3 className="font-bold text-slate-700 flex items-center gap-2"><UserIcon size={18}/> Performance Individual</h3>
+          <button 
+            onClick={() => onNavigate?.('kanban', { overdue: true, archived: false })}
+            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-red-200 transition-all text-left group"
+          >
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 group-hover:text-red-600">Atrasadas</p>
+              <h4 className="text-2xl font-black text-slate-800">{kanbanMetrics.overdue}</h4>
+              <div className="mt-2 w-8 h-1 bg-red-500 rounded-full"></div>
+          </button>
+
+          <button 
+            onClick={() => onNavigate?.('kanban', { status: 'DONE', archived: false })}
+            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all text-left group"
+          >
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 group-hover:text-emerald-600">Concluídas</p>
+              <h4 className="text-2xl font-black text-slate-800">{kanbanMetrics.completed}</h4>
+              <div className="mt-2 w-8 h-1 bg-emerald-500 rounded-full"></div>
+          </button>
+
+          <button 
+            onClick={() => onNavigate?.('kanban', { pending: true, archived: false })}
+            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-200 transition-all text-left group"
+          >
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 group-hover:text-amber-600">Pendentes (Backlog)</p>
+              <h4 className="text-2xl font-black text-slate-800">{kanbanMetrics.pending}</h4>
+              <div className="mt-2 w-8 h-1 bg-amber-500 rounded-full"></div>
+          </button>
+
+          <button 
+            onClick={() => onNavigate?.('kanban', { archived: true })}
+            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-400 transition-all text-left group"
+          >
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 group-hover:text-slate-600">Arquivadas</p>
+              <h4 className="text-2xl font-black text-slate-800">{kanbanMetrics.archived}</h4>
+              <div className="mt-2 w-8 h-1 bg-slate-400 rounded-full"></div>
+          </button>
+      </div>
+
+      {/* KPI Cards de Tempo e Metas */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="absolute -right-4 -top-4 text-slate-50 opacity-10 group-hover:opacity-20 transition-opacity rotate-12"><Clock size={100}/></div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Hourglass size={12}/> Horas Investidas</p>
+              <h3 className="text-3xl font-black text-slate-800 mt-2">{formatHours(totalSeconds)}</h3>
+              <p className="text-[10px] text-indigo-500 font-bold mt-1">Tempo real logado no período</p>
+          </div>
+          
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+              <div className="absolute -right-4 -top-4 text-slate-50 opacity-10 group-hover:opacity-20 transition-opacity rotate-12"><Target size={100}/></div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={12}/> Entregas Totais</p>
+              <h3 className="text-3xl font-black text-emerald-600 mt-2">{doneTasks.length}</h3>
+              <p className="text-[10px] text-slate-400 font-bold mt-1">Jobs movidos para 'Concluído'</p>
+          </div>
+
+          <div className="bg-slate-900 p-5 rounded-2xl shadow-xl relative overflow-hidden group text-white md:col-span-2">
+              <div className="absolute -right-4 -top-4 text-white opacity-5 group-hover:opacity-10 transition-opacity rotate-12"><Target size={120}/></div>
+              <div className="flex justify-between items-start">
+                  <div>
+                      <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest flex items-center gap-1"><Target size={12}/> Progresso da Meta ({activeGoal?.title || 'Global'})</p>
+                      <div className="flex items-baseline gap-2 mt-2">
+                          <h3 className="text-3xl font-black">{progressMetrics ? `${progressMetrics.percent}%` : 'N/A'}</h3>
+                          {progressMetrics && (
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded ${progressMetrics.status === 'ABOVE' ? 'bg-emerald-500/20 text-emerald-400' : progressMetrics.status === 'BELOW' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                  {progressMetrics.status === 'ABOVE' ? 'Superando' : progressMetrics.status === 'BELOW' ? 'Abaixo do Ritmo' : 'No Ritmo'}
+                              </span>
+                          )}
+                      </div>
+                  </div>
+                  <div className="text-right">
+                      <p className="text-[10px] font-black text-slate-400 uppercase">Projeção Final</p>
+                      <h4 className="text-xl font-black text-white">{progressMetrics ? progressMetrics.projection.toFixed(1) : '0'}</h4>
+                      <p className="text-[9px] text-slate-500 font-bold">Meta: {activeGoal?.targetValue || 0}</p>
+                  </div>
               </div>
-              <div className="flex-1 overflow-auto">
+              <div className="mt-4">
+                  <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-1000 ${progressMetrics?.status === 'BELOW' ? 'bg-red-500' : 'bg-pink-500'}`} 
+                        style={{width: `${progressMetrics?.percent || 0}%`}}
+                      ></div>
+                  </div>
+                  <div className="flex justify-between mt-2">
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">Realizado: {progressMetrics?.realized.toFixed(1)}</p>
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">Média Diária: {progressMetrics?.dailyAvg.toFixed(1)}</p>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Gráfico de Esforço Diário */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm min-h-[350px] relative">
+              <h3 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp size={16} className="text-pink-600"/> Intensidade de Produção (Horas/Dia)</h3>
+              <div className="w-full h-64 min-h-[256px]">
+                <ResponsiveContainer width="100%" height="100%" debounce={50}>
+                    <AreaChart data={timeDistributionData}>
+                        <defs>
+                            <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#db2777" stopOpacity={0.2}/>
+                                <stop offset="95%" stopColor="#db2777" stopOpacity={0}/>
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                        <XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={10} fontWeight="bold" stroke="#94a3b8"/>
+                        <YAxis axisLine={false} tickLine={false} fontSize={10} fontWeight="bold" stroke="#94a3b8"/>
+                        <Tooltip 
+                            contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px'}}
+                            cursor={{stroke: '#db2777', strokeWidth: 2}}
+                        />
+                        <Area type="monotone" dataKey="horas" stroke="#db2777" strokeWidth={4} fillOpacity={1} fill="url(#colorHours)" />
+                    </AreaChart>
+                </ResponsiveContainer>
+              </div>
+          </div>
+
+          {/* Ranking Detalhado com Metas Individuais */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+                  <h3 className="font-black text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><UserIcon size={16} className="text-indigo-600"/> Performance do Time</h3>
+                  <span className="text-[10px] font-black text-slate-400 uppercase">Progresso Individual</span>
+              </div>
+              <div className="flex-1 overflow-auto custom-scrollbar">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-white text-slate-500 font-semibold border-b border-slate-100">
+                    <thead className="bg-white text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                         <tr>
                             <th className="p-4">Colaborador</th>
-                            <th className="p-4 text-center">Entregues</th>
-                            <th className="p-4 text-center">Ativas</th>
-                            <th className="p-4 text-center text-red-500">Atrasos</th>
-                            <th className="p-4 text-center">Eficiência</th>
+                            <th className="p-4 text-center">Horas</th>
+                            <th className="p-4 text-center">Entregas</th>
+                            <th className="p-4 text-center">Meta Individual</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                         {individualRanking.map((user, idx) => (
-                            <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                            <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
                                 <td className="p-4">
                                     <div className="flex items-center gap-3">
-                                        <span className={`font-bold w-4 text-center ${idx < 3 ? 'text-amber-500' : 'text-slate-300'}`}>{idx+1}</span>
-                                        <img src={user.avatar} className="w-8 h-8 rounded-full border border-slate-200"/>
-                                        <span className="font-medium text-slate-700">{user.name}</span>
+                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>{idx+1}</div>
+                                        <img src={user.avatar} className="w-8 h-8 rounded-full border-2 border-white shadow-sm"/>
+                                        <span className="font-bold text-slate-700 group-hover:text-pink-600 transition-colors">{user.name}</span>
                                     </div>
                                 </td>
+                                <td className="p-4 text-center font-black text-slate-800">{user.hours.toFixed(1)}h</td>
                                 <td className="p-4 text-center font-bold text-emerald-600">{user.completed}</td>
-                                <td className="p-4 text-center text-slate-600">{user.active}</td>
-                                <td className="p-4 text-center text-red-500 font-medium">{user.overdue}</td>
                                 <td className="p-4 text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                        <span className={`text-xs font-bold ${user.efficiency > 100 ? 'text-blue-600' : user.efficiency < 80 ? 'text-red-500' : 'text-emerald-600'}`}>
-                                            {user.efficiency}%
-                                        </span>
-                                    </div>
+                                    {user.hasGoal ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${user.goalProgress >= 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-pink-100 text-pink-700'}`}>
+                                                {user.goalProgress}%
+                                            </span>
+                                            <div className="w-16 bg-slate-100 h-1 rounded-full overflow-hidden">
+                                                <div className={`h-full transition-all duration-1000 ${user.goalProgress >= 100 ? 'bg-emerald-500' : 'bg-pink-500'}`} style={{width: `${user.goalProgress}%`}}></div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[10px] text-slate-300 font-bold uppercase italic">Sem Meta</span>
+                                    )}
                                 </td>
                             </tr>
                         ))}
-                        {individualRanking.length === 0 && (
-                            <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum dado encontrado para os filtros selecionados.</td></tr>
-                        )}
                     </tbody>
                 </table>
               </div>
           </div>
+      </div>
 
-          {/* Charts & Squad Ranking */}
-          <div className="space-y-6">
-               {/* Chart */}
-               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                   <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2"><TrendingUp size={18}/> Volume de Entregas (Últimos Dias)</h3>
-                   <div className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={historyData}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                              <XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={12} stroke="#94a3b8"/>
-                              <YAxis axisLine={false} tickLine={false} fontSize={12} stroke="#94a3b8" allowDecimals={false}/>
-                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
-                              <Line type="monotone" dataKey="entregas" stroke="#db2777" strokeWidth={3} dot={{r: 4, fill: '#db2777', strokeWidth: 2, stroke: '#fff'}} />
-                          </LineChart>
-                      </ResponsiveContainer>
-                   </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm md:col-span-2">
+               <h3 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><List size={16} className="text-blue-600"/> Gargalos: Impacto na Meta</h3>
+               <div className="space-y-3">
+                    {filteredTasks.filter(t => {
+                        const real = t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0) / 3600;
+                        return t.estimatedTime > 0 && real > t.estimatedTime;
+                    }).slice(0, 5).map(task => {
+                        const realHours = task.timeLogs.reduce((s, l) => s + (l.duration || 0), 0) / 3600;
+                        const overflow = realHours - task.estimatedTime;
+                        return (
+                            <div key={task.id} onClick={() => setSelectedTask(task)} className="flex items-center justify-between p-4 bg-red-50/30 border border-red-100 rounded-xl hover:bg-red-50 cursor-pointer transition-all">
+                                <div className="flex-1">
+                                    <h4 className="text-sm font-bold text-slate-800">{task.title}</h4>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Estimado: {task.estimatedTime}h • Real: {realHours.toFixed(1)}h</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs font-black text-red-600 flex items-center gap-1">+ {overflow.toFixed(1)}h <AlertTriangle size={12}/></span>
+                                    <p className="text-[9px] text-red-400 font-bold uppercase tracking-tighter">Atraso Operacional</p>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {filteredTasks.filter(t => (t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0) / 3600) > t.estimatedTime && t.estimatedTime > 0).length === 0 && (
+                        <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 text-xs font-bold uppercase">Nenhum gargalo identificado.</div>
+                    )}
                </div>
-
-               {/* Squad Ranking (Only for Management) */}
-               {isManagement && (
-                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                       <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                          <h3 className="font-bold text-slate-700 flex items-center gap-2"><Users size={18}/> Performance por Squad</h3>
-                       </div>
-                       <table className="w-full text-sm text-left">
-                            <thead className="bg-white text-slate-500 font-semibold border-b border-slate-100">
-                                <tr>
-                                    <th className="p-3">Squad</th>
-                                    <th className="p-3 text-center">Entregas</th>
-                                    <th className="p-3 text-center text-red-500">Atrasos</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {squadRanking.map(s => (
-                                    <tr key={s.id} className="hover:bg-slate-50">
-                                        <td className="p-3 font-medium text-slate-700">{s.name}</td>
-                                        <td className="p-3 text-center font-bold text-emerald-600">{s.completed}</td>
-                                        <td className="p-3 text-center text-red-500">{s.overdue}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                       </table>
-                   </div>
-               )}
+          </div>
+          
+          <div className="bg-pink-600 p-6 rounded-2xl shadow-xl text-white flex flex-col justify-between">
+              <div>
+                <h3 className="font-black text-xs text-pink-200 uppercase tracking-widest mb-4">Eficiência Operacional</h3>
+                <p className="text-sm font-medium leading-relaxed opacity-90">O time está operando com **{efficiencyMetrics.ratio}%** da eficiência planejada.</p>
+              </div>
+              <div className="mt-8 space-y-4">
+                  <div className="flex justify-between text-[10px] font-black uppercase">
+                      <span>Uso da Estimativa</span>
+                      <span>{Math.round((efficiencyMetrics.totalReal / Math.max(efficiencyMetrics.totalEst, 1)) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-3 rounded-full overflow-hidden border border-white/10">
+                      <div className="bg-white h-full transition-all duration-1000 shadow-[0_0_15px_rgba(255,255,255,0.5)]" style={{width: `${Math.min((efficiencyMetrics.totalReal / Math.max(efficiencyMetrics.totalEst, 1)) * 100, 100)}%`}}></div>
+                  </div>
+                  <button onClick={() => window.print()} className="w-full py-3 bg-white text-pink-600 font-black rounded-xl text-xs uppercase tracking-widest hover:bg-pink-50 transition-colors shadow-lg">Exportar Relatório</button>
+              </div>
           </div>
       </div>
+
+      {/* Modal de Definição de Meta */}
+      {showGoalModal && (
+          <Modal 
+            isOpen={showGoalModal} 
+            onClose={() => setShowGoalModal(false)}
+            title="Configurar Meta"
+            maxWidth="500px"
+          >
+              <div className="space-y-6">
+                  <div className="space-y-4">
+                      <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Título da Meta</label>
+                          <input 
+                            type="text" 
+                            value={newGoal.title} 
+                            onChange={e => setNewGoal({...newGoal, title: e.target.value})}
+                            placeholder="Ex: Meta Mensal de Entregas"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-pink-100"
+                          />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Tipo</label>
+                              <select 
+                                value={newGoal.type} 
+                                onChange={e => setNewGoal({...newGoal, type: e.target.value as any})}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-pink-100"
+                              >
+                                  <option value="PRODUCTION">Produção (Entregas)</option>
+                                  <option value="HOURS">Horas Logadas</option>
+                              </select>
+                          </div>
+                          <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Valor Alvo</label>
+                              <input 
+                                type="number" 
+                                value={newGoal.targetValue} 
+                                onChange={e => setNewGoal({...newGoal, targetValue: Number(e.target.value)})}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-pink-100"
+                              />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Atribuir a</label>
+                          <select 
+                            value={newGoal.userId || newGoal.squadId || 'GLOBAL'} 
+                            onChange={e => {
+                                const val = e.target.value;
+                                if (val === 'GLOBAL') setNewGoal({...newGoal, userId: undefined, squadId: undefined});
+                                else if (val.startsWith('squad-')) setNewGoal({...newGoal, squadId: val, userId: undefined});
+                                else setNewGoal({...newGoal, userId: val, squadId: undefined});
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-pink-100"
+                          >
+                              <option value="GLOBAL">Global (Agência)</option>
+                              <optgroup label="Squads">
+                                  {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                              </optgroup>
+                              <optgroup label="Colaboradores">
+                                  {users.filter(u => u.role !== 'CLIENT').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                              </optgroup>
+                          </select>
+                      </div>
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                      <button onClick={() => setShowGoalModal(false)} className="flex-1 py-3 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-100 rounded-xl transition-colors">Cancelar</button>
+                      <button onClick={handleSaveGoal} className="flex-1 py-3 bg-pink-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-pink-700 transition-colors shadow-lg shadow-pink-200">Salvar Meta</button>
+                  </div>
+              </div>
+          </Modal>
+      )}
 
       {selectedTask && (
         <TaskModal 
@@ -399,8 +596,12 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ ta
             onClose={() => setSelectedTask(null)} 
             onUpdate={updateTask}
             currentUser={currentUser}
+            onDeleteTask={(id) => { setTasks(prev => prev.filter(t => t.id !== id)); setSelectedTask(null); }}
+            openConfirm={async (opts) => { console.log(opts); return true; }}
+            clients={clients}
         />
       )}
     </div>
   );
 };
+

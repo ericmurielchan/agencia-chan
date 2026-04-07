@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { KanbanBoard } from './components/KanbanBoard';
-import { CRM } from './components/CRM';
+import { CRMModule } from './components/crm/CRMModule';
 import { Financials } from './components/Financials';
 import { ClientPortal } from './components/ClientPortal';
 import { ProductivityDashboard } from './components/ProductivityDashboard';
@@ -14,100 +14,178 @@ import { ServiceCatalog } from './components/ServiceCatalog';
 import { ProfileSettings } from './components/ProfileSettings';
 import { Requisitions } from './components/Requisitions';
 import { SystemAdmin } from './components/SystemAdmin'; 
+import { Approvals } from './components/Approvals';
 import { HelpCenter } from './components/HelpCenter';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { Login } from './components/Login';
-import { initialUsers, initialTasks, initialLeads, initialFinancialRecords, initialSquads, initialTaskColumns, initialCrmColumns, initialAssets, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions } from './utils/mockData';
-import { Task, User, Lead, FinancialRecord, Role, Squad, ColumnConfig, Asset, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings } from './types';
-import { Users, Settings, Bell, Check, Gift, AlertTriangle, Info, Clock, CheckCircle, Shield } from 'lucide-react';
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { NotificationService } from './services/notificationService';
+import { testSupabaseConnection, fetchUsers, fetchTasks, fetchClients, seedDatabase, fetchLeads, fetchFinancialTransactions, fetchBankAccounts } from './services/supabaseService';
+import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches } from './utils/mockData';
+import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch } from './types';
+import { Users, Settings, Bell, Check, Gift, AlertTriangle, Info, Clock, CheckCircle, Shield, Trash2, Archive, Eye, DollarSign, Briefcase, Menu, X as XIcon } from 'lucide-react';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
   
-  // State Management
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('sidebarOpen');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [sidebarCompact, setSidebarCompact] = useState(() => {
+    const saved = localStorage.getItem('sidebarCompact');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile && sidebarOpen && !sidebarCompact) {
+          setSidebarCompact(true);
+      }
+      // No desktop, garantimos que a sidebar esteja "aberta" (visível), mesmo que compacta
+      if (!mobile && !sidebarOpen) {
+          setSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [sidebarOpen, sidebarCompact]);
+
+  useEffect(() => {
+    localStorage.setItem('sidebarOpen', JSON.stringify(sidebarOpen));
+    localStorage.setItem('sidebarCompact', JSON.stringify(sidebarCompact));
+  }, [sidebarOpen, sidebarCompact]);
+
+  useEffect(() => {
+    const handleToggle = () => toggleSidebar();
+    window.addEventListener('toggle-sidebar', handleToggle);
+    return () => window.removeEventListener('toggle-sidebar', handleToggle);
+  }, [sidebarOpen, sidebarCompact, isMobile]);
+
+  useEffect(() => {
+    const initSupabase = async () => {
+      const connection = await testSupabaseConnection();
+      if (connection.success) {
+        const dbUsers = await fetchUsers();
+        if (dbUsers.length === 0) {
+          console.log('Banco de dados vazio. Realizando migração inicial...');
+          await seedDatabase();
+          // Recarregar após migração
+          const usersData = await fetchUsers();
+          const tasksData = await fetchTasks();
+          const clientsData = await fetchClients();
+          const leadsData = await fetchLeads();
+          const financialData = await fetchFinancialTransactions();
+          const bankData = await fetchBankAccounts();
+          
+          if (usersData.length > 0) setUsers(usersData as any);
+          if (tasksData.length > 0) setTasks(tasksData as any);
+          if (clientsData.length > 0) setClients(clientsData as any);
+          if (leadsData.length > 0) setLeads(leadsData as any);
+          if (financialData.length > 0) setFinancialTransactions(financialData as any);
+          if (bankData.length > 0) setBankAccounts(bankData as any);
+        } else {
+          console.log('Dados carregados do Supabase com sucesso.');
+          const tasksData = await fetchTasks();
+          const clientsData = await fetchClients();
+          const leadsData = await fetchLeads();
+          const financialData = await fetchFinancialTransactions();
+          const bankData = await fetchBankAccounts();
+          
+          setUsers(dbUsers as any);
+          setTasks(tasksData as any);
+          setClients(clientsData as any);
+          setLeads(leadsData as any);
+          setFinancialTransactions(financialData as any);
+          setBankAccounts(bankData as any);
+        }
+      }
+    };
+    initSupabase();
+  }, []);
+
+  const toggleSidebar = () => {
+      // No desktop, o toggle de "abrir/fechar" a sidebar inteira vira o toggle de compactar
+      if (!isMobile) {
+          setSidebarCompact(!sidebarCompact);
+      } else {
+          setSidebarOpen(!sidebarOpen);
+      }
+  };
+
+  const toggleCompact = () => setSidebarCompact(!sidebarCompact);
+
+  const [confirmOptions, setConfirmOptions] = useState<ConfirmOptions | null>(null);
+  const confirmResolveRef = useRef<(value: boolean) => void>(null);
+
+  const openConfirm = (options: ConfirmOptions): Promise<boolean> => {
+      return new Promise((resolve) => {
+          setConfirmOptions(options);
+          confirmResolveRef.current = resolve;
+      });
+  };
+
+  const handleConfirmAction = (result: boolean) => {
+      setConfirmOptions(null);
+      if (confirmResolveRef.current) confirmResolveRef.current(result);
+  };
+
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
-  const [transactions, setTransactions] = useState<FinancialRecord[]>(initialFinancialRecords);
-  const [assets, setAssets] = useState<Asset[]>(initialAssets);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(initialBankAccounts);
+  const [creditCards, setCreditCards] = useState<CreditCard[]>(initialCreditCards);
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(initialFinancialTransactions);
+  const [cardInvoices, setCardInvoices] = useState<CardInvoice[]>(initialCardInvoices);
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [squads, setSquads] = useState<Squad[]>(initialSquads);
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [services, setServices] = useState<AgencyService[]>(initialServices);
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [selectedApprovalBatchId, setSelectedApprovalBatchId] = useState<string | null>(null);
+  const [selectedApprovalItemId, setSelectedApprovalItemId] = useState<string | null>(null);
+  const [kanbanFilter, setKanbanFilter] = useState<any>(null);
   const [requisitions, setRequisitions] = useState<Requisition[]>(initialRequisitions);
-  
-  // NEW: System Settings State
+  const [goals, setGoals] = useState<ProductivityGoal[]>(initialGoals);
+  const [approvalBatches, setApprovalBatches] = useState<ApprovalBatch[]>(initialApprovalBatches);
+  const [leadSources, setLeadSources] = useState<string[]>(['Instagram', 'Linkedin', 'Google Ads', 'Indicação', 'Site']);
   const [systemSettings, setSystemSettings] = useState<SystemSettings>({
       agencyName: 'Agência Chan',
       logo: '',
-      primaryColor: '#db2777', // Default Pink
-      sidebarColor: '#0f172a' // Default Slate 900
+      primaryColor: '#db2777',
+      sidebarColor: '#0f172a'
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
-  
-  // Refs
   const notificationRef = useRef<HTMLDivElement>(null);
-  
-  // Config States
   const [taskColumns, setTaskColumns] = useState<ColumnConfig[]>(initialTaskColumns);
-  const [crmColumns, setCrmColumns] = useState<ColumnConfig[]>(initialCrmColumns);
+  const [crmColumns, setCrmColumns] = useState<PipelineStage[]>(initialCrmColumns as any);
+  const [lossReasons, setLossReasons] = useState<LossReason[]>(initialLossReasons);
   const [rolePermissions, setRolePermissions] = useState<RolePermissions>(initialRolePermissions);
 
-  // Click Outside Handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
         setShowNotifications(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  // Check for notifications logic (omitted for brevity, assume same as before)
-  useEffect(() => {
-      const todayDate = new Date();
-      todayDate.setHours(0,0,0,0);
-      const todayStr = todayDate.toISOString().split('T')[0];
-      
-      clients.forEach(c => {
-          c.contacts.forEach(contact => {
-              if (contact.birthDate === todayStr) {
-                  const id = `bday-${c.id}-${contact.email}`;
-                  if(!notifications.find(n => n.id === id)) {
-                      setNotifications(prev => [...prev, {
-                          id,
-                          title: 'Aniversariante do Dia',
-                          message: `Hoje é aniversário de ${contact.name} (${c.name})`,
-                          type: 'Birthday',
-                          read: false,
-                          timestamp: Date.now(),
-                          navToView: 'clients'
-                      }]);
-                  }
-              }
-          });
-      });
-  }, [clients, notifications]);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    if (user.role === 'CLIENT') {
-        setCurrentView('client-portal');
-    } else {
+    if (user.role === 'CLIENT') setCurrentView('client-portal');
+    else {
         const allowed = rolePermissions[user.role] || [];
-        if (allowed.includes('dashboard')) {
-            setCurrentView('dashboard');
-        } else if (allowed.length > 0) {
-            setCurrentView(allowed[0]);
-        } else {
-            setCurrentView('dashboard'); 
-        }
+        setCurrentView(allowed.includes('dashboard') ? 'dashboard' : (allowed[0] || 'dashboard'));
     }
   };
 
@@ -116,268 +194,334 @@ const App: React.FC = () => {
     setCurrentView('dashboard');
   };
 
-  const handleUpdateUser = (updatedUser: User) => {
-      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-      setCurrentUser(updatedUser);
-  };
-
   const handleNotificationClick = (notif: Notification) => {
-      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
-      
-      if (notif.navToView) {
-          const allowedModules = rolePermissions[currentUser?.role || 'EMPLOYEE'] || [];
-          if (allowedModules.includes(notif.navToView) || (currentUser?.role === 'CLIENT' && notif.navToView === 'requisitions')) {
-              setCurrentView(notif.navToView);
-          }
-      }
-      setShowNotifications(false);
+    // Mark as read
+    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, status: 'READ' } : n));
+
+    if (notif.navToView) {
+        setCurrentView(notif.navToView);
+        
+        // Contextual actions based on metadata
+        if (notif.metadata?.referenceId) {
+            if (notif.navToView === 'kanban') {
+                setSelectedTaskId(notif.metadata.referenceId);
+            } else if (notif.navToView === 'crm') {
+                setSelectedLeadId(notif.metadata.referenceId);
+            } else if (notif.navToView === 'finance') {
+                if (notif.metadata.module === 'financeiro_fatura') {
+                    setSelectedInvoiceId(notif.metadata.referenceId);
+                } else {
+                    setSelectedTransactionId(notif.metadata.referenceId);
+                }
+            } else if (notif.navToView === 'approvals') {
+                if (notif.metadata?.batchId) setSelectedApprovalBatchId(notif.metadata.batchId);
+                if (notif.metadata?.itemId) setSelectedApprovalItemId(notif.metadata.itemId);
+            }
+        }
+    }
+    setShowNotifications(false);
   };
 
   const markAllAsRead = () => {
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setNotifications(prev => prev.map(n => n.status === 'UNREAD' ? { ...n, status: 'READ' } : n));
   };
 
-  const getNotificationIcon = (type: string) => {
-      switch (type) {
-          case 'Birthday': return <Gift size={18} className="text-purple-500" />;
-          case 'WARNING': return <AlertTriangle size={18} className="text-red-500" />;
-          case 'SUCCESS': return <CheckCircle size={18} className="text-emerald-500" />;
-          default: return <Info size={18} className="text-blue-500" />;
-      }
-  };
-
-  // --- PUBLIC NAVIGATION LOGIC ---
   if (!currentUser) {
-      if (currentView === 'privacy') {
-          return <PrivacyPolicy onBack={() => setCurrentView('login')} agencyName={systemSettings.agencyName} />;
-      }
-      if (currentView === 'help') {
-          // Dummy Guest User for Help Center visualization
-          const guestUser: User = { id: 'guest', name: 'Visitante', email: '', role: 'EMPLOYEE', avatar: '', hasSystemAccess: false };
-          return (
-              <div className="min-h-screen bg-slate-50 p-8">
-                  <div className="mb-4">
-                      <button onClick={() => setCurrentView('login')} className="text-slate-500 hover:text-slate-800 font-medium text-sm">← Voltar para Login</button>
-                  </div>
-                  <HelpCenter currentUser={guestUser} />
-              </div>
-          );
-      }
-      
+      if (currentView === 'privacy') return <PrivacyPolicy onBack={() => setCurrentView('login')} agencyName={systemSettings.agencyName} />;
+      if (currentView === 'help') return <div className="p-4 md:p-8"><HelpCenter currentUser={{id:'g', name:'G', email:'', role:'EMPLOYEE', avatar:''}} /></div>;
       return <Login onLogin={handleLogin} users={users} systemSettings={systemSettings} onNavigate={setCurrentView} />;
   }
 
-  const renderContent = () => {
-    if (currentView === 'settings') {
-        return <ProfileSettings currentUser={currentUser} onUpdateUser={handleUpdateUser} />;
-    }
-    if (currentView === 'help') {
-        return <HelpCenter currentUser={currentUser} />;
-    }
-    if (currentView === 'privacy') {
-        return <PrivacyPolicy onBack={() => setCurrentView('dashboard')} agencyName={systemSettings.agencyName} />;
-    }
+  const unreadCount = notifications.filter(n => n.status === 'UNREAD' && (!n.targetUserId || n.targetUserId === currentUser.id)).length;
 
-    const allowedModules = rolePermissions[currentUser.role] || [];
-    const globalViews = ['dashboard', 'client-portal', 'help', 'privacy'];
-
-    if (!globalViews.includes(currentView) && !allowedModules.includes(currentView)) {
-        return <div className="p-8 text-center text-slate-500">Acesso não autorizado a este módulo.</div>;
-    }
-
-    switch (currentView) {
-      case 'dashboard':
-        return <DashboardOverview tasks={tasks} leads={leads} finance={transactions} users={users} />;
-      case 'kanban':
-        return <KanbanBoard 
-            tasks={tasks} setTasks={setTasks} 
-            users={users} currentUser={currentUser} 
-            columns={taskColumns} setColumns={setTaskColumns}
-        />;
-      case 'crm':
-        return <CRM 
-            leads={leads} setLeads={setLeads}
-            columns={crmColumns} setColumns={setCrmColumns}
-        />;
-      case 'requisitions':
-        return <Requisitions 
-            requisitions={requisitions}
-            setRequisitions={setRequisitions}
-            currentUser={currentUser}
-            users={users}
-            setNotifications={setNotifications}
-            setTransactions={setTransactions}
-        />;
-      case 'finance':
-        return <Financials 
-            transactions={transactions} 
-            setTransactions={setTransactions} 
-            assets={assets}
-            setAssets={setAssets}
-            currentUser={currentUser}
-            users={users}
-            setNotifications={setNotifications}
-        />;
-      case 'client-portal':
-        return <ClientPortal 
-            tasks={tasks} 
-            setTasks={setTasks} 
-            currentUser={currentUser} 
-            users={users}
-            clients={clients}
-            squads={squads}
-            setNotifications={setNotifications}
-            setRequisitions={setRequisitions}
-            onNavigate={setCurrentView}
-        />;
-      case 'productivity':
-        return <ProductivityDashboard 
-            tasks={tasks} 
-            setTasks={setTasks}
-            users={users} 
-            squads={squads} 
-            clients={clients}
-            currentUser={currentUser} 
-        />;
-      case 'teams':
-        return <TeamManagement users={users} setUsers={setUsers} squads={squads} setSquads={setSquads} />;
-      case 'permissions':
-        return <PermissionsManager permissions={rolePermissions} setPermissions={setRolePermissions} />;
-      case 'clients':
-        return <ClientManagement clients={clients} setClients={setClients} squads={squads} services={services} users={users} setUsers={setUsers} />;
-      case 'catalog':
-        return <ServiceCatalog services={services} setServices={setServices} />;
-      case 'system-admin':
-        return <SystemAdmin settings={systemSettings} onUpdateSettings={setSystemSettings} />;
-      default:
-        return <div>Selecione uma opção</div>;
-    }
+  const getSidebarWidth = () => {
+    if (isMobile) return '0px';
+    return sidebarCompact ? '80px' : '256px';
   };
 
-  const myNotifications = notifications.filter(n => !n.targetUserId || n.targetUserId === currentUser.id).sort((a,b) => b.timestamp - a.timestamp);
-  const unreadCount = myNotifications.filter(n => !n.read).length;
+  const contentMargin = getSidebarWidth();
+
+  const isKanban = currentView === 'kanban';
 
   return (
-    <div className={`flex min-h-screen transition-colors duration-300 ${currentUser.preferences?.theme === 'dark' ? 'bg-slate-900 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
+    <div className={`flex h-screen transition-colors duration-300 ${currentUser.preferences?.theme === 'dark' ? 'bg-slate-900 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
+      {/* Mobile Overlay */}
+      {isMobile && sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 z-[9999] animate-pop" 
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       <Sidebar 
         currentView={currentView} 
         setView={setCurrentView} 
-        currentUserRole={currentUser.role}
-        permissions={rolePermissions}
-        logout={handleLogout}
+        currentUserRole={currentUser.role} 
+        permissions={rolePermissions} 
+        logout={handleLogout} 
         systemSettings={systemSettings}
+        isOpen={sidebarOpen}
+        onToggle={toggleSidebar}
+        isCompact={sidebarCompact}
+        onToggleCompact={toggleCompact}
+        isMobile={isMobile}
       />
       
-      <main className="ml-64 flex-1 flex flex-col p-8 min-h-screen">
-        <div className="flex justify-end items-center mb-8 gap-4 relative shrink-0">
-            <div className="relative" ref={notificationRef}>
-                <button 
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="p-2 rounded-full border transition-all relative"
-                    style={showNotifications ? { backgroundColor: `${systemSettings.primaryColor}20`, borderColor: systemSettings.primaryColor, color: systemSettings.primaryColor } : { backgroundColor: 'white', borderColor: '#e2e8f0', color: '#64748b' }}
-                >
-                    <Bell size={20} />
-                    {unreadCount > 0 && (
-                        <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+      <main 
+        className={`flex-1 flex flex-col h-full transition-all duration-300 ease-in-out relative ${isKanban ? 'p-0' : 'px-4 py-6'}`}
+        style={{ marginLeft: contentMargin }}
+      >
+        {/* TOP HEADER SECTION */}
+        {!isKanban && (
+            <div className="sticky top-0 z-40 flex justify-between items-center gap-4 mb-6 md:mb-8">
+                <div className="flex items-center gap-3">
+                    {isMobile && (
+                        <button 
+                            onClick={toggleSidebar}
+                            className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm"
+                        >
+                            <Menu size={20} />
+                        </button>
                     )}
-                </button>
-                
-                {showNotifications && (
-                    <div className="absolute right-0 top-full mt-3 w-96 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden z-[60] animate-pop origin-top-right">
-                        <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 flex justify-between items-center backdrop-blur-sm">
-                            <div>
-                                <h3 className="font-bold text-slate-800 dark:text-white">Notificações</h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{unreadCount} não lidas</p>
-                            </div>
+                    <div className="hidden sm:block">
+                        <h2 className="text-lg font-black text-slate-800 tracking-tight leading-none">
+                            {currentView === 'dashboard' ? 'Dashboard' : 
+                             currentView === 'crm' ? 'CRM' :
+                             currentView === 'finance' ? 'Financeiro' :
+                             currentView === 'teams' ? 'Equipes' : 'Sistema'}
+                        </h2>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 md:gap-4">
+                    <div className="relative" ref={notificationRef}>
+                        <button 
+                          onClick={() => setShowNotifications(!showNotifications)} 
+                          className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-center transition-all hover:shadow-md hover:border-pink-200 group"
+                        >
+                            <Bell size={18} className="text-slate-500 group-hover:text-pink-600 transition-colors" />
                             {unreadCount > 0 && (
-                                <button 
-                                    onClick={markAllAsRead} 
-                                    className="text-xs font-medium hover:bg-slate-100 px-2 py-1 rounded transition-colors flex items-center gap-1"
-                                    style={{ color: systemSettings.primaryColor }}
-                                >
-                                    <Check size={12}/> Marcar todas lidas
-                                </button>
+                                <span className="absolute top-2.5 right-2.5 md:top-3 md:right-3 w-2 md:w-2.5 h-2 md:h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
                             )}
-                        </div>
-                        <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                            {myNotifications.length === 0 && (
-                                <div className="p-8 text-center flex flex-col items-center gap-2">
-                                    <Bell size={24} className="text-slate-300"/>
-                                    <p className="text-sm text-slate-400">Nenhuma notificação por enquanto.</p>
+                        </button>
+                        
+                        {showNotifications && (
+                            <div className="absolute right-0 top-full mt-3 w-80 md:w-96 bg-white rounded-2xl md:rounded-3xl shadow-2xl border border-slate-100 z-[100] animate-pop origin-top-right overflow-hidden">
+                                <div className="p-4 md:p-5 border-b bg-slate-50/50 flex justify-between items-center">
+                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Notificações</h3>
+                                    <button onClick={markAllAsRead} className="text-[10px] font-black text-pink-600 hover:text-pink-700 transition-colors">Marcar lidas</button>
                                 </div>
-                            )}
-                            {myNotifications.map(notif => (
-                                <div 
-                                    key={notif.id} 
-                                    onClick={() => handleNotificationClick(notif)}
-                                    className={`p-4 border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors group relative ${!notif.read ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}
-                                >
-                                    {!notif.read && (
-                                        <span className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: systemSettings.primaryColor }}></span>
-                                    )}
-                                    <div className="flex gap-3">
-                                        <div className={`mt-1 p-2 rounded-full h-fit shrink-0 ${!notif.read ? 'bg-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                                            {getNotificationIcon(notif.type)}
+                                <div className="max-h-64 md:max-h-96 overflow-y-auto custom-scrollbar">
+                                    {notifications.length > 0 ? (
+                                        <div className="divide-y divide-slate-50">
+                                            {notifications.sort((a, b) => b.timestamp - a.timestamp).map(notif => (
+                                                <button 
+                                                    key={notif.id} 
+                                                    onClick={() => handleNotificationClick(notif)}
+                                                    className={`w-full p-4 text-left hover:bg-slate-50 transition-colors flex gap-3 items-start ${notif.status === 'UNREAD' ? 'bg-pink-50/30' : ''}`}
+                                                >
+                                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                                        notif.type === 'ALERT' ? 'bg-red-100 text-red-600' :
+                                                        notif.type === 'WARNING' ? 'bg-amber-100 text-amber-600' :
+                                                        notif.type === 'SUCCESS' ? 'bg-emerald-100 text-emerald-600' :
+                                                        'bg-blue-100 text-blue-600'
+                                                    }`}>
+                                                        <Bell size={14} />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <p className={`text-[11px] font-black uppercase tracking-tight truncate ${notif.status === 'UNREAD' ? 'text-slate-900' : 'text-slate-600'}`}>{notif.title}</p>
+                                                            <span className="text-[9px] text-slate-400 font-bold ml-2 whitespace-nowrap">
+                                                                {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-500 font-medium line-clamp-2 leading-relaxed">{notif.message}</p>
+                                                        {notif.navToView && (
+                                                            <div className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-pink-600">
+                                                                <span>Ver detalhes</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            ))}
                                         </div>
-                                        <div className="flex-1">
-                                            <div className="flex justify-between items-start mb-1">
-                                                <p className={`text-sm ${!notif.read ? 'font-bold text-slate-800 dark:text-slate-100' : 'font-medium text-slate-600 dark:text-slate-400'}`}>
-                                                    {notif.title}
-                                                </p>
-                                                <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                                                    {new Date(notif.timestamp).toLocaleDateString() === new Date().toLocaleDateString() 
-                                                        ? new Date(notif.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-                                                        : new Date(notif.timestamp).toLocaleDateString([], {day: '2-digit', month: '2-digit'})
-                                                    }
-                                                </span>
+                                    ) : (
+                                        <div className="p-10 text-center">
+                                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-300">
+                                                <Bell size={20} />
                                             </div>
-                                            <p className={`text-xs leading-relaxed ${!notif.read ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>
-                                                {notif.message}
-                                            </p>
+                                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Sem novidades</p>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
-                            ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div 
+                      className="bg-white px-3 md:px-6 py-1.5 md:py-2 rounded-xl md:rounded-3xl shadow-sm border border-slate-100 flex items-center gap-2 md:gap-4 cursor-pointer hover:shadow-md transition-all group"
+                      onClick={() => setCurrentView('settings')}
+                    >
+                        <div className="text-right hidden xs:block">
+                            <p className="text-xs md:text-sm font-black text-slate-800 leading-none group-hover:text-pink-600 truncate max-w-[80px] md:max-w-none">{currentUser.name}</p>
+                            <p className="text-[8px] md:text-[10px] text-slate-400 uppercase font-black mt-1 tracking-wider">{currentUser.role}</p>
+                        </div>
+                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-2xl overflow-hidden border-2 border-slate-50 bg-slate-100 shrink-0">
+                          <img src={currentUser.avatar} alt="Perfil" className="w-full h-full object-cover" />
                         </div>
                     </div>
-                )}
-            </div>
-
-            <div 
-                className={`flex items-center gap-3 bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow cursor-pointer ${currentView === 'settings' ? 'ring-2' : ''}`}
-                style={currentView === 'settings' ? { borderColor: systemSettings.primaryColor, ringColor: systemSettings.primaryColor } : {}}
-                onClick={() => setCurrentView('settings')}
-            >
-                <div className="text-right hidden md:block">
-                    <p className="text-sm font-bold text-slate-800 dark:text-white">{currentUser.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {currentUser.role === 'ADMIN' ? 'CEO / Admin' : 
-                         currentUser.role === 'FINANCE' ? 'Financeiro' : currentUser.role}
-                    </p>
                 </div>
-                <img src={currentUser.avatar} alt="Perfil" className="w-10 h-10 rounded-full border-2 border-slate-100 dark:border-slate-700" />
-                <Settings size={16} className="text-slate-400 ml-2" />
             </div>
-        </div>
+        )}
 
-        <div className="flex-1">
-            {renderContent()}
+        <div className="flex-1 w-full max-w-full flex flex-col overflow-y-auto custom-scrollbar">
+            {currentView === 'dashboard' && (
+              <DashboardOverview 
+                tasks={tasks} 
+                leads={leads} 
+                finance={financialTransactions} 
+                users={users} 
+                clients={clients}
+                cardInvoices={cardInvoices}
+                bankAccounts={bankAccounts}
+                creditCards={creditCards}
+                currentUser={currentUser}
+                setCurrentView={setCurrentView}
+                goals={goals}
+                squads={squads}
+              />
+            )}
+            {currentView === 'kanban' && (
+              <KanbanBoard 
+                tasks={tasks} 
+                setTasks={setTasks} 
+                users={users} 
+                currentUser={currentUser} 
+                columns={taskColumns} 
+                setColumns={setTaskColumns} 
+                openConfirm={openConfirm} 
+                notifications={notifications} 
+                setNotifications={setNotifications}
+                sidebarOpen={sidebarOpen}
+                sidebarCompact={sidebarCompact}
+                isMobile={isMobile}
+                clients={clients}
+                selectedTaskId={selectedTaskId}
+                onClearSelectedTask={() => setSelectedTaskId(null)}
+                initialFilter={kanbanFilter}
+                onClearFilter={() => setKanbanFilter(null)}
+                onNavigate={(view, refId) => {
+                  setCurrentView(view);
+                  if (view === 'kanban' && refId) setSelectedTaskId(refId);
+                  if (view === 'crm' && refId) setSelectedLeadId(refId);
+                  if (view === 'finance' && refId) setSelectedTransactionId(refId);
+                }}
+              />
+            )}
+            {currentView === 'crm' && (
+              <CRMModule 
+                leads={leads} 
+                setLeads={setLeads} 
+                stages={crmColumns as any} 
+                setStages={setCrmColumns as any} 
+                lossReasons={lossReasons}
+                setLossReasons={setLossReasons}
+                users={users}
+                currentUser={currentUser}
+                clients={clients}
+                setClients={setClients}
+                notifications={notifications}
+                setNotifications={setNotifications}
+                openConfirm={openConfirm}
+                selectedLeadId={selectedLeadId}
+                onClearSelectedLead={() => setSelectedLeadId(null)}
+                onNavigate={(view, refId) => {
+                  setCurrentView(view);
+                  if (view === 'kanban' && refId) setSelectedTaskId(refId);
+                  if (view === 'crm' && refId) setSelectedLeadId(refId);
+                  if (view === 'finance' && refId) setSelectedTransactionId(refId);
+                }}
+              />
+            )}
+            {currentView === 'requisitions' && <Requisitions requisitions={requisitions} setRequisitions={setRequisitions} currentUser={currentUser} users={users} setNotifications={setNotifications} setTransactions={setFinancialTransactions} clients={clients} />}
+            {currentView === 'finance' && (
+              <Financials 
+                bankAccounts={bankAccounts}
+                setBankAccounts={setBankAccounts}
+                creditCards={creditCards}
+                setCreditCards={setCreditCards}
+                transactions={financialTransactions}
+                setTransactions={setFinancialTransactions}
+                cardInvoices={cardInvoices}
+                setCardInvoices={setCardInvoices}
+                currentUser={currentUser} 
+                users={users} 
+                clients={clients}
+                squads={squads}
+                openConfirm={openConfirm}
+                selectedTransactionId={selectedTransactionId}
+                onClearSelectedTransaction={() => setSelectedTransactionId(null)}
+                selectedInvoiceId={selectedInvoiceId}
+                onClearSelectedInvoice={() => setSelectedInvoiceId(null)}
+              />
+            )}
+            {currentView === 'client-portal' && (
+              <ClientPortal 
+                tasks={tasks} 
+                setTasks={setTasks} 
+                currentUser={currentUser} 
+                users={users} 
+                clients={clients} 
+                squads={squads} 
+                batches={approvalBatches}
+                setNotifications={setNotifications} 
+                onNavigate={setCurrentView} 
+                setSelectedBatchId={setSelectedApprovalBatchId}
+              />
+            )}
+            {currentView === 'productivity' && (
+              <ProductivityDashboard 
+                tasks={tasks} 
+                setTasks={setTasks} 
+                users={users} 
+                squads={initialSquads} 
+                clients={clients} 
+                currentUser={currentUser} 
+                setNotifications={setNotifications} 
+                goals={goals} 
+                setGoals={setGoals} 
+                onNavigate={(view, filter) => {
+                  setCurrentView(view);
+                  if (view === 'kanban' && filter) setKanbanFilter(filter);
+                }}
+              />
+            )}
+            {currentView === 'catalog' && <ServiceCatalog services={services} setServices={setServices} currentUser={currentUser} openConfirm={openConfirm} />}
+            {currentView === 'teams' && <TeamManagement users={users} setUsers={setUsers} squads={squads} setSquads={setSquads} openConfirm={openConfirm} />}
+            {currentView === 'permissions' && <PermissionsManager permissions={rolePermissions} setPermissions={setRolePermissions} openConfirm={openConfirm} />}
+            {currentView === 'clients' && <ClientManagement clients={clients} setClients={setClients} squads={initialSquads} services={services} users={users} setUsers={setUsers} openConfirm={openConfirm} tasks={tasks} requisitions={requisitions} currentUser={currentUser} />}
+            {currentView === 'system-admin' && <SystemAdmin settings={systemSettings} onUpdateSettings={setSystemSettings} />}
+            {currentView === 'approvals' && (
+              <Approvals 
+                currentUser={currentUser} 
+                users={users} 
+                clients={clients} 
+                batches={approvalBatches}
+                setBatches={setApprovalBatches}
+                setNotifications={setNotifications}
+                squads={squads}
+                selectedBatchId={selectedApprovalBatchId}
+                setSelectedBatchId={setSelectedApprovalBatchId}
+                selectedItemId={selectedApprovalItemId}
+                setSelectedItemId={setSelectedApprovalItemId}
+              />
+            )}
+            {currentView === 'help' && <HelpCenter currentUser={currentUser} />}
+            {currentView === 'settings' && <ProfileSettings currentUser={currentUser} onUpdateUser={(u) => { setUsers(users.map(us => us.id === u.id ? u : us)); setCurrentUser(u); }} />}
         </div>
-
-        <footer className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700 text-center text-xs text-slate-400">
-            <p className="mb-2">
-                &copy; {new Date().getFullYear()} {systemSettings.agencyName}. Todos os direitos reservados.
-            </p>
-            <div className="flex justify-center gap-4">
-                <button 
-                    onClick={() => setCurrentView('privacy')}
-                    className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex items-center gap-1"
-                >
-                    <Shield size={10}/> Políticas de Privacidade
-                </button>
-            </div>
-        </footer>
       </main>
+
+      {confirmOptions && <ConfirmDialog options={confirmOptions} onConfirm={() => handleConfirmAction(true)} onCancel={() => handleConfirmAction(false)} />}
     </div>
   );
 };

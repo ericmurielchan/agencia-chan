@@ -1,28 +1,88 @@
-
 import React, { useState, useMemo } from 'react';
-import { Task, Lead, FinancialRecord, User } from '../types';
-import { Layout, Zap, AlertTriangle, Archive, PieChart as PieChartIcon, BarChart2, TrendingUp, Calendar, AlertCircle, Clock } from 'lucide-react';
+import { Task, Lead, FinancialTransaction, User, Client, CardInvoice, BankAccount, CreditCard, ProductivityGoal, Squad } from '../types';
+import { calculateKanbanMetrics } from '../utils/metrics';
+import { 
+    Layout, 
+    Zap, 
+    AlertTriangle, 
+    Archive, 
+    PieChart as PieChartIcon, 
+    BarChart2, 
+    TrendingUp, 
+    Calendar, 
+    AlertCircle, 
+    Clock, 
+    DollarSign, 
+    Users, 
+    CheckCircle2, 
+    TrendingDown, 
+    ArrowUpRight, 
+    ArrowDownRight, 
+    Plus, 
+    Briefcase, 
+    History,
+    Target,
+    Activity,
+    Bell,
+    ChevronRight,
+    Wallet,
+    PiggyBank,
+    Scale
+} from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 
 interface DashboardProps {
   tasks: Task[];
   leads: Lead[];
-  finance: FinancialRecord[];
+  finance: FinancialTransaction[];
   users: User[];
+  clients: Client[];
+  cardInvoices: CardInvoice[];
+  bankAccounts: BankAccount[];
+  creditCards: CreditCard[];
+  currentUser: User;
+  setCurrentView: (view: string) => void;
+  goals: ProductivityGoal[];
+  squads: Squad[];
 }
 
-export const DashboardOverview: React.FC<DashboardProps> = ({ tasks, leads, finance, users }) => {
-  // Inicializa com últimos 30 dias
-  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [activePreset, setActivePreset] = useState<'7days' | '30days' | 'quarter' | 'custom'>('30days');
+export const DashboardOverview: React.FC<DashboardProps> = ({ 
+    tasks, 
+    leads, 
+    finance, 
+    users, 
+    clients, 
+    cardInvoices, 
+    bankAccounts,
+    creditCards,
+    currentUser, 
+    setCurrentView,
+    goals,
+    squads
+}) => {
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]); // First day of current month
+  const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]); // Last day of current month
+  const [activePreset, setActivePreset] = useState<'7days' | '30days' | 'quarter' | 'month' | 'custom'>('month');
 
-  // Helper para aplicar presets
-  const applyPreset = (days: number, presetName: '7days' | '30days' | 'quarter') => {
+  const isFinance = currentUser.role === 'FINANCE';
+  const isAdmin = currentUser.role === 'ADMIN';
+  const isManager = currentUser.role === 'MANAGER';
+  const isEmployee = currentUser.role === 'EMPLOYEE';
+  const isFreelancer = currentUser.role === 'FREELANCER';
+
+  const [selectedUserId, setSelectedUserId] = useState<string | 'ALL'>(isEmployee || isFreelancer ? currentUser.id : 'ALL');
+  const [selectedSquadId, setSelectedSquadId] = useState<string | 'ALL'>(isManager ? currentUser.squad || 'ALL' : 'ALL');
+
+  const applyPreset = (days: number | 'month', presetName: '7days' | '30days' | 'quarter' | 'month') => {
       const end = new Date();
       const start = new Date();
-      start.setDate(end.getDate() - days);
-      
+      if (days === 'month') {
+          start.setDate(1);
+          end.setMonth(end.getMonth() + 1);
+          end.setDate(0);
+      } else {
+          start.setDate(end.getDate() - days);
+      }
       setEndDate(end.toISOString().split('T')[0]);
       setStartDate(start.toISOString().split('T')[0]);
       setActivePreset(presetName);
@@ -34,270 +94,368 @@ export const DashboardOverview: React.FC<DashboardProps> = ({ tasks, leads, fina
       setActivePreset('custom');
   };
 
-  // Lógica de Filtro baseada no range selecionado
   const filterByDate = (dateStr: string) => {
       if (!dateStr) return false;
       return dateStr >= startDate && dateStr <= endDate;
   };
 
-  // Filtros aplicados aos dados
-  // Nota: Mantemos IN_PROGRESS visível independente da data para não perder o foco operacional atual,
-  // mas o filtro de data se aplica estritamente para conclusões, backlog e financeiro.
-  const filteredTasks = useMemo(() => tasks.filter(t => filterByDate(t.dueDate) || t.status === 'IN_PROGRESS'), [tasks, startDate, endDate]);
-  const filteredFinance = useMemo(() => finance.filter(f => filterByDate(f.dueDate)), [finance, startDate, endDate]);
-  
-  // --- INDICADORES OPERACIONAIS (KPIs) ---
-  const activeTasks = tasks.filter(t => !t.archived && t.status !== 'DONE');
-  const inProgressCount = activeTasks.filter(t => t.status === 'IN_PROGRESS').length;
-  const reviewCount = activeTasks.filter(t => t.status === 'REVIEW').length;
-  
-  // Atrasadas (Global, não arquivadas e não concluídas)
-  const overdueCount = tasks.filter(t => {
-      return !t.archived && t.status !== 'DONE' && new Date(t.dueDate) < new Date(new Date().setHours(0,0,0,0));
-  }).length;
-  
-  // Arquivadas
-  const archivedCount = tasks.filter(t => t.archived).length;
-  
-  // Métricas Financeiras
-  const revenue = filteredFinance.filter(f => f.type === 'INCOME' && f.status === 'PAID').reduce((acc, c) => acc + c.amount, 0);
-  
-  // --- DADOS PARA GRÁFICOS ---
-  
-  // 1. Distribuição de Status (Pie Chart) - Baseado no filtro
-  // Usamos filteredTasks para refletir o range selecionado (exceto In Progress que é fixo)
-  const statusDistribution = [
-      { name: 'A Fazer', value: filteredTasks.filter(t => t.status === 'TODO' || t.status === 'BACKLOG').length, color: '#94a3b8' },
-      { name: 'Em Andamento', value: filteredTasks.filter(t => t.status === 'IN_PROGRESS').length, color: '#3b82f6' },
-      { name: 'Revisão', value: filteredTasks.filter(t => t.status === 'REVIEW').length, color: '#a855f7' },
-      { name: 'Concluídas', value: filteredTasks.filter(t => t.status === 'DONE').length, color: '#10b981' } // Adicionado Concluídas para ver produtividade do período
-  ].filter(d => d.value > 0);
+  // Role-based filtering logic
+  const filteredData = useMemo(() => {
+    let baseTasks = tasks;
+    let baseLeads = leads;
+    let baseFinance = finance;
+    let baseClients = clients;
 
-  // 2. Carga de Trabalho por Usuário (Bar Chart)
-  const workloadData = users
-    .filter(u => u.role !== 'CLIENT' && u.role !== 'ADMIN')
-    .map(u => {
-        // Considera tarefas ativas no geral para carga de trabalho atual
-        const userTasks = activeTasks.filter(t => t.assigneeIds.includes(u.id));
-        return {
-            name: u.name.split(' ')[0], 
-            tasks: userTasks.length,
-            highPriority: userTasks.filter(t => t.priority === 'HIGH').length
-        };
-    })
-    .sort((a,b) => b.tasks - a.tasks);
+    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
+        baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
+        baseLeads = leads.filter(l => l.responsibleId === currentUser.id);
+        baseClients = clients.filter(c => c.responsibleId === currentUser.id);
+    } else if (currentUser.role === 'MANAGER') {
+        if (currentUser.squad) {
+            baseTasks = tasks.filter(t => t.squadId === currentUser.squad);
+            baseClients = clients.filter(c => c.squadId === currentUser.squad);
+            
+            const squadMembers = users.filter(u => u.squad === currentUser.squad).map(u => u.id);
+            baseLeads = leads.filter(l => l.responsibleId && squadMembers.includes(l.responsibleId));
+        }
+    }
+
+    // Apply manual filters from dropdowns
+    if (selectedSquadId !== 'ALL') {
+        baseTasks = baseTasks.filter(t => t.squadId === selectedSquadId);
+        baseLeads = baseLeads.filter(l => {
+            const resp = users.find(u => u.id === l.responsibleId);
+            return resp?.squad === selectedSquadId;
+        });
+        baseClients = baseClients.filter(c => c.squadId === selectedSquadId);
+    }
+    if (selectedUserId !== 'ALL') {
+        baseTasks = baseTasks.filter(t => t.assigneeIds.includes(selectedUserId));
+        baseLeads = baseLeads.filter(l => l.responsibleId === selectedUserId);
+        baseClients = baseClients.filter(c => c.responsibleId === selectedUserId);
+    }
+
+    return {
+        tasks: baseTasks,
+        leads: baseLeads,
+        finance: baseFinance,
+        clients: baseClients
+    };
+  }, [tasks, leads, finance, clients, currentUser, users]);
+
+  const stats = useMemo(() => {
+    const periodTxs = filteredData.finance.filter(f => filterByDate(f.date));
+    const revenue = periodTxs.filter(f => f.type === 'INCOME' && f.status === 'PAID').reduce((acc, c) => acc + c.amount, 0);
+    const expenses = periodTxs.filter(f => f.type === 'EXPENSE' && f.status === 'PAID').reduce((acc, c) => acc + c.amount, 0);
+    const profit = revenue - expenses;
+
+    const periodLeads = filteredData.leads.filter(l => filterByDate(new Date(l.createdAt).toISOString().split('T')[0]));
+    const newLeads = periodLeads.length;
+    
+    const activeClients = filteredData.clients.filter(c => c.status === 'ACTIVE').length;
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    const next7DaysStr = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+
+    const kanbanMetrics = calculateKanbanMetrics(filteredData.tasks);
+
+    const totalBalance = bankAccounts.reduce((acc, curr) => acc + curr.balance, 0);
+    const accountsToPayNextDays = filteredData.finance.filter(f => f.type === 'EXPENSE' && f.status === 'PENDING' && f.date >= todayStr && f.date <= next7DaysStr).reduce((acc, c) => acc + c.amount, 0);
+    const delinquency = filteredData.finance.filter(f => f.type === 'INCOME' && f.status === 'PENDING' && f.date < todayStr).reduce((acc, c) => acc + c.amount, 0);
+    const delinquentClientsCount = new Set(filteredData.finance.filter(f => f.type === 'INCOME' && f.status === 'PENDING' && f.date < todayStr).map(f => f.clientId).filter(Boolean)).size;
+
+    // Commercial metrics
+    const funnelLeads = filteredData.leads.filter(l => l.status === 'OPEN').length;
+    const valueInNegotiation = filteredData.leads.filter(l => l.status === 'OPEN').reduce((acc, l) => acc + (l.value || 0), 0);
+    const leadsNoContact = filteredData.leads.filter(l => l.status === 'OPEN' && (!l.lastContact || l.history.length === 0)).length;
+    const wonLeads = filteredData.leads.filter(l => l.status === 'WON' && filterByDate(new Date(l.updatedAt).toISOString().split('T')[0])).length;
+    const lostLeads = filteredData.leads.filter(l => l.status === 'LOST' && filterByDate(new Date(l.updatedAt).toISOString().split('T')[0])).length;
+    const conversionRate = (wonLeads + lostLeads) > 0 ? (wonLeads / (wonLeads + lostLeads)) * 100 : 0;
+
+    // Operational Bottlenecks
+    const bottlenecks = filteredData.tasks.filter(t => {
+        const realHours = t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0) / 3600;
+        return t.estimatedTime > 0 && realHours > t.estimatedTime;
+    }).length;
+
+    // Team below goal
+    const currentMonth = new Date().toISOString().substring(0, 7);
+    const teamBelowGoal = goals.some(g => {
+        if (g.month !== currentMonth) return false;
+        const realized = g.type === 'PRODUCTION' 
+            ? tasks.filter(t => t.status === 'DONE' && (g.userId ? t.assigneeIds.includes(g.userId) : (g.squadId ? t.squadId === g.squadId : true))).length
+            : tasks.filter(t => (g.userId ? t.assigneeIds.includes(g.userId) : (g.squadId ? t.squadId === g.squadId : true))).reduce((acc, t) => acc + t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0), 0) / 3600;
+        return (realized / g.targetValue) < 0.9;
+    });
+
+    return {
+        revenue,
+        expenses,
+        profit,
+        newLeads,
+        activeClients,
+        overdueTasks: kanbanMetrics.overdue,
+        inProgressTasks: kanbanMetrics.inProgress,
+        totalBalance,
+        accountsToPayNextDays,
+        delinquency,
+        delinquentClientsCount,
+        funnelLeads,
+        valueInNegotiation,
+        leadsNoContact,
+        conversionRate,
+        bottlenecks: kanbanMetrics.bottlenecks,
+        teamBelowGoal
+    };
+  }, [filteredData, tasks, goals, bankAccounts, startDate, endDate]);
+
+  const alerts = useMemo(() => {
+    const list = [];
+    if (stats.leadsNoContact > 0) list.push({ type: 'CRM', message: `${stats.leadsNoContact} leads sem contato recente`, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-50', action: 'crm' });
+    if (stats.overdueTasks > 0) list.push({ type: 'TASKS', message: `${stats.overdueTasks} tarefas atrasadas`, icon: Clock, color: 'text-red-500', bg: 'bg-red-50', action: 'kanban' });
+    if (stats.delinquency > 0) {
+        list.push({ 
+            type: 'FINANCE', 
+            message: `Inadimplência: R$ ${stats.delinquency.toLocaleString('pt-BR')}`, 
+            icon: AlertTriangle, 
+            color: 'text-pink-500', 
+            bg: 'bg-pink-50',
+            action: 'finance'
+        });
+    }
+    if (stats.teamBelowGoal) {
+        list.push({ 
+            type: 'PRODUCTIVITY', 
+            message: `Equipe ou Colaborador abaixo da meta esperada`, 
+            icon: Target, 
+            color: 'text-indigo-500', 
+            bg: 'bg-indigo-50',
+            action: 'productivity'
+        });
+    }
+    return list;
+  }, [stats]);
+
+  const shortcuts = [
+    { label: 'Novo Lead', icon: Plus, view: 'crm', color: 'bg-pink-600' },
+    { label: 'Nova Tarefa', icon: CheckCircle2, view: 'kanban', color: 'bg-blue-600' },
+    { label: 'Nova Despesa', icon: DollarSign, view: 'finance', color: 'bg-slate-900' },
+    { label: 'Novo Cliente', icon: Users, view: 'clients', color: 'bg-emerald-600' },
+  ];
 
   return (
-    <div className="space-y-6 animate-pop">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <div className="space-y-6 animate-pop pb-10">
+      {/* Header Section */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
         <div>
-            <h1 className="text-2xl font-bold text-slate-800">Visão Operacional & Estratégica</h1>
-            <p className="text-slate-500 text-sm">Monitoramento em tempo real da saúde da agência</p>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight">Olá, {currentUser.name.split(' ')[0]} 👋</h1>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Visão Geral Estratégica</p>
         </div>
         
-        {/* Controles de Filtro Personalizado */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto bg-slate-50 p-2 rounded-lg border border-slate-100">
-            {/* Presets */}
-            <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1 w-full sm:w-auto">
-                <button 
-                    onClick={() => applyPreset(7, '7days')}
-                    className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activePreset === '7days' ? 'bg-pink-50 text-pink-600 font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto bg-slate-50 p-2 rounded-2xl border border-slate-100">
+            {/* Squad Filter */}
+            {(isAdmin) && (
+                <select 
+                    value={selectedSquadId} 
+                    onChange={(e) => setSelectedSquadId(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-600 outline-none focus:border-pink-200 transition-all w-full sm:w-auto"
                 >
-                    7 Dias
-                </button>
-                <button 
-                    onClick={() => applyPreset(30, '30days')}
-                    className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activePreset === '30days' ? 'bg-pink-50 text-pink-600 font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+                    <option value="ALL">Todas as Squads</option>
+                    {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+            )}
+
+            {/* User Filter */}
+            {(isAdmin || isManager) && (
+                <select 
+                    value={selectedUserId} 
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-600 outline-none focus:border-pink-200 transition-all w-full sm:w-auto"
                 >
-                    30 Dias
-                </button>
-                <button 
-                    onClick={() => applyPreset(90, 'quarter')}
-                    className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activePreset === 'quarter' ? 'bg-pink-50 text-pink-600 font-bold' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Trimestre
-                </button>
+                    <option value="ALL">Todos os Colaboradores</option>
+                    {users.filter(u => u.role !== 'CLIENT' && (selectedSquadId === 'ALL' || u.squad === selectedSquadId)).map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                </select>
+            )}
+
+            <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 p-1 w-full sm:w-auto overflow-x-auto">
+                <button onClick={() => applyPreset('month', 'month')} className={`flex-1 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activePreset === 'month' ? 'bg-pink-50 text-pink-600' : 'text-slate-400 hover:text-slate-600'}`}>Mês Atual</button>
+                <button onClick={() => applyPreset(7, '7days')} className={`flex-1 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activePreset === '7days' ? 'bg-pink-50 text-pink-600' : 'text-slate-400 hover:text-slate-600'}`}>7D</button>
+                <button onClick={() => applyPreset(30, '30days')} className={`flex-1 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activePreset === '30days' ? 'bg-pink-50 text-pink-600' : 'text-slate-400 hover:text-slate-600'}`}>30D</button>
+                <button onClick={() => applyPreset(90, 'quarter')} className={`flex-1 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activePreset === 'quarter' ? 'bg-pink-50 text-pink-600' : 'text-slate-400 hover:text-slate-600'}`}>90D</button>
             </div>
 
-            {/* Inputs Manuais */}
             <div className="flex items-center gap-2 w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-slate-200 pt-2 sm:pt-0 sm:pl-3">
-                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
-                    <Calendar size={14} className="text-slate-400"/>
-                    <input 
-                        type="date" 
-                        value={startDate}
-                        onChange={(e) => handleCustomDateChange('start', e.target.value)}
-                        className="text-xs text-slate-600 outline-none w-24 bg-transparent font-medium"
-                    />
-                </div>
-                <span className="text-slate-400 text-xs">até</span>
-                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
-                    <input 
-                        type="date" 
-                        value={endDate}
-                        onChange={(e) => handleCustomDateChange('end', e.target.value)}
-                        className="text-xs text-slate-600 outline-none w-24 bg-transparent font-medium"
-                    />
-                </div>
+                <input type="date" value={startDate} onChange={(e) => handleCustomDateChange('start', e.target.value)} className="text-[10px] font-bold text-slate-600 outline-none bg-white border border-slate-200 rounded-xl px-3 py-2 flex-1 sm:flex-none" />
+                <span className="text-slate-400 text-xs font-bold">-</span>
+                <input type="date" value={endDate} onChange={(e) => handleCustomDateChange('end', e.target.value)} className="text-[10px] font-bold text-slate-600 outline-none bg-white border border-slate-200 rounded-xl px-3 py-2 flex-1 sm:flex-none" />
             </div>
         </div>
       </div>
 
-      {/* --- CARDS OPERACIONAIS SUPERIORES --- */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        
-        {/* Em Andamento */}
-        <div className="bg-white p-5 rounded-xl border border-blue-100 shadow-sm relative overflow-hidden group">
-            <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <Zap size={60} className="text-blue-500" />
-            </div>
-            <p className="text-blue-500 text-xs font-bold uppercase tracking-wide flex items-center gap-1">
-                <Layout size={14}/> Em Produção
-            </p>
-            <h3 className="text-3xl font-bold text-slate-800 mt-2">{inProgressCount}</h3>
-            <div className="mt-2 text-xs text-slate-400">
-                Tarefas sendo executadas agora
-            </div>
-        </div>
+      {/* Executive Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+        {/* Finance Context */}
+        {(isAdmin || isManager || isFinance) && (
+            <>
+                <div onClick={() => setCurrentView('finance')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-emerald-200 transition-all">
+                    <p className="text-emerald-500 text-[9px] font-black uppercase tracking-widest mb-1">Receita</p>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {stats.revenue.toLocaleString('pt-BR')}</h3>
+                </div>
+                <div onClick={() => setCurrentView('finance')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-red-200 transition-all">
+                    <p className="text-red-500 text-[9px] font-black uppercase tracking-widest mb-1">Despesas</p>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {stats.expenses.toLocaleString('pt-BR')}</h3>
+                </div>
+                <div onClick={() => setCurrentView('finance')} className={`p-5 rounded-3xl border shadow-premium cursor-pointer transition-all ${stats.profit >= 0 ? 'bg-emerald-50 border-emerald-100 hover:border-emerald-300' : 'bg-red-50 border-red-100 hover:border-red-300'}`}>
+                    <p className={`${stats.profit >= 0 ? 'text-emerald-600' : 'text-red-600'} text-[9px] font-black uppercase tracking-widest mb-1`}>Lucro</p>
+                    <h3 className={`text-xl font-black tracking-tighter ${stats.profit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {stats.profit.toLocaleString('pt-BR')}</h3>
+                </div>
+            </>
+        )}
 
-        {/* Atrasadas */}
-        <div className="bg-white p-5 rounded-xl border border-red-100 shadow-sm relative overflow-hidden group">
-            <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <AlertCircle size={60} className="text-red-500" />
-            </div>
-            <p className="text-red-500 text-xs font-bold uppercase tracking-wide flex items-center gap-1">
-                <AlertTriangle size={14}/> Atrasadas
-            </p>
-            <h3 className="text-3xl font-bold text-red-600 mt-2">{overdueCount}</h3>
-            <div className="mt-2 text-xs text-red-400 font-medium">
-                Requerem atenção imediata
-            </div>
-        </div>
+        {/* Commercial Context */}
+        {(isAdmin || isManager || isEmployee || isFreelancer) && (
+            <>
+                <div onClick={() => setCurrentView('crm')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-pink-200 transition-all">
+                    <p className="text-pink-500 text-[9px] font-black uppercase tracking-widest mb-1">Novos Leads</p>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">{stats.newLeads}</h3>
+                </div>
+                <div onClick={() => setCurrentView('crm')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-indigo-200 transition-all">
+                    <p className="text-indigo-500 text-[9px] font-black uppercase tracking-widest mb-1">Em Negociação</p>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {stats.valueInNegotiation.toLocaleString('pt-BR')}</h3>
+                </div>
+                <div onClick={() => setCurrentView('crm')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-amber-200 transition-all">
+                    <p className="text-amber-500 text-[9px] font-black uppercase tracking-widest mb-1">Conversão</p>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">{stats.conversionRate.toFixed(1)}%</h3>
+                </div>
+            </>
+        )}
 
-        {/* Arquivadas */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group">
-            <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <Archive size={60} className="text-slate-500" />
+        {/* Clients Context */}
+        {(isAdmin || isManager) && (
+            <div onClick={() => setCurrentView('clients')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-blue-200 transition-all">
+                <p className="text-blue-500 text-[9px] font-black uppercase tracking-widest mb-1">Clientes Ativos</p>
+                <h3 className="text-xl font-black text-slate-800 tracking-tighter">{stats.activeClients}</h3>
             </div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-wide flex items-center gap-1">
-                <Archive size={14}/> Arquivadas
-            </p>
-            <h3 className="text-3xl font-bold text-slate-700 mt-2">{archivedCount}</h3>
-            <div className="mt-2 text-xs text-slate-400">
-                Histórico de tarefas (Total)
-            </div>
-        </div>
-
-         {/* Receita (Visão Rápida) */}
-         <div className="bg-slate-900 p-5 rounded-xl border border-slate-800 shadow-sm relative overflow-hidden group text-white">
-            <div className="absolute right-0 top-0 p-4 opacity-20 group-hover:opacity-30 transition-opacity">
-                <TrendingUp size={60} className="text-emerald-400" />
-            </div>
-            <p className="text-emerald-400 text-xs font-bold uppercase tracking-wide flex items-center gap-1">
-                <TrendingUp size={14}/> Receita (Período)
-            </p>
-            <h3 className="text-3xl font-bold mt-2">R$ {revenue.toLocaleString('pt-BR', { notation: 'compact' })}</h3>
-            <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-                <Calendar size={10} />
-                {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}
-            </div>
-        </div>
+        )}
       </div>
-      
-      {/* --- GRÁFICOS DE DECISÃO --- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Distribuição de Status */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-              <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2">
-                  <PieChartIcon size={18} className="text-slate-400"/> Distribuição (Período)
+
+      {/* Main Blocks */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* COMERCIAL (AÇÃO) */}
+          {(isAdmin || isManager || isEmployee || isFreelancer) && (
+              <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium flex flex-col">
+                  <div className="flex items-center justify-between mb-8">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                          <Target size={18} className="text-pink-500" /> Comercial (Ação)
+                      </h3>
+                      <button onClick={() => setCurrentView('crm')} className="text-[10px] font-black text-pink-600 uppercase tracking-widest hover:underline">Ver CRM</button>
+                  </div>
+                  <div className="space-y-4">
+                      <div onClick={() => setCurrentView('crm')} className="p-4 bg-amber-50 rounded-2xl border border-amber-100 cursor-pointer hover:bg-amber-100 transition-all">
+                          <p className="text-[10px] font-black text-amber-600 uppercase mb-1">Leads sem contato</p>
+                          <p className="text-2xl font-black text-amber-700">{stats.leadsNoContact}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Total Negociação</p>
+                              <p className="text-lg font-black text-slate-800">R$ {stats.valueInNegotiation.toLocaleString('pt-BR')}</p>
+                          </div>
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Taxa Conversão</p>
+                              <p className="text-lg font-black text-slate-800">{stats.conversionRate.toFixed(1)}%</p>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* FINANCEIRO (RISCO) */}
+          {(isAdmin || isManager || isFinance) && (
+              <div className="bg-slate-900 p-8 rounded-[40px] border border-slate-800 shadow-2xl flex flex-col text-white">
+                  <div className="flex items-center justify-between mb-8">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                          <DollarSign size={18} className="text-pink-400" /> Financeiro (Risco)
+                      </h3>
+                      <button onClick={() => setCurrentView('finance')} className="text-[10px] font-black text-pink-400 uppercase tracking-widest hover:underline">Ver Financeiro</button>
+                  </div>
+                  <div className="space-y-6">
+                      <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Atual</p>
+                          <h3 className="text-3xl font-black tracking-tighter">R$ {stats.totalBalance.toLocaleString('pt-BR')}</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">A Vencer (7D)</p>
+                              <p className="text-lg font-black text-white">R$ {stats.accountsToPayNextDays.toLocaleString('pt-BR')}</p>
+                          </div>
+                          <div onClick={() => setCurrentView('finance')} className="bg-red-900/30 p-4 rounded-2xl border border-red-900/50 cursor-pointer hover:bg-red-900/50 transition-all">
+                              <p className="text-[9px] font-black text-red-400 uppercase mb-1">Inadimplência</p>
+                              <p className="text-lg font-black text-red-400">R$ {stats.delinquency.toLocaleString('pt-BR')}</p>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Alerts Section */}
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                  <Bell size={18} className="text-amber-500" /> Alertas e Pendências Críticas
               </h3>
-              <div className="flex-1 min-h-[250px] relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                          <Pie
-                              data={statusDistribution}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={80}
-                              paddingAngle={5}
-                              dataKey="value"
+              <div className="space-y-3">
+                  {alerts.map((alert, idx) => (
+                      <div key={idx} className={`flex items-center justify-between p-4 ${alert.bg} rounded-2xl border border-transparent hover:border-slate-100 transition-all`}>
+                          <div className="flex items-center gap-4">
+                              <div className={`p-2 rounded-xl bg-white shadow-sm ${alert.color}`}>
+                                  <alert.icon size={18} />
+                              </div>
+                              <div>
+                                  <p className={`text-xs font-black ${alert.color} uppercase tracking-tight`}>{alert.type}</p>
+                                  <p className="text-[11px] font-bold text-slate-600">{alert.message}</p>
+                              </div>
+                          </div>
+                          <button 
+                            onClick={() => setCurrentView(alert.action)}
+                            className="p-2 hover:bg-white rounded-lg text-slate-400 transition-all"
                           >
-                              {statusDistribution.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                          </Pie>
-                          <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                          <Legend verticalAlign="bottom" height={36}/>
-                      </PieChart>
-                  </ResponsiveContainer>
-                  {/* Centro do Donut */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] text-center pointer-events-none">
-                      <span className="text-3xl font-bold text-slate-800">{filteredTasks.length}</span>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold">Tarefas</p>
-                  </div>
+                              <ChevronRight size={16} />
+                          </button>
+                      </div>
+                  ))}
+                  {alerts.length === 0 && (
+                      <div className="py-10 text-center">
+                          <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-3" />
+                          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Nenhuma pendência crítica</p>
+                      </div>
+                  )}
               </div>
           </div>
 
-          {/* Carga de Trabalho da Equipe */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm md:col-span-2">
-              <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2">
-                  <BarChart2 size={18} className="text-slate-400"/> Carga de Trabalho Atual
+          {/* Shortcuts Section */}
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                  <Zap size={18} className="text-pink-500" /> Atalhos Rápidos
               </h3>
-              <div className="h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={workloadData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={12} stroke="#64748b"/>
-                          <YAxis axisLine={false} tickLine={false} fontSize={12} stroke="#64748b"/>
-                          <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
-                          <Legend />
-                          <Bar name="Total Ativas" dataKey="tasks" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={30} />
-                          <Bar name="Alta Prioridade" dataKey="highPriority" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={30} />
-                      </BarChart>
-                  </ResponsiveContainer>
+              <div className="grid grid-cols-2 gap-4">
+                  {shortcuts.map((shortcut, idx) => (
+                      <button 
+                        key={idx}
+                        onClick={() => setCurrentView(shortcut.view)}
+                        className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-pink-200 hover:bg-white hover:shadow-xl transition-all group"
+                      >
+                          <div className={`w-12 h-12 rounded-2xl ${shortcut.color} text-white flex items-center justify-center mb-3 shadow-lg group-hover:scale-110 transition-transform`}>
+                              <shortcut.icon size={24} />
+                          </div>
+                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{shortcut.label}</span>
+                      </button>
+                  ))}
               </div>
           </div>
       </div>
-
-      {/* --- LISTA DE ALERTA OPERACIONAL --- */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
-              <h3 className="font-bold text-orange-800 flex items-center gap-2">
-                  <AlertTriangle size={18}/> Alerta: Prioridades Travadas
-              </h3>
-              <span className="text-xs text-orange-600 font-medium">Tarefas 'Alta Prioridade' que não estão concluídas</span>
-          </div>
-          <div className="divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
-              {tasks.filter(t => t.priority === 'HIGH' && t.status !== 'DONE' && !t.archived).map(task => (
-                  <div key={task.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
-                              <Clock size={16}/>
-                          </div>
-                          <div>
-                              <p className="font-bold text-slate-800 text-sm">{task.title}</p>
-                              <p className="text-xs text-slate-500">Status: {task.status} • Prazo: {task.dueDate}</p>
-                          </div>
-                      </div>
-                      <div className="flex -space-x-2">
-                          {task.assigneeIds.map(uid => {
-                              const u = users.find(user => user.id === uid);
-                              if(!u) return null;
-                              return <img key={uid} src={u.avatar} className="w-8 h-8 rounded-full border-2 border-white" title={u.name}/>
-                          })}
-                      </div>
-                  </div>
-              ))}
-              {tasks.filter(t => t.priority === 'HIGH' && t.status !== 'DONE' && !t.archived).length === 0 && (
-                  <div className="p-8 text-center text-slate-400">
-                      Tudo certo! Nenhuma tarefa urgente travada.
-                  </div>
-              )}
-          </div>
-      </div>
-
     </div>
   );
 };
