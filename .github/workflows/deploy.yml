@@ -15,10 +15,10 @@ jobs:
       - name: 🛠️ Instalando Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 20  # Versão mais estável para React 19
 
       - name: 📦 Instalando dependências
-        run: npm install
+        run: npm install --frozen-lockfile || npm install
 
       - name: 🏗️ Gerando o Build
         run: npm run build
@@ -35,3 +35,4 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           protocol: ftp
+          port: 21
