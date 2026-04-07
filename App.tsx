@@ -20,7 +20,18 @@ import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { Login } from './components/Login';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { NotificationService } from './services/notificationService';
-import { testSupabaseConnection, fetchUsers, fetchTasks, fetchClients, seedDatabase, fetchLeads, fetchFinancialTransactions, fetchBankAccounts } from './services/supabaseService';
+import { 
+  testSupabaseConnection, 
+  fetchUsers, 
+  fetchTasks, 
+  fetchClients, 
+  seedDatabase, 
+  fetchLeads, 
+  fetchFinancialTransactions, 
+  fetchBankAccounts,
+  fetchSystemSettings,
+  updateSystemSettings
+} from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch } from './types';
 import { Users, Settings, Bell, Check, Gift, AlertTriangle, Info, Clock, CheckCircle, Shield, Trash2, Archive, Eye, DollarSign, Briefcase, Menu, X as XIcon } from 'lucide-react';
@@ -71,43 +82,24 @@ const App: React.FC = () => {
       try {
         const connection = await testSupabaseConnection();
         if (connection.success) {
-          const dbUsers = await fetchUsers();
-          if (dbUsers.length === 0) {
-            console.log('Banco de dados vazio. Realizando migração inicial...');
-            await seedDatabase();
-            // Recarregar após migração
-            const [usersData, tasksData, clientsData, leadsData, financialData, bankData] = await Promise.all([
-              fetchUsers(),
-              fetchTasks(),
-              fetchClients(),
-              fetchLeads(),
-              fetchFinancialTransactions(),
-              fetchBankAccounts()
-            ]);
-            
-            if (usersData.length > 0) setUsers(usersData as any);
-            if (tasksData.length > 0) setTasks(tasksData as any);
-            if (clientsData.length > 0) setClients(clientsData as any);
-            if (leadsData.length > 0) setLeads(leadsData as any);
-            if (financialData.length > 0) setFinancialTransactions(financialData as any);
-            if (bankData.length > 0) setBankAccounts(bankData as any);
-          } else {
-            console.log('Dados carregados do Supabase com sucesso.');
-            const [tasksData, clientsData, leadsData, financialData, bankData] = await Promise.all([
-              fetchTasks(),
-              fetchClients(),
-              fetchLeads(),
-              fetchFinancialTransactions(),
-              fetchBankAccounts()
-            ]);
-            
-            setUsers(dbUsers as any);
-            setTasks(tasksData as any);
-            setClients(clientsData as any);
-            setLeads(leadsData as any);
-            setFinancialTransactions(financialData as any);
-            setBankAccounts(bankData as any);
-          }
+          console.log('Carregando dados reais do Supabase...');
+          const [dbUsers, tasksData, clientsData, leadsData, financialData, bankData, settingsData] = await Promise.all([
+            fetchUsers(),
+            fetchTasks(),
+            fetchClients(),
+            fetchLeads(),
+            fetchFinancialTransactions(),
+            fetchBankAccounts(),
+            fetchSystemSettings()
+          ]);
+          
+          setUsers(dbUsers as any);
+          setTasks(tasksData as any);
+          setClients(clientsData as any);
+          setLeads(leadsData as any);
+          setFinancialTransactions(financialData as any);
+          setBankAccounts(bankData as any);
+          if (settingsData) setSystemSettings(settingsData);
         } else {
           console.warn('Conexão com Supabase falhou, usando dados mock.');
         }
@@ -169,9 +161,21 @@ const App: React.FC = () => {
   const [systemSettings, setSystemSettings] = useState<SystemSettings>({
       agencyName: 'Agência Chan',
       logo: '',
+      favicon: '',
       primaryColor: '#db2777',
       sidebarColor: '#0f172a'
   });
+
+  // Apply Favicon and Title
+  useEffect(() => {
+    document.title = systemSettings.agencyName;
+    
+    const link: HTMLLinkElement = document.querySelector("link[rel*='icon']") || document.createElement('link');
+    link.type = 'image/x-icon';
+    link.rel = 'shortcut icon';
+    link.href = systemSettings.favicon || '/favicon.ico';
+    document.getElementsByTagName('head')[0].appendChild(link);
+  }, [systemSettings.favicon, systemSettings.agencyName]);
 
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -510,7 +514,15 @@ const App: React.FC = () => {
             {currentView === 'teams' && <TeamManagement users={users} setUsers={setUsers} squads={squads} setSquads={setSquads} openConfirm={openConfirm} />}
             {currentView === 'permissions' && <PermissionsManager permissions={rolePermissions} setPermissions={setRolePermissions} openConfirm={openConfirm} />}
             {currentView === 'clients' && <ClientManagement clients={clients} setClients={setClients} squads={initialSquads} services={services} users={users} setUsers={setUsers} openConfirm={openConfirm} tasks={tasks} requisitions={requisitions} currentUser={currentUser} />}
-            {currentView === 'system-admin' && <SystemAdmin settings={systemSettings} onUpdateSettings={setSystemSettings} />}
+            {currentView === 'system-admin' && (
+              <SystemAdmin 
+                settings={systemSettings} 
+                onUpdateSettings={async (newSettings) => {
+                  setSystemSettings(newSettings);
+                  await updateSystemSettings(newSettings);
+                }} 
+              />
+            )}
             {currentView === 'approvals' && (
               <Approvals 
                 currentUser={currentUser} 

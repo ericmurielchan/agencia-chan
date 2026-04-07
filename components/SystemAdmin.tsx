@@ -29,6 +29,7 @@ const SIDEBAR_PRESETS = [
 export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSettings }) => {
     const [localSettings, setLocalSettings] = useState<SystemSettings>(settings);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const faviconInputRef = useRef<HTMLInputElement>(null);
     const [successMsg, setSuccessMsg] = useState('');
 
     const handleSave = () => {
@@ -48,8 +49,23 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
         }
     };
 
+    const handleFaviconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setLocalSettings({ ...localSettings, favicon: reader.result as string });
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const resetLogo = () => {
         setLocalSettings({ ...localSettings, logo: '' });
+    };
+
+    const resetFavicon = () => {
+        setLocalSettings({ ...localSettings, favicon: '' });
     };
 
     return (
@@ -123,6 +139,44 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
                                         onChange={handleLogoUpload}
                                     />
                                     <p className="text-[10px] text-slate-400">Recomendado: PNG ou SVG (Quadrado ou Horizontal)</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Favicon */}
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-3">Favicon (Ícone da Aba)</label>
+                            <div className="flex items-start gap-4">
+                                <div className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 relative overflow-hidden group">
+                                    {localSettings.favicon ? (
+                                        <img src={localSettings.favicon} alt="Favicon" className="w-8 h-8 object-contain" />
+                                    ) : (
+                                        <span className="text-[10px] text-slate-400 text-center px-1">Sem Ícone</span>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <button 
+                                        onClick={() => faviconInputRef.current?.click()}
+                                        className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors w-full"
+                                    >
+                                        <Upload size={14}/> Carregar Favicon
+                                    </button>
+                                    {localSettings.favicon && (
+                                        <button 
+                                            onClick={resetFavicon}
+                                            className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors w-full"
+                                        >
+                                            <RefreshCcw size={14}/> Restaurar
+                                        </button>
+                                    )}
+                                    <input 
+                                        type="file" 
+                                        ref={faviconInputRef} 
+                                        className="hidden" 
+                                        accept="image/png, image/x-icon, image/svg+xml"
+                                        onChange={handleFaviconUpload}
+                                    />
+                                    <p className="text-[10px] text-slate-400">Recomendado: ICO ou PNG (32x32)</p>
                                 </div>
                             </div>
                         </div>

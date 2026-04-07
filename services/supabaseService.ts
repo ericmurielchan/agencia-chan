@@ -1,6 +1,17 @@
 import { supabase } from '../lib/supabaseClient';
 import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads } from '../utils/mockData';
-import { User, Task, Lead, Client } from '../types';
+import { User, Task, Lead, Client, SystemSettings } from '../types';
+
+/**
+ * Mapeia as configurações do sistema do Supabase para o formato do App
+ */
+const mapSettings = (s: any): SystemSettings => ({
+  agencyName: s.agency_name || 'Agência Chan',
+  logo: s.logo || '',
+  favicon: s.favicon || '',
+  primaryColor: s.primary_color || '#db2777',
+  sidebarColor: s.sidebar_color || '#0f172a'
+});
 
 /**
  * Mapeia um usuário do Supabase para o formato do App
@@ -186,6 +197,41 @@ export const fetchFinancialTransactions = async () => {
 };
 
 /**
+ * Busca as configurações do sistema
+ */
+export const fetchSystemSettings = async () => {
+  const { data, error } = await supabase.from('system_settings').select('*').single();
+  if (error) {
+    if (error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      console.error('Erro ao buscar configurações:', error);
+    }
+    return null;
+  }
+  return mapSettings(data);
+};
+
+/**
+ * Atualiza as configurações do sistema
+ */
+export const updateSystemSettings = async (settings: SystemSettings) => {
+  const { error } = await supabase.from('system_settings').upsert({
+    id: 1, // Usamos ID fixo 1 para as configurações globais
+    agency_name: settings.agencyName,
+    logo: settings.logo,
+    favicon: settings.favicon,
+    primary_color: settings.primaryColor,
+    sidebar_color: settings.sidebarColor,
+    updated_at: new Date().toISOString()
+  });
+  
+  if (error) {
+    console.error('Erro ao atualizar configurações:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
  * Busca todas as contas bancárias
  */
 export const fetchBankAccounts = async () => {
@@ -203,6 +249,32 @@ export const fetchBankAccounts = async () => {
     color: b.color,
     status: b.status
   }));
+};
+
+/**
+ * Limpa todos os dados de teste do banco de dados, mantendo apenas os usuários.
+ */
+export const clearDatabase = async () => {
+  try {
+    console.log('Limpando dados de teste do Supabase...');
+    
+    // Ordem importa devido às chaves estrangeiras
+    await supabase.from('tasks').delete().neq('id', '0');
+    await supabase.from('financial_transactions').delete().neq('id', '0');
+    await supabase.from('leads').delete().neq('id', '0');
+    await supabase.from('clients').delete().neq('id', '0');
+    await supabase.from('bank_accounts').delete().neq('id', '0');
+    await supabase.from('squads').delete().neq('id', '0');
+    
+    // Para usuários, mantemos apenas o seu admin
+    await supabase.from('users').delete().neq('email', 'eric.muriel@gmail.com');
+
+    console.log('Banco de dados limpo com sucesso!');
+    return { success: true };
+  } catch (err) {
+    console.error('Erro ao limpar banco:', err);
+    return { success: false, error: err };
+  }
 };
 
 /**

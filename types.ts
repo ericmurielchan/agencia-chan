@@ -12,6 +12,7 @@ export interface ConfirmOptions {
 export interface SystemSettings {
     agencyName: string;
     logo: string;
+    favicon?: string;
     primaryColor: string;
     sidebarColor: string;
 }
