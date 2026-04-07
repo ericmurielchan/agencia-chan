@@ -1,5 +1,99 @@
 import { supabase } from '../lib/supabaseClient';
 import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads } from '../utils/mockData';
+import { User, Task, Lead, Client } from '../types';
+
+/**
+ * Mapeia um usuário do Supabase para o formato do App
+ */
+const mapUser = (u: any): User => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  avatar: u.avatar,
+  squad: u.squad_id,
+  clientId: u.client_id,
+  hourlyRate: u.hourly_rate,
+  salary: u.salary,
+  hasSystemAccess: u.has_system_access,
+  preferences: u.preferences || { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false }
+});
+
+/**
+ * Mapeia uma tarefa do Supabase para o formato do App
+ */
+const mapTask = (t: any): Task => ({
+  id: t.id,
+  clientId: t.client_id,
+  title: t.title,
+  description: t.description || '',
+  status: t.status,
+  priority: t.priority,
+  dueDate: t.due_date,
+  estimatedTime: t.estimated_time || 0,
+  assigneeIds: t.assignee_ids || [],
+  squadId: t.squad_id,
+  isTracking: t.is_tracking || false,
+  approvalStatus: t.approval_status || 'PENDING',
+  archived: t.archived || false,
+  createdAt: t.created_at || Date.now(),
+  cover: t.cover,
+  timeLogs: t.time_logs || [],
+  checklists: t.checklists || [],
+  comments: t.comments || [],
+  history: t.history || []
+});
+
+/**
+ * Mapeia um lead do Supabase para o formato do App
+ */
+const mapLead = (l: any): Lead => ({
+  id: l.id,
+  name: l.name,
+  company: l.company || '',
+  value: l.value || 0,
+  stageId: l.stage_id,
+  status: l.status || 'OPEN',
+  email: l.email || '',
+  phone: l.phone || '',
+  priority: l.priority || 'MEDIUM',
+  temperature: l.temperature || 'WARM',
+  responsibleId: l.responsible_id,
+  notes: l.notes || '',
+  tags: l.tags || [],
+  createdAt: l.created_at || Date.now(),
+  updatedAt: l.updated_at || Date.now(),
+  lastContact: l.last_contact || new Date().toISOString(),
+  history: l.history || [],
+  tasks: l.tasks || []
+});
+
+/**
+ * Mapeia um cliente do Supabase para o formato do App
+ */
+const mapClient = (c: any): Client => ({
+  id: c.id,
+  name: c.name,
+  legalName: c.legal_name,
+  document: c.document,
+  status: c.status,
+  responsibleId: c.responsible_id,
+  squadId: c.squad_id,
+  monthlyValue: c.monthly_value,
+  isRecurring: c.is_recurring || false,
+  level: c.level || 'BASIC',
+  summary: c.summary,
+  contractUrl: c.contract_url,
+  assetsFolderUrl: c.assets_folder_url,
+  contact: c.contact_info,
+  financialContact: c.financial_contact,
+  tags: c.tags || [],
+  internalNotes: c.internal_notes,
+  contacts: c.contacts || [],
+  passwords: c.passwords || [],
+  passwordLogs: c.password_logs || [],
+  systemAccesses: c.system_accesses || []
+});
 
 /**
  * Função para testar a conexão com o Supabase buscando dados da tabela 'users'.
@@ -20,8 +114,11 @@ export const testSupabaseConnection = async () => {
  */
 export const fetchUsers = async () => {
   const { data, error } = await supabase.from('users').select('*');
-  if (error) console.error('Erro ao buscar usuários:', error);
-  return data || [];
+  if (error) {
+    console.error('Erro ao buscar usuários:', error);
+    return [];
+  }
+  return (data || []).map(mapUser);
 };
 
 /**
@@ -29,8 +126,11 @@ export const fetchUsers = async () => {
  */
 export const fetchTasks = async () => {
   const { data, error } = await supabase.from('tasks').select('*');
-  if (error) console.error('Erro ao buscar tarefas:', error);
-  return data || [];
+  if (error) {
+    console.error('Erro ao buscar tarefas:', error);
+    return [];
+  }
+  return (data || []).map(mapTask);
 };
 
 /**
@@ -38,8 +138,11 @@ export const fetchTasks = async () => {
  */
 export const fetchClients = async () => {
   const { data, error } = await supabase.from('clients').select('*');
-  if (error) console.error('Erro ao buscar clientes:', error);
-  return data || [];
+  if (error) {
+    console.error('Erro ao buscar clientes:', error);
+    return [];
+  }
+  return (data || []).map(mapClient);
 };
 
 /**
@@ -47,8 +150,11 @@ export const fetchClients = async () => {
  */
 export const fetchLeads = async () => {
   const { data, error } = await supabase.from('leads').select('*');
-  if (error) console.error('Erro ao buscar leads:', error);
-  return data || [];
+  if (error) {
+    console.error('Erro ao buscar leads:', error);
+    return [];
+  }
+  return (data || []).map(mapLead);
 };
 
 /**
@@ -56,8 +162,27 @@ export const fetchLeads = async () => {
  */
 export const fetchFinancialTransactions = async () => {
   const { data, error } = await supabase.from('financial_transactions').select('*');
-  if (error) console.error('Erro ao buscar transações:', error);
-  return data || [];
+  if (error) {
+    console.error('Erro ao buscar transações:', error);
+    return [];
+  }
+  return (data || []).map(t => ({
+    id: t.id,
+    description: t.description,
+    amount: t.amount,
+    type: t.type,
+    date: t.date,
+    status: t.status,
+    categoryId: t.category_id,
+    bankAccountId: t.bank_account_id,
+    creditCardId: t.credit_card_id,
+    clientId: t.client_id,
+    squadId: t.squad_id,
+    responsibleId: t.responsible_id,
+    installments: t.installments,
+    recurrenceId: t.recurrence_id,
+    createdAt: t.created_at || Date.now()
+  }));
 };
 
 /**
@@ -65,8 +190,19 @@ export const fetchFinancialTransactions = async () => {
  */
 export const fetchBankAccounts = async () => {
   const { data, error } = await supabase.from('bank_accounts').select('*');
-  if (error) console.error('Erro ao buscar contas:', error);
-  return data || [];
+  if (error) {
+    console.error('Erro ao buscar contas:', error);
+    return [];
+  }
+  return (data || []).map(b => ({
+    id: b.id,
+    name: b.name,
+    type: b.type,
+    bankName: b.bank_name,
+    balance: b.balance,
+    color: b.color,
+    status: b.status
+  }));
 };
 
 /**

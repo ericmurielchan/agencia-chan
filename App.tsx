@@ -68,41 +68,51 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initSupabase = async () => {
-      const connection = await testSupabaseConnection();
-      if (connection.success) {
-        const dbUsers = await fetchUsers();
-        if (dbUsers.length === 0) {
-          console.log('Banco de dados vazio. Realizando migração inicial...');
-          await seedDatabase();
-          // Recarregar após migração
-          const usersData = await fetchUsers();
-          const tasksData = await fetchTasks();
-          const clientsData = await fetchClients();
-          const leadsData = await fetchLeads();
-          const financialData = await fetchFinancialTransactions();
-          const bankData = await fetchBankAccounts();
-          
-          if (usersData.length > 0) setUsers(usersData as any);
-          if (tasksData.length > 0) setTasks(tasksData as any);
-          if (clientsData.length > 0) setClients(clientsData as any);
-          if (leadsData.length > 0) setLeads(leadsData as any);
-          if (financialData.length > 0) setFinancialTransactions(financialData as any);
-          if (bankData.length > 0) setBankAccounts(bankData as any);
+      try {
+        const connection = await testSupabaseConnection();
+        if (connection.success) {
+          const dbUsers = await fetchUsers();
+          if (dbUsers.length === 0) {
+            console.log('Banco de dados vazio. Realizando migração inicial...');
+            await seedDatabase();
+            // Recarregar após migração
+            const [usersData, tasksData, clientsData, leadsData, financialData, bankData] = await Promise.all([
+              fetchUsers(),
+              fetchTasks(),
+              fetchClients(),
+              fetchLeads(),
+              fetchFinancialTransactions(),
+              fetchBankAccounts()
+            ]);
+            
+            if (usersData.length > 0) setUsers(usersData as any);
+            if (tasksData.length > 0) setTasks(tasksData as any);
+            if (clientsData.length > 0) setClients(clientsData as any);
+            if (leadsData.length > 0) setLeads(leadsData as any);
+            if (financialData.length > 0) setFinancialTransactions(financialData as any);
+            if (bankData.length > 0) setBankAccounts(bankData as any);
+          } else {
+            console.log('Dados carregados do Supabase com sucesso.');
+            const [tasksData, clientsData, leadsData, financialData, bankData] = await Promise.all([
+              fetchTasks(),
+              fetchClients(),
+              fetchLeads(),
+              fetchFinancialTransactions(),
+              fetchBankAccounts()
+            ]);
+            
+            setUsers(dbUsers as any);
+            setTasks(tasksData as any);
+            setClients(clientsData as any);
+            setLeads(leadsData as any);
+            setFinancialTransactions(financialData as any);
+            setBankAccounts(bankData as any);
+          }
         } else {
-          console.log('Dados carregados do Supabase com sucesso.');
-          const tasksData = await fetchTasks();
-          const clientsData = await fetchClients();
-          const leadsData = await fetchLeads();
-          const financialData = await fetchFinancialTransactions();
-          const bankData = await fetchBankAccounts();
-          
-          setUsers(dbUsers as any);
-          setTasks(tasksData as any);
-          setClients(clientsData as any);
-          setLeads(leadsData as any);
-          setFinancialTransactions(financialData as any);
-          setBankAccounts(bankData as any);
+          console.warn('Conexão com Supabase falhou, usando dados mock.');
         }
+      } catch (err) {
+        console.error('Erro crítico na inicialização do Supabase:', err);
       }
     };
     initSupabase();
