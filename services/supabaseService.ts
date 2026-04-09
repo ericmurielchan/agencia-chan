@@ -27,6 +27,7 @@ const mapUser = (u: any): User => ({
   hourlyRate: u.hourly_rate,
   salary: u.salary,
   hasSystemAccess: u.has_system_access,
+  password: u.password,
   preferences: u.preferences || { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false }
 });
 
@@ -252,6 +253,43 @@ export const fetchBankAccounts = async () => {
 };
 
 /**
+ * Salva ou atualiza um usuário no banco de dados
+ */
+export const saveUser = async (user: Partial<User>) => {
+  const { error } = await supabase.from('users').upsert({
+    id: user.id || undefined,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatar: user.avatar,
+    squad_id: user.squad,
+    client_id: user.clientId,
+    hourly_rate: user.hourlyRate,
+    salary: user.salary,
+    has_system_access: user.hasSystemAccess,
+    password: user.password // Salva a senha (texto plano por enquanto conforme solicitado)
+  });
+
+  if (error) {
+    console.error('Erro ao salvar usuário:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um usuário do banco de dados
+ */
+export const deleteUser = async (id: string) => {
+  const { error } = await supabase.from('users').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir usuário:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
  * Limpa todos os dados de teste do banco de dados, mantendo apenas os usuários.
  */
 export const clearDatabase = async () => {
@@ -304,6 +342,7 @@ export const seedDatabase = async () => {
         hourly_rate: u.hourlyRate,
         salary: u.salary,
         has_system_access: u.hasSystemAccess,
+        password: u.password, // Adicionado para permitir autenticação
         preferences: u.preferences
       }))
     );

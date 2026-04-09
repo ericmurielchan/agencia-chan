@@ -1,5 +1,5 @@
 
-import { Task, User, Lead, FinancialTransaction, BankAccount, CreditCard, CardInvoice, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, FinancialCategory, Supplier, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch } from '../types';
+import { Task, User, Lead, FinancialTransaction, BankAccount, CreditCard, CardInvoice, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, FinancialCategory, Supplier, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from '../types';
 
 const defaultPreferences = {
     theme: 'light' as const,
@@ -689,4 +689,24 @@ export const initialApprovalBatches: ApprovalBatch[] = [
             }
         ]
     }
+];
+
+export const initialStock: StockItem[] = [
+    { id: 'st1', name: 'Papel A4', category: 'Escritório', quantity: 50, minQuantity: 10, unit: 'Pacote', price: 25.00, location: 'Almoxarifado' },
+    { id: 'st2', name: 'Toner Impressora', category: 'Escritório', quantity: 2, minQuantity: 1, unit: 'Unidade', price: 150.00, location: 'Almoxarifado' },
+    { id: 'st3', name: 'Café em Grãos', category: 'Copa', quantity: 5, minQuantity: 2, unit: 'kg', price: 45.00, location: 'Cozinha' }
+];
+
+export const initialAssets: Asset[] = [
+    { id: 'as1', name: 'MacBook Pro M3', category: 'HARDWARE', purchaseDate: '2024-01-10', purchaseValue: 15000, currentValue: 14000, status: 'ACTIVE', responsibleId: 'u1', serialNumber: 'MBP123456' },
+    { id: 'as2', name: 'Cadeira Ergonômica', category: 'FURNITURE', purchaseDate: '2023-05-15', purchaseValue: 1200, currentValue: 900, status: 'ACTIVE', location: 'Escritório Central' },
+    { id: 'as3', name: 'Licença Adobe Creative Cloud', category: 'SOFTWARE', purchaseDate: '2024-01-01', purchaseValue: 2500, currentValue: 2500, status: 'ACTIVE' }
+];
+
+export const initialCashSessions: CashRegisterSession[] = [
+    { id: 'cs1', openedAt: new Date().toISOString(), openedBy: 'u3', initialAmount: 500, status: 'OPEN' }
+];
+
+export const initialCashMovements: CashMovement[] = [
+    { id: 'cm1', sessionId: 'cs1', type: 'IN', amount: 150, description: 'Venda Avulsa', timestamp: new Date().toISOString(), category: 'SALE' }
 ];

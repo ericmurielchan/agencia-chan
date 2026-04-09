@@ -1,7 +1,8 @@
 
 import React, { useState, useRef } from 'react';
 import { SystemSettings } from '../types';
-import { Settings, Upload, Check, RefreshCcw, Palette, LayoutTemplate, Sidebar as SidebarIcon } from 'lucide-react';
+import { Settings, Upload, Check, RefreshCcw, Palette, LayoutTemplate, Sidebar as SidebarIcon, Database } from 'lucide-react';
+import { seedDatabase, clearDatabase } from '../services/supabaseService';
 
 interface SystemAdminProps {
     settings: SystemSettings;
@@ -31,6 +32,7 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
     const fileInputRef = useRef<HTMLInputElement>(null);
     const faviconInputRef = useRef<HTMLInputElement>(null);
     const [successMsg, setSuccessMsg] = useState('');
+    const [isSeeding, setIsSeeding] = useState(false);
 
     const handleSave = () => {
         onUpdateSettings(localSettings);
@@ -68,6 +70,44 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
         setLocalSettings({ ...localSettings, favicon: '' });
     };
 
+    const handleSeed = async () => {
+        if (!window.confirm('Isso irá migrar os dados iniciais para o Supabase. Deseja continuar?')) return;
+        
+        setIsSeeding(true);
+        try {
+            const result = await seedDatabase();
+            if (result.success) {
+                setSuccessMsg('Dados migrados com sucesso!');
+            } else {
+                alert('Erro ao migrar dados: ' + (result.error as any)?.message);
+            }
+        } catch (err) {
+            alert('Erro crítico na migração.');
+        } finally {
+            setIsSeeding(false);
+            setTimeout(() => setSuccessMsg(''), 3000);
+        }
+    };
+
+    const handleClear = async () => {
+        if (!window.confirm('ATENÇÃO: Isso irá apagar quase todos os dados do banco (exceto seu usuário admin). Deseja continuar?')) return;
+        
+        setIsSeeding(true);
+        try {
+            const result = await clearDatabase();
+            if (result.success) {
+                setSuccessMsg('Banco de dados limpo com sucesso!');
+            } else {
+                alert('Erro ao limpar banco: ' + (result.error as any)?.message);
+            }
+        } catch (err) {
+            alert('Erro crítico ao limpar banco.');
+        } finally {
+            setIsSeeding(false);
+            setTimeout(() => setSuccessMsg(''), 3000);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-pop max-w-4xl mx-auto">
             <div className="flex justify-between items-center mb-6">
@@ -77,11 +117,29 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
                     </h2>
                     <p className="text-slate-500">Personalize a aparência e identidade da plataforma.</p>
                 </div>
-                {successMsg && (
-                    <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 animate-pop">
-                        <Check size={16}/> {successMsg}
+                <div className="flex items-center gap-3">
+                    {successMsg && (
+                        <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 animate-pop">
+                            <Check size={16}/> {successMsg}
+                        </div>
+                    )}
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleClear}
+                            disabled={isSeeding}
+                            className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50"
+                        >
+                            <RefreshCcw size={16} className={isSeeding ? 'animate-spin' : ''}/> Limpar Banco
+                        </button>
+                        <button 
+                            onClick={handleSeed}
+                            disabled={isSeeding}
+                            className="bg-slate-800 text-white hover:bg-slate-900 px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50"
+                        >
+                            <Database size={16} className={isSeeding ? 'animate-spin' : ''}/> Migrar Dados Mock
+                        </button>
                     </div>
-                )}
+                </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

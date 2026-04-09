@@ -30,10 +30,11 @@ import {
   fetchFinancialTransactions, 
   fetchBankAccounts,
   fetchSystemSettings,
-  updateSystemSettings
+  updateSystemSettings,
+  saveUser
 } from './services/supabaseService';
-import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches } from './utils/mockData';
-import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch } from './types';
+import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements } from './utils/mockData';
+import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from './types';
 import { Users, Settings, Bell, Check, Gift, AlertTriangle, Info, Clock, CheckCircle, Shield, Trash2, Archive, Eye, DollarSign, Briefcase, Menu, X as XIcon } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -155,6 +156,10 @@ const App: React.FC = () => {
   const [selectedApprovalItemId, setSelectedApprovalItemId] = useState<string | null>(null);
   const [kanbanFilter, setKanbanFilter] = useState<any>(null);
   const [requisitions, setRequisitions] = useState<Requisition[]>(initialRequisitions);
+  const [stock, setStock] = useState<StockItem[]>(initialStock);
+  const [assets, setAssets] = useState<Asset[]>(initialAssets);
+  const [cashSessions, setCashSessions] = useState<CashRegisterSession[]>(initialCashSessions);
+  const [cashMovements, setCashMovements] = useState<CashMovement[]>(initialCashMovements);
   const [goals, setGoals] = useState<ProductivityGoal[]>(initialGoals);
   const [approvalBatches, setApprovalBatches] = useState<ApprovalBatch[]>(initialApprovalBatches);
   const [leadSources, setLeadSources] = useState<string[]>(['Instagram', 'Linkedin', 'Google Ads', 'Indicação', 'Site']);
@@ -468,6 +473,14 @@ const App: React.FC = () => {
                 setTransactions={setFinancialTransactions}
                 cardInvoices={cardInvoices}
                 setCardInvoices={setCardInvoices}
+                stock={stock}
+                setStock={setStock}
+                assets={assets}
+                setAssets={setAssets}
+                cashSessions={cashSessions}
+                setCashSessions={setCashSessions}
+                cashMovements={cashMovements}
+                setCashMovements={setCashMovements}
                 currentUser={currentUser} 
                 users={users} 
                 clients={clients}
@@ -539,7 +552,16 @@ const App: React.FC = () => {
               />
             )}
             {currentView === 'help' && <HelpCenter currentUser={currentUser} />}
-            {currentView === 'settings' && <ProfileSettings currentUser={currentUser} onUpdateUser={(u) => { setUsers(users.map(us => us.id === u.id ? u : us)); setCurrentUser(u); }} />}
+            {currentView === 'settings' && (
+              <ProfileSettings 
+                currentUser={currentUser} 
+                onUpdateUser={async (u) => { 
+                  setUsers(users.map(us => us.id === u.id ? u : us)); 
+                  setCurrentUser(u); 
+                  await saveUser(u);
+                }} 
+              />
+            )}
         </div>
       </main>
 

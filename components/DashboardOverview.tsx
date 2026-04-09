@@ -145,6 +145,17 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
 
   const stats = useMemo(() => {
     const periodTxs = filteredData.finance.filter(f => filterByDate(f.date));
+    
+    // Cash flow chart data
+    const cashFlowData: Record<string, { date: string, income: number, expense: number }> = {};
+    periodTxs.forEach(tx => {
+        const date = tx.date;
+        if (!cashFlowData[date]) cashFlowData[date] = { date, income: 0, expense: 0 };
+        if (tx.type === 'INCOME' && tx.status === 'PAID') cashFlowData[date].income += tx.amount;
+        if (tx.type === 'EXPENSE' && tx.status === 'PAID') cashFlowData[date].expense += tx.amount;
+    });
+    const chartData = Object.values(cashFlowData).sort((a, b) => a.date.localeCompare(b.date));
+
     const revenue = periodTxs.filter(f => f.type === 'INCOME' && f.status === 'PAID').reduce((acc, c) => acc + c.amount, 0);
     const expenses = periodTxs.filter(f => f.type === 'EXPENSE' && f.status === 'PAID').reduce((acc, c) => acc + c.amount, 0);
     const profit = revenue - expenses;
@@ -196,6 +207,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         activeClients,
         overdueTasks: kanbanMetrics.overdue,
         inProgressTasks: kanbanMetrics.inProgress,
+        completedTasks: kanbanMetrics.completed,
         totalBalance,
         accountsToPayNextDays,
         delinquency,
@@ -205,7 +217,8 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         leadsNoContact,
         conversionRate,
         bottlenecks: kanbanMetrics.bottlenecks,
-        teamBelowGoal
+        teamBelowGoal,
+        chartData
     };
   }, [filteredData, tasks, goals, bankAccounts, startDate, endDate]);
 
@@ -380,21 +393,73 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
                       </h3>
                       <button onClick={() => setCurrentView('finance')} className="text-[10px] font-black text-pink-400 uppercase tracking-widest hover:underline">Ver Financeiro</button>
                   </div>
-                  <div className="space-y-6">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                      <div className="space-y-6">
+                          <div>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Atual</p>
+                              <h3 className="text-3xl font-black tracking-tighter">R$ {stats.totalBalance.toLocaleString('pt-BR')}</h3>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">A Vencer (7D)</p>
+                                  <p className="text-lg font-black text-white">R$ {stats.accountsToPayNextDays.toLocaleString('pt-BR')}</p>
+                              </div>
+                              <div onClick={() => setCurrentView('finance')} className="bg-red-900/30 p-4 rounded-2xl border border-red-900/50 cursor-pointer hover:bg-red-900/50 transition-all">
+                                  <p className="text-[9px] font-black text-red-400 uppercase mb-1">Inadimplência</p>
+                                  <p className="text-lg font-black text-red-400">R$ {stats.delinquency.toLocaleString('pt-BR')}</p>
+                              </div>
+                          </div>
+                      </div>
+                      <div className="h-48 w-full bg-slate-800/50 rounded-3xl p-4 border border-slate-800">
+                          <p className="text-[9px] font-black text-slate-500 uppercase mb-4">Fluxo de Caixa</p>
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                              <BarChart data={stats.chartData}>
+                                  <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                  <Bar dataKey="expense" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                                  <Tooltip 
+                                    contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '10px' }}
+                                    itemStyle={{ color: '#fff' }}
+                                  />
+                              </BarChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* OPERACIONAL (PERFORMANCE) */}
+          {(isAdmin || isManager || isEmployee || isFreelancer) && (
+              <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium flex flex-col">
+                  <div className="flex items-center justify-between mb-8">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                          <Activity size={18} className="text-blue-500" /> Operacional (Performance)
+                      </h3>
+                      <button onClick={() => setCurrentView('kanban')} className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">Ver Kanban</button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                          <p className="text-[9px] font-black text-blue-600 uppercase mb-1">Em Andamento</p>
+                          <p className="text-xl font-black text-blue-700">{stats.inProgressTasks}</p>
+                      </div>
+                      <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                          <p className="text-[9px] font-black text-emerald-600 uppercase mb-1">Entregas</p>
+                          <p className="text-xl font-black text-emerald-700">{stats.completedTasks}</p>
+                      </div>
+                      <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                          <p className="text-[9px] font-black text-red-600 uppercase mb-1">Gargalos</p>
+                          <p className="text-xl font-black text-red-700">{stats.bottlenecks}</p>
+                      </div>
+                  </div>
+                  <div className="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                       <div>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Atual</p>
-                          <h3 className="text-3xl font-black tracking-tighter">R$ {stats.totalBalance.toLocaleString('pt-BR')}</h3>
+                          <p className="text-[10px] font-black text-slate-400 uppercase">Status da Meta</p>
+                          <p className={`text-xs font-black ${stats.teamBelowGoal ? 'text-red-500' : 'text-emerald-500'}`}>
+                              {stats.teamBelowGoal ? 'Abaixo do esperado' : 'Dentro do planejado'}
+                          </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700">
-                              <p className="text-[9px] font-black text-slate-400 uppercase mb-1">A Vencer (7D)</p>
-                              <p className="text-lg font-black text-white">R$ {stats.accountsToPayNextDays.toLocaleString('pt-BR')}</p>
-                          </div>
-                          <div onClick={() => setCurrentView('finance')} className="bg-red-900/30 p-4 rounded-2xl border border-red-900/50 cursor-pointer hover:bg-red-900/50 transition-all">
-                              <p className="text-[9px] font-black text-red-400 uppercase mb-1">Inadimplência</p>
-                              <p className="text-lg font-black text-red-400">R$ {stats.delinquency.toLocaleString('pt-BR')}</p>
-                          </div>
-                      </div>
+                      <button onClick={() => setCurrentView('productivity')} className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all">
+                          <Target size={16} className="text-indigo-500" />
+                      </button>
                   </div>
               </div>
           )}

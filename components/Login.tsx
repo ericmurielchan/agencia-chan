@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User, SystemSettings } from '../types';
 import { Mail, ArrowLeft, Lock, HelpCircle, Shield, CheckCircle2, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { initialUsers } from '../utils/mockData';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -36,9 +37,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
         .eq('email', email.toLowerCase())
         .single();
 
-      if (supabaseError || !foundUser) {
-        // Fallback para mock data se o Supabase falhar ou não encontrar (útil para desenvolvimento)
-        const mockUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (supabaseError || !foundUser || !foundUser.password) {
+        // Fallback para mock data se o Supabase falhar, não encontrar ou o usuário estiver sem senha (migração incompleta)
+        const mockUser = initialUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
         if (mockUser) {
           if (password !== mockUser.password) {
             setError('Senha incorreta.');

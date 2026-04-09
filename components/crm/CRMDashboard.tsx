@@ -164,7 +164,7 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
                         </div>
                     </div>
                     <div className="h-[250px] sm:h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={funnelData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis 
@@ -192,7 +192,7 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
                         <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase mt-1">Ranking de perdas</p>
                     </div>
                     <div className="h-[200px] sm:h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <PieChart>
                                 <Pie
                                     data={lossReasonData}
@@ -266,7 +266,7 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
                         <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-tight">Performance por Etapa</h3>
                     </div>
                     <div className="h-[180px] sm:h-[200px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={funnelData} layout="vertical" margin={{ left: -20 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                 <XAxis type="number" hide />

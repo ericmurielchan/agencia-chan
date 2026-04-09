@@ -399,7 +399,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm min-h-[350px] relative">
               <h3 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp size={16} className="text-pink-600"/> Intensidade de Produção (Horas/Dia)</h3>
               <div className="w-full h-64 min-h-[256px]">
-                <ResponsiveContainer width="100%" height="100%" debounce={50}>
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
                     <AreaChart data={timeDistributionData}>
                         <defs>
                             <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">

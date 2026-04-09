@@ -371,7 +371,57 @@ export interface ColumnConfig {
 
 export type NotificationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 export type NotificationStatus = 'UNREAD' | 'READ' | 'ARCHIVED';
-export type SystemModule = 'KANBAN' | 'CRM' | 'FINANCE' | 'REQUISITIONS' | 'CLIENTS' | 'ADMIN' | 'HELP' | 'DASHBOARD' | 'APPROVALS';
+export type SystemModule = 'KANBAN' | 'CRM' | 'FINANCE' | 'REQUISITIONS' | 'CLIENTS' | 'ADMIN' | 'HELP' | 'DASHBOARD' | 'APPROVALS' | 'STOCK' | 'ASSETS';
+
+export interface StockItem {
+    id: string;
+    name: string;
+    category: string;
+    quantity: number;
+    minQuantity: number;
+    unit: string;
+    price: number;
+    supplierId?: string;
+    lastRestock?: string;
+    location?: string;
+}
+
+export interface Asset {
+    id: string;
+    name: string;
+    category: 'HARDWARE' | 'SOFTWARE' | 'FURNITURE' | 'VEHICLE' | 'OTHER';
+    purchaseDate: string;
+    purchaseValue: number;
+    currentValue: number;
+    status: 'ACTIVE' | 'MAINTENANCE' | 'DISPOSED';
+    location?: string;
+    responsibleId?: string;
+    serialNumber?: string;
+    description?: string;
+}
+
+export interface CashRegisterSession {
+    id: string;
+    openedAt: string;
+    closedAt?: string;
+    openedBy: string;
+    closedBy?: string;
+    initialAmount: number;
+    finalAmount?: number;
+    expectedAmount?: number;
+    status: 'OPEN' | 'CLOSED';
+    notes?: string;
+}
+
+export interface CashMovement {
+    id: string;
+    sessionId: string;
+    type: 'IN' | 'OUT';
+    amount: number;
+    description: string;
+    timestamp: string;
+    category: 'SALE' | 'SUPPLY' | 'WITHDRAWAL' | 'EXPENSE' | 'OTHER';
+}
 
 export type ApprovalCategory = 'SOCIAL_MEDIA' | 'DESIGN' | 'PDF' | 'TRAFFIC' | 'VIDEO' | 'SHOOTING' | 'OTHERS';
 export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ADJUSTMENT';
