@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User, SystemSettings } from '../types';
 import { Mail, ArrowLeft, Lock, HelpCircle, Shield, CheckCircle2, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { mapUser } from '../services/supabaseService';
 import { initialUsers } from '../utils/mockData';
 
 interface LoginProps {
@@ -73,19 +74,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
       }
 
       // Converte o formato do Supabase (snake_case) para o formato do App (camelCase)
-      const mappedUser: User = {
-        id: foundUser.id,
-        name: foundUser.name,
-        email: foundUser.email,
-        role: foundUser.role,
-        avatar: foundUser.avatar,
-        squad: foundUser.squad_id,
-        clientId: foundUser.client_id,
-        hourlyRate: foundUser.hourly_rate,
-        salary: foundUser.salary,
-        hasSystemAccess: foundUser.has_system_access,
-        preferences: foundUser.preferences
-      };
+      const mappedUser = mapUser(foundUser);
 
       onLogin(mappedUser);
     } catch (err) {

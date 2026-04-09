@@ -16,7 +16,7 @@ const mapSettings = (s: any): SystemSettings => ({
 /**
  * Mapeia um usuário do Supabase para o formato do App
  */
-const mapUser = (u: any): User => ({
+export const mapUser = (u: any): User => ({
   id: u.id,
   name: u.name,
   email: u.email,
