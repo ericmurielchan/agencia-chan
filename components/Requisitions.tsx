@@ -222,7 +222,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
               noPadding={true}
               scrollable={false}
           >
-              <div className="bg-white rounded-[32px] w-full h-full shadow-2xl overflow-hidden flex flex-col">
+              <div className="bg-white rounded-[32px] w-full flex-1 min-h-0 shadow-2xl overflow-hidden flex flex-col">
                   <div className="p-6 border-b border-slate-50 bg-white flex items-center justify-between shrink-0">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-pink-50 text-pink-600 rounded-xl"><Plus size={20}/></div>
@@ -231,7 +231,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                       <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
                   </div>
                   
-                  <div className="p-8 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+                  <div className="p-8 space-y-5 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                       <div>
                           <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-[0.2em] ml-1">Tipo de Solicitação</label>
                           <select 
@@ -322,13 +322,13 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
               noPadding={true}
               scrollable={false}
           >
-              <div className="bg-white rounded-[32px] w-full h-full shadow-2xl overflow-hidden border-t-4 border-red-600 border-x border-b border-slate-100 flex flex-col">
+              <div className="bg-white rounded-[32px] w-full flex-1 min-h-0 shadow-2xl overflow-hidden border-t-4 border-red-600 border-x border-b border-slate-100 flex flex-col">
                   <div className="p-6 border-b border-slate-50 bg-white flex items-center gap-4 shrink-0">
                       <div className="p-3 bg-red-50 text-red-600 rounded-2xl shadow-sm"><AlertTriangle size={24}/></div>
                       <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Negar Pedido</h3>
                   </div>
                   
-                  <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                  <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                       <div className="p-4 bg-red-50 rounded-2xl border border-red-100 text-xs">
                         <p className="font-black text-red-800 uppercase text-[9px] tracking-widest mb-1.5">Item Solicitado:</p>
                         <p className="text-red-700 font-bold">{selectedReqForReject.title}</p>

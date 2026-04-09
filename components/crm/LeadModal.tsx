@@ -120,7 +120,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             noPadding={true} 
             scrollable={false}
         >
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col flex-1 min-h-0">
                 {/* MODAL HEADER */}
                 <div className="p-5 sm:p-8 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50/50 shrink-0 gap-4">
                     <div className="flex-1 w-full">
@@ -202,7 +202,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     </div>
 
                     {/* CONTENT AREA */}
-                    <div className="flex-1 p-5 sm:p-8 overflow-y-auto custom-scrollbar">
+                    <div className="flex-1 p-5 sm:p-8 overflow-y-auto custom-scrollbar min-h-0">
                         {activeTab === 'DETAILS' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
                                 <div className="space-y-6">

@@ -69,7 +69,7 @@ export const Modal: React.FC<ModalProps> = ({
                 )}
 
                 {/* Body */}
-                <div className={`${noPadding ? 'p-0' : 'p-6'} ${scrollable ? 'overflow-y-auto custom-scrollbar' : 'overflow-hidden'} flex-1`}>
+                <div className={`${noPadding ? 'p-0' : 'p-6'} ${scrollable ? 'overflow-y-auto custom-scrollbar' : 'overflow-hidden'} flex-1 flex flex-col min-h-0`}>
                     {children}
                 </div>
             </div>

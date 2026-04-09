@@ -1564,12 +1564,12 @@ export const Financials: React.FC<FinancialsProps> = ({
                     noPadding={true}
                     scrollable={false}
                 >
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col flex-1 min-h-0">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingStockId ? 'Editar Item' : 'Novo Item de Estoque'}</h3>
                             <button onClick={() => { setIsStockModalOpen(false); setEditingStockId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                             <div>
                                 <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome do Item</label>
                                 <input 
@@ -1647,12 +1647,12 @@ export const Financials: React.FC<FinancialsProps> = ({
                     noPadding={true}
                     scrollable={false}
                 >
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col flex-1 min-h-0">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingAssetId ? 'Editar Ativo' : 'Novo Ativo'}</h3>
                             <button onClick={() => { setIsAssetModalOpen(false); setEditingAssetId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                             <div>
                                 <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome do Ativo</label>
                                 <input 
@@ -1740,12 +1740,12 @@ export const Financials: React.FC<FinancialsProps> = ({
                     noPadding={true}
                     scrollable={false}
                 >
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col flex-1 min-h-0">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Nova Movimentação</h3>
                             <button onClick={() => setIsCashMovementModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                             <div className="flex p-1 bg-slate-100 rounded-2xl">
                                 <button 
                                     onClick={() => setNewCashMovement({...newCashMovement, type: 'IN'})}
@@ -1815,12 +1815,12 @@ export const Financials: React.FC<FinancialsProps> = ({
                     noPadding={true}
                     scrollable={false}
                 >
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col flex-1 min-h-0">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Nova Transação</h3>
                             <button onClick={() => setIsTransactionModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                             <div className="flex p-1 bg-slate-100 rounded-2xl">
                                 <button 
                                     onClick={() => setNewTransaction({...newTransaction, type: 'INCOME'})}
@@ -2017,12 +2017,12 @@ export const Financials: React.FC<FinancialsProps> = ({
                     noPadding={true}
                     scrollable={false}
                 >
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col flex-1 min-h-0">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingAccountId ? 'Editar Conta' : 'Nova Conta'}</h3>
                             <button onClick={() => { setIsAccountModalOpen(false); setEditingAccountId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                             <div>
                                 <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome da Conta</label>
                                 <input 
@@ -2101,12 +2101,12 @@ export const Financials: React.FC<FinancialsProps> = ({
                     noPadding={true}
                     scrollable={false}
                 >
-                    <div className="flex flex-col h-full">
+                    <div className="flex flex-col flex-1 min-h-0">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
                             <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingCardId ? 'Editar Cartão' : 'Novo Cartão'}</h3>
                             <button onClick={() => { setIsCardModalOpen(false); setEditingCardId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                             <div>
                                 <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome do Cartão</label>
                                 <input 

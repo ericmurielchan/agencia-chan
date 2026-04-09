@@ -167,7 +167,7 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
               noPadding={true}
               scrollable={false}
           >
-              <div className="flex flex-col h-full">
+              <div className="flex flex-col flex-1 min-h-0">
                   <div className="p-6 border-b border-slate-50 flex justify-between items-start bg-slate-50 shrink-0">
                       <div className="flex-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block ml-1">Empresa Prospectada</label>
@@ -186,7 +186,7 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
                           <button onClick={() => setActiveTab('DETAILS')} className={`w-full text-left px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'DETAILS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:bg-white/50'}`}>Info</button>
                           <button onClick={() => setActiveTab('ACTIVITIES')} className={`w-full text-left px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ACTIVITIES' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:bg-white/50'}`}>Notas</button>
                       </div>
-                      <div className="flex-1 p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                      <div className="flex-1 p-6 space-y-4 overflow-y-auto custom-scrollbar min-h-0">
                           {activeTab === 'DETAILS' && (
                               <div className="space-y-4">
                                   <div>
@@ -219,7 +219,7 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
               noPadding={true}
               scrollable={false}
           >
-              <div className="flex flex-col h-full">
+              <div className="flex flex-col flex-1 min-h-0">
                   <div className="p-6 border-b border-slate-50 bg-slate-50 flex justify-between items-center shrink-0">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><Settings size={18}/></div>
@@ -227,7 +227,7 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
                       </div>
                       <button onClick={() => setIsSettingsOpen(false)} className="p-1.5 text-slate-300 hover:bg-slate-100 rounded-full transition-colors"><X size={18}/></button>
                   </div>
-                  <div className="p-10 text-center space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                  <div className="p-10 text-center space-y-4 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Módulo de Configuração</p>
                     <p className="text-slate-500 text-sm">Personalize as etapas e origens dos seus negócios.</p>
                   </div>
