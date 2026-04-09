@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { User, UserPreferences } from '../types';
-import { User as UserIcon, Lock, Bell, Moon, Sun, CreditCard, Save, RefreshCw, Upload, Mail } from 'lucide-react';
+import { User as UserIcon, Lock, Bell, Moon, Sun, CreditCard, Save, RefreshCw, Upload, Mail, Eye, EyeOff } from 'lucide-react';
 
 interface ProfileSettingsProps {
   currentUser: User;
@@ -19,6 +19,8 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   
   const [successMsg, setSuccessMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +34,8 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
     
     if (newPassword) {
         // Validação da Senha Atual
-        if (currentPassword !== currentUser.password) {
+        // Se o usuário já tem uma senha definida, ele precisa confirmar a atual
+        if (currentUser.password && currentPassword !== currentUser.password) {
             setPasswordError('A senha atual está incorreta.');
             return;
         }
@@ -42,7 +45,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
             return;
         }
         if (newPassword.length < 3) {
-            setPasswordError('A nova senha é muito curta.');
+            setPasswordError('A nova senha é muito curta (mínimo 3 caracteres).');
             return;
         }
         updatedUser.password = newPassword;
@@ -226,36 +229,59 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
                        <div className="space-y-4">
                            <div>
                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Senha Atual <span className="text-red-500">*</span></label>
-                               <input 
-                                    type="password"
-                                    className="w-full border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 text-sm focus:border-pink-500 outline-none bg-white dark:bg-slate-700 dark:text-white"
-                                    value={currentPassword}
-                                    onChange={e => setCurrentPassword(e.target.value)}
-                                    placeholder="Digite sua senha atual"
-                               />
+                               <div className="relative">
+                                   <Lock className="absolute left-3 top-3 text-slate-400" size={18}/>
+                                   <input 
+                                        type={showCurrentPassword ? "text" : "password"}
+                                        className="w-full border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 pl-10 pr-10 text-sm focus:border-pink-500 outline-none bg-white dark:bg-slate-700 dark:text-white"
+                                        value={currentPassword}
+                                        onChange={e => setCurrentPassword(e.target.value)}
+                                        placeholder="Digite sua senha atual"
+                                   />
+                                   <button 
+                                        type="button"
+                                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                                   >
+                                       {showCurrentPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                                   </button>
+                               </div>
                            </div>
                            <div className="pt-2 border-t border-slate-100 dark:border-slate-700"></div>
                            <div>
                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nova Senha</label>
-                               <input 
-                                    type="password"
-                                    className="w-full border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 text-sm focus:border-pink-500 outline-none bg-white dark:bg-slate-700 dark:text-white"
-                                    value={newPassword}
-                                    onChange={e => setNewPassword(e.target.value)}
-                                    placeholder="Mínimo 3 caracteres"
-                                    disabled={!currentPassword}
-                               />
+                               <div className="relative">
+                                   <Lock className="absolute left-3 top-3 text-slate-400" size={18}/>
+                                   <input 
+                                        type={showNewPassword ? "text" : "password"}
+                                        className="w-full border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 pl-10 pr-10 text-sm focus:border-pink-500 outline-none bg-white dark:bg-slate-700 dark:text-white"
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                        placeholder="Mínimo 3 caracteres"
+                                        disabled={!currentPassword}
+                                   />
+                                   <button 
+                                        type="button"
+                                        onClick={() => setShowNewPassword(!showNewPassword)}
+                                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                                   >
+                                       {showNewPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                                   </button>
+                               </div>
                            </div>
                            <div>
                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Confirmar Nova Senha</label>
-                               <input 
-                                    type="password"
-                                    className="w-full border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 text-sm focus:border-pink-500 outline-none bg-white dark:bg-slate-700 dark:text-white"
-                                    value={confirmPassword}
-                                    onChange={e => setConfirmPassword(e.target.value)}
-                                    placeholder="Repita a nova senha"
-                                    disabled={!newPassword}
-                               />
+                               <div className="relative">
+                                   <Lock className="absolute left-3 top-3 text-slate-400" size={18}/>
+                                   <input 
+                                        type={showNewPassword ? "text" : "password"}
+                                        className="w-full border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 pl-10 rounded-lg text-sm focus:border-pink-500 outline-none bg-white dark:bg-slate-700 dark:text-white"
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                        placeholder="Repita a nova senha"
+                                        disabled={!newPassword}
+                                   />
+                               </div>
                            </div>
                            {passwordError && (
                                <p className="text-xs text-red-500 font-bold bg-red-50 dark:bg-red-900/20 p-2 rounded">{passwordError}</p>
