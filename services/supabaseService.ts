@@ -1,6 +1,15 @@
 import { supabase } from '../lib/supabaseClient';
 import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads } from '../utils/mockData';
-import { User, Task, Lead, Client, SystemSettings } from '../types';
+import { User, Task, Lead, Client, SystemSettings, Squad } from '../types';
+
+/**
+ * Mapeia uma squad do Supabase para o formato do App
+ */
+const mapSquad = (s: any): Squad => ({
+  id: s.id,
+  name: s.name,
+  members: s.members || []
+});
 
 /**
  * Mapeia as configurações do sistema do Supabase para o formato do App
@@ -250,6 +259,47 @@ export const fetchBankAccounts = async () => {
     color: b.color,
     status: b.status
   }));
+};
+
+/**
+ * Busca todas as squads do banco de dados
+ */
+export const fetchSquads = async () => {
+  const { data, error } = await supabase.from('squads').select('*');
+  if (error) {
+    console.error('Erro ao buscar squads:', error);
+    return [];
+  }
+  return (data || []).map(mapSquad);
+};
+
+/**
+ * Salva ou atualiza uma squad no banco de dados
+ */
+export const saveSquad = async (squad: Partial<Squad>) => {
+  const { error } = await supabase.from('squads').upsert({
+    id: squad.id || undefined,
+    name: squad.name,
+    members: squad.members
+  });
+
+  if (error) {
+    console.error('Erro ao salvar squad:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui uma squad do banco de dados
+ */
+export const deleteSquad = async (id: string) => {
+  const { error } = await supabase.from('squads').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir squad:', error);
+    return { success: false, error };
+  }
+  return { success: true };
 };
 
 /**

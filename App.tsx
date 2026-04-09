@@ -31,7 +31,8 @@ import {
   fetchBankAccounts,
   fetchSystemSettings,
   updateSystemSettings,
-  saveUser
+  saveUser,
+  fetchSquads
 } from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from './types';
@@ -93,14 +94,15 @@ const App: React.FC = () => {
         const connection = await testSupabaseConnection();
         if (connection.success) {
           console.log('Carregando dados reais do Supabase...');
-          const [dbUsers, tasksData, clientsData, leadsData, financialData, bankData, settingsData] = await Promise.all([
+          const [dbUsers, tasksData, clientsData, leadsData, financialData, bankData, settingsData, squadsData] = await Promise.all([
             fetchUsers(),
             fetchTasks(),
             fetchClients(),
             fetchLeads(),
             fetchFinancialTransactions(),
             fetchBankAccounts(),
-            fetchSystemSettings()
+            fetchSystemSettings(),
+            fetchSquads()
           ]);
           
           setUsers(dbUsers as any);
@@ -110,6 +112,7 @@ const App: React.FC = () => {
           setFinancialTransactions(financialData as any);
           setBankAccounts(bankData as any);
           if (settingsData) setSystemSettings(settingsData);
+          if (squadsData.length > 0) setSquads(squadsData as any);
         } else {
           console.warn('Conexão com Supabase falhou, usando dados mock.');
         }

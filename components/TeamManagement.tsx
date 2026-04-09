@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { User, Squad, ConfirmOptions, Role } from '../types';
 import { Plus, Trash2, Edit2, Shield, User as UserIcon, FileText, Lock, Key, X, CheckCircle, Users, Mail, Eye, EyeOff } from 'lucide-react';
-import { saveUser, deleteUser } from '../services/supabaseService';
+import { saveUser, deleteUser, saveSquad, deleteSquad } from '../services/supabaseService';
 
 interface TeamManagementProps {
   users: User[];
@@ -89,11 +89,53 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers,
       }
   };
 
-  const handleSaveSquad = () => {
+  const handleSaveSquad = async () => {
       if (!editingSquad.name) return;
-      if (editingSquad.id) setSquads(prev => prev.map(s => s.id === editingSquad.id ? { ...s, ...editingSquad } as Squad : s));
-      else setSquads(prev => [...prev, { id: Date.now().toString(), name: editingSquad.name || '', members: editingSquad.members || [] }]);
-      setIsSquadModalOpen(false);
+      
+      try {
+          const squadToSave = {
+              ...editingSquad,
+              id: editingSquad.id || `squad-${Date.now()}`,
+              members: editingSquad.members || []
+          };
+          
+          const result = await saveSquad(squadToSave);
+          if (result.success) {
+              if (editingSquad.id) {
+                  setSquads(prev => prev.map(s => s.id === editingSquad.id ? squadToSave as Squad : s));
+              } else {
+                  setSquads(prev => [...prev, squadToSave as Squad]);
+              }
+              setIsSquadModalOpen(false);
+          } else {
+              alert('Erro ao salvar squad no banco de dados.');
+          }
+      } catch (error) {
+          console.error(error);
+      }
+  };
+
+  const handleDeleteSquad = async (id: string) => {
+      const ok = await openConfirm({ 
+          title: "Excluir Squad?", 
+          description: "Atenção: A exclusão de uma squad removerá o vínculo de todos os colaboradores, tarefas e clientes associados a ela. Esta ação não pode ser desfeita.", 
+          variant: "danger" 
+      });
+      
+      if (ok) {
+          try {
+              const result = await deleteSquad(id);
+              if (result.success) {
+                  setSquads(prev => prev.filter(s => s.id !== id));
+                  // Opcional: Limpar referências locais de usuários se necessário, 
+                  // mas o App recarregará os dados ou o usuário verá a mudança ao editar.
+              } else {
+                  alert('Erro ao excluir squad do banco de dados.');
+              }
+          } catch (error) {
+              console.error(error);
+          }
+      }
   };
 
   const toggleSquadMember = (userId: string) => {
@@ -159,9 +201,24 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers,
               <div className="flex justify-between mb-6 items-center"><h3 className="font-bold">Squads</h3><button onClick={()=>{setEditingSquad({name:'',members:[]});setIsSquadModalOpen(true)}} className="text-xs text-pink-600 font-bold">+ Criar Squad</button></div>
               <div className="space-y-4">
                   {squads.map(s => (
-                      <div key={s.id} className="p-4 border rounded-xl bg-slate-50/50 flex justify-between items-center">
+                      <div key={s.id} className="p-4 border rounded-xl bg-slate-50/50 flex justify-between items-center group">
                           <span className="font-bold">{s.name}</span>
-                          <button onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} className="text-blue-500"><Edit2 size={16}/></button>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} 
+                                className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Editar"
+                              >
+                                  <Edit2 size={16}/>
+                              </button>
+                              <button 
+                                onClick={()=>handleDeleteSquad(s.id)} 
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Excluir"
+                              >
+                                  <Trash2 size={16}/>
+                              </button>
+                          </div>
                       </div>
                   ))}
               </div>
