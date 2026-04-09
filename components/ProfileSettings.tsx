@@ -8,6 +8,16 @@ interface ProfileSettingsProps {
   onUpdateUser: (updatedUser: User) => void;
 }
 
+// Role Labels Mapping
+const ROLE_LABELS: Record<string, string> = {
+    'ADMIN': 'Administrador',
+    'MANAGER': 'Gerente',
+    'FINANCE': 'Financeiro',
+    'EMPLOYEE': 'Colaborador',
+    'FREELANCER': 'Comercial',
+    'CLIENT': 'Cliente'
+};
+
 export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, onUpdateUser }) => {
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'SECURITY' | 'PREFERENCES' | 'FINANCIAL'>('GENERAL');
   
@@ -15,11 +25,9 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
   const [formData, setFormData] = useState(currentUser);
   
   // Security States
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   
   const [successMsg, setSuccessMsg] = useState('');
@@ -33,13 +41,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
     let updatedUser = { ...formData };
     
     if (newPassword) {
-        // Validação da Senha Atual
-        // Se o usuário já tem uma senha definida, ele precisa confirmar a atual
-        if (currentUser.password && currentPassword !== currentUser.password) {
-            setPasswordError('A senha atual está incorreta.');
-            return;
-        }
-
         if (newPassword !== confirmPassword) {
             setPasswordError('As novas senhas não coincidem.');
             return;
@@ -56,7 +57,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
     // Reset fields
     setNewPassword('');
     setConfirmPassword('');
-    setCurrentPassword('');
     setPasswordError('');
     
     setSuccessMsg('Perfil atualizado com sucesso!');
@@ -185,7 +185,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
                            </div>
                            <div>
                                <h3 className="text-lg font-bold text-slate-800 dark:text-white">{formData.name}</h3>
-                               <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-xs font-bold">{formData.role}</span>
+                               <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-xs font-bold">{ROLE_LABELS[formData.role] || formData.role}</span>
                            </div>
                        </div>
 
@@ -223,31 +223,11 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
                    <div className="space-y-6 animate-pop max-w-md">
                        <div>
                            <h3 className="font-bold text-slate-800 dark:text-white mb-1">Alterar Senha</h3>
-                           <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Para sua segurança, confirme a senha atual antes de alterar.</p>
+                           <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Defina uma nova senha para sua conta.</p>
                        </div>
                        
                        <div className="space-y-4">
-                           <div>
-                               <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Senha Atual <span className="text-red-500">*</span></label>
-                               <div className="relative">
-                                   <Lock className="absolute left-3 top-3 text-slate-400" size={18}/>
-                                   <input 
-                                        type={showCurrentPassword ? "text" : "password"}
-                                        className="w-full border border-slate-200 dark:border-slate-600 rounded-lg p-2.5 pl-10 pr-10 text-sm focus:border-pink-500 outline-none bg-white dark:bg-slate-700 dark:text-white"
-                                        value={currentPassword}
-                                        onChange={e => setCurrentPassword(e.target.value)}
-                                        placeholder="Digite sua senha atual"
-                                   />
-                                   <button 
-                                        type="button"
-                                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
-                                   >
-                                       {showCurrentPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
-                                   </button>
-                               </div>
-                           </div>
-                           <div className="pt-2 border-t border-slate-100 dark:border-slate-700"></div>
+
                            <div>
                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nova Senha</label>
                                <div className="relative">
@@ -258,7 +238,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
                                         value={newPassword}
                                         onChange={e => setNewPassword(e.target.value)}
                                         placeholder="Mínimo 3 caracteres"
-                                        disabled={!currentPassword}
                                    />
                                    <button 
                                         type="button"

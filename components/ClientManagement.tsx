@@ -902,7 +902,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                                     <div className="col-span-2 p-20 text-center bg-red-50 rounded-[32px] border border-red-100">
                                         <Lock size={48} className="mx-auto text-red-200 mb-4"/>
                                         <p className="text-red-600 font-black uppercase text-xs tracking-widest">Acesso Restrito</p>
-                                        <p className="text-red-400 text-[10px] font-bold mt-2">Freelancers não possuem permissão para visualizar o banco de senhas.</p>
+                                        <p className="text-red-400 text-[10px] font-bold mt-2">Comerciais não possuem permissão para visualizar o banco de senhas.</p>
                                     </div>
                                 ) : (
                                     (viewingClient.passwords || []).length === 0 ? (

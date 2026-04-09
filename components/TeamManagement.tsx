@@ -17,8 +17,8 @@ const ROLES: { value: Role; label: string }[] = [
     { value: 'ADMIN', label: 'Administrador (Total)' },
     { value: 'MANAGER', label: 'Gerente / Gestor' },
     { value: 'FINANCE', label: 'Financeiro' },
-    { value: 'EMPLOYEE', label: 'Colaborador CLT' },
-    { value: 'FREELANCER', label: 'Freelancer / PJ' },
+    { value: 'EMPLOYEE', label: 'Colaborador' },
+    { value: 'FREELANCER', label: 'Comercial' },
 ];
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers, squads, setSquads, openConfirm }) => {

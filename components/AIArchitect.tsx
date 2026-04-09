@@ -89,8 +89,8 @@ export const AIArchitect: React.FC = () => {
             <button onClick={() => setQuery("Sugira um fluxo Kanban para projetos de SEO")} className="whitespace-nowrap px-3 py-1.5 bg-slate-50 hover:bg-pink-50 text-pink-600 text-xs font-medium rounded-full border border-pink-100 flex items-center gap-1 transition-colors">
                 <Lightbulb size={12} /> Fluxo SEO
             </button>
-            <button onClick={() => setQuery("Como medir produtividade de freelancers?")} className="whitespace-nowrap px-3 py-1.5 bg-slate-50 hover:bg-pink-50 text-pink-600 text-xs font-medium rounded-full border border-pink-100 flex items-center gap-1 transition-colors">
-                <Lightbulb size={12} /> KPIs Freelancer
+            <button onClick={() => setQuery("Como medir produtividade de comerciais?")} className="whitespace-nowrap px-3 py-1.5 bg-slate-50 hover:bg-pink-50 text-pink-600 text-xs font-medium rounded-full border border-pink-100 flex items-center gap-1 transition-colors">
+                <Lightbulb size={12} /> KPIs Comercial
             </button>
         </div>
       </div>

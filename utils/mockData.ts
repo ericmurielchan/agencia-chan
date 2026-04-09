@@ -370,7 +370,7 @@ export const initialRolePermissions: RolePermissions = {
         'kanban', 'productivity', 'requisitions', 'help', 'approvals'
     ],
     'FREELANCER': [
-        'kanban', 'finance', 'requisitions', 'help', 'approvals'
+        'dashboard', 'kanban', 'crm', 'requisitions', 'help'
     ],
     'FINANCE': [
         'dashboard', 'finance', 'clients', 'requisitions', 'help', 'approvals',

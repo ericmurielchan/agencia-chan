@@ -249,7 +249,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                                     <option value="Compra">Insumos / Hardware</option>
                                     <option value="Reembolso">Reembolso de Despesa</option>
                                     <option value="Software">Assinatura / Software</option>
-                                    <option value="Serviço">Terceirização / Freelancer</option>
+                                    <option value="Serviço">Terceirização / Comercial</option>
                                   </>
                               )}
                           </select>

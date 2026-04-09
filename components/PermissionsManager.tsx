@@ -30,7 +30,7 @@ const DEFAULT_PERMISSIONS: RolePermissions = {
         'kanban', 'productivity', 'requisitions', 'help'
     ],
     'FREELANCER': [
-        'kanban', 'requisitions', 'help'
+        'dashboard', 'kanban', 'crm', 'requisitions', 'help'
     ],
     'FINANCE': [
         'dashboard', 'finance', 'clients', 'requisitions', 'help',
@@ -87,7 +87,7 @@ const ROLE_CONFIG: Record<Role, { label: string, color: string }> = {
     'ADMIN': { label: 'CEO / Admin', color: 'bg-slate-800 text-white' },
     'MANAGER': { label: 'Gerente', color: 'bg-purple-100 text-purple-700' },
     'EMPLOYEE': { label: 'Colaborador', color: 'bg-blue-100 text-blue-700' },
-    'FREELANCER': { label: 'Freelancer', color: 'bg-orange-100 text-orange-700' },
+    'FREELANCER': { label: 'Comercial', color: 'bg-orange-100 text-orange-700' },
     'FINANCE': { label: 'Financeiro', color: 'bg-emerald-100 text-emerald-700' },
     'CLIENT': { label: 'Cliente', color: 'bg-pink-100 text-pink-700' }
 };

@@ -37,6 +37,15 @@ import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialC
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from './types';
 import { Users, Settings, Bell, Check, Gift, AlertTriangle, Info, Clock, CheckCircle, Shield, Trash2, Archive, Eye, DollarSign, Briefcase, Menu, X as XIcon } from 'lucide-react';
 
+const ROLE_LABELS: Record<Role, string> = {
+    'ADMIN': 'Administrador',
+    'MANAGER': 'Gerente',
+    'FINANCE': 'Financeiro',
+    'EMPLOYEE': 'Colaborador',
+    'FREELANCER': 'Comercial',
+    'CLIENT': 'Cliente'
+};
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
@@ -383,7 +392,7 @@ const App: React.FC = () => {
                     >
                         <div className="text-right hidden xs:block">
                             <p className="text-xs md:text-sm font-black text-slate-800 leading-none group-hover:text-pink-600 truncate max-w-[80px] md:max-w-none">{currentUser.name}</p>
-                            <p className="text-[8px] md:text-[10px] text-slate-400 uppercase font-black mt-1 tracking-wider">{currentUser.role}</p>
+                            <p className="text-[8px] md:text-[10px] text-slate-400 uppercase font-black mt-1 tracking-wider">{ROLE_LABELS[currentUser.role] || currentUser.role}</p>
                         </div>
                         <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-2xl overflow-hidden border-2 border-slate-50 bg-slate-100 shrink-0">
                           <img src={currentUser.avatar} alt="Perfil" className="w-full h-full object-cover" />

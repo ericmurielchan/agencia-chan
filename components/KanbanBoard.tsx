@@ -44,6 +44,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const notifRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = currentUser.role === 'ADMIN';
+  const isManager = currentUser.role === 'MANAGER';
+  
+  const visibleTasks = useMemo(() => {
+    if (isAdmin || isManager) return tasks;
+    return tasks.filter(t => t.assigneeIds.includes(currentUser.id));
+  }, [tasks, currentUser, isAdmin, isManager]);
+
   const activeColumns = useMemo(() => columns.filter(c => !c.isArchived).sort((a,b) => a.order - b.order), [columns]);
   const archivedColumns = useMemo(() => columns.filter(c => c.isArchived).sort((a,b) => a.order - b.order), [columns]);
   
@@ -256,7 +263,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       <main className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar">
         <div className="inline-flex h-full p-6 gap-6 items-start">
           {activeColumns.map(col => {
-            const colTasks = tasks.filter(t => {
+            const colTasks = visibleTasks.filter(t => {
               const matchesStatus = t.status === col.id;
               const matchesArchived = showArchived ? t.archived : !t.archived;
               const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase());
