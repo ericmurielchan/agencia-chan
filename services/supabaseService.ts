@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
-import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads } from '../utils/mockData';
-import { User, Task, Lead, Client, SystemSettings, Squad } from '../types';
+import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads, initialCreditCards } from '../utils/mockData';
+import { User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount } from '../types';
 
 /**
  * Mapeia uma squad do Supabase para o formato do App
@@ -262,6 +262,96 @@ export const fetchBankAccounts = async () => {
 };
 
 /**
+ * Salva ou atualiza uma conta bancária
+ */
+export const saveBankAccount = async (account: Partial<BankAccount>) => {
+  const { error } = await supabase.from('bank_accounts').upsert({
+    id: account.id || undefined,
+    name: account.name,
+    type: account.type,
+    bank_name: account.bankName,
+    balance: account.balance,
+    color: account.color,
+    status: account.status
+  });
+
+  if (error) {
+    console.error('Erro ao salvar conta:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui uma conta bancária
+ */
+export const deleteBankAccount = async (id: string) => {
+  const { error } = await supabase.from('bank_accounts').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir conta:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os cartões de crédito
+ */
+export const fetchCreditCards = async () => {
+  const { data, error } = await supabase.from('credit_cards').select('*');
+  if (error) {
+    console.error('Erro ao buscar cartões:', error);
+    return [];
+  }
+  return (data || []).map(c => ({
+    id: c.id,
+    name: c.name,
+    brand: c.brand,
+    limit: c.limit,
+    availableLimit: c.available_limit,
+    closingDay: c.closing_day,
+    dueDate: c.due_day,
+    color: c.color,
+    status: c.status
+  }));
+};
+
+/**
+ * Salva ou atualiza um cartão de crédito
+ */
+export const saveCreditCard = async (card: Partial<CreditCard>) => {
+  const { error } = await supabase.from('credit_cards').upsert({
+    id: card.id || undefined,
+    name: card.name,
+    brand: card.brand,
+    limit: card.limit,
+    available_limit: card.availableLimit,
+    closing_day: card.closingDay,
+    due_day: card.dueDate,
+    color: card.color,
+    status: card.status
+  });
+
+  if (error) {
+    console.error('Erro ao salvar cartão:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um cartão de crédito
+ */
+export const deleteCreditCard = async (id: string) => {
+  const { error } = await supabase.from('credit_cards').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir cartão:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
  * Busca todas as squads do banco de dados
  */
 export const fetchSquads = async () => {
@@ -352,6 +442,7 @@ export const clearDatabase = async () => {
     await supabase.from('leads').delete().neq('id', '0');
     await supabase.from('clients').delete().neq('id', '0');
     await supabase.from('bank_accounts').delete().neq('id', '0');
+    await supabase.from('credit_cards').delete().neq('id', '0');
     await supabase.from('squads').delete().neq('id', '0');
     
     // Para usuários, mantemos apenas o seu admin
@@ -465,6 +556,22 @@ export const seedDatabase = async () => {
       }))
     );
     if (leadError) console.error('Erro ao migrar Leads:', leadError);
+
+    // 6. Migrar Cartões
+    const { error: cardError } = await supabase.from('credit_cards').upsert(
+      initialCreditCards.map(c => ({
+        id: c.id,
+        name: c.name,
+        brand: c.brand,
+        limit: c.limit,
+        available_limit: c.availableLimit,
+        closing_day: c.closingDay,
+        due_day: c.dueDate,
+        color: c.color,
+        status: c.status
+      }))
+    );
+    if (cardError) console.error('Erro ao migrar Cartões:', cardError);
 
     console.log('Migração concluída com sucesso!');
     return { success: true };

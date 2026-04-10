@@ -57,6 +57,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { initialCategories } from '../utils/mockData';
 import { analyzeFinancialHealth } from '../services/aiService';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
+import { saveCreditCard, deleteCreditCard, saveBankAccount, deleteBankAccount } from '../services/supabaseService';
 
 interface FinancialsProps {
     bankAccounts: BankAccount[];
@@ -531,14 +532,12 @@ export const Financials: React.FC<FinancialsProps> = ({
         });
     };
 
-    const handleAddAccount = () => {
+    const handleAddAccount = async () => {
         if (!newAccount.name || !newAccount.bankName) return;
 
-        if (editingAccountId) {
-            setBankAccounts(prev => prev.map(acc => acc.id === editingAccountId ? { ...acc, ...newAccount } as BankAccount : acc));
-        } else {
-            const account: BankAccount = {
-                id: Date.now().toString(),
+        try {
+            const accountToSave: BankAccount = {
+                id: editingAccountId || Date.now().toString(),
                 name: newAccount.name,
                 type: newAccount.type as any,
                 bankName: newAccount.bankName,
@@ -546,37 +545,100 @@ export const Financials: React.FC<FinancialsProps> = ({
                 color: newAccount.color || '#3b82f6',
                 status: 'ACTIVE'
             };
-            setBankAccounts(prev => [...prev, account]);
-        }
 
-        setIsAccountModalOpen(false);
-        setEditingAccountId(null);
-        setNewAccount({ type: 'CHECKING', status: 'ACTIVE', balance: 0, color: '#3b82f6' });
+            const result = await saveBankAccount(accountToSave);
+            if (result.success) {
+                if (editingAccountId) {
+                    setBankAccounts(prev => prev.map(acc => acc.id === editingAccountId ? accountToSave : acc));
+                } else {
+                    setBankAccounts(prev => [...prev, accountToSave]);
+                }
+                setIsAccountModalOpen(false);
+                setEditingAccountId(null);
+                setNewAccount({ type: 'CHECKING', status: 'ACTIVE', balance: 0, color: '#3b82f6' });
+            } else {
+                alert('Erro ao salvar conta no banco de dados.');
+            }
+        } catch (error) {
+            console.error(error);
+        }
     };
 
-    const handleAddCard = () => {
+    const handleDeleteAccount = async (id: string) => {
+        const confirm = await openConfirm({
+            title: 'Excluir Conta',
+            description: 'Tem certeza que deseja excluir esta conta? Todas as transações associadas a ela podem ser impactadas.',
+            variant: 'danger'
+        });
+
+        if (confirm) {
+            try {
+                const result = await deleteBankAccount(id);
+                if (result.success) {
+                    setBankAccounts(prev => prev.filter(acc => acc.id !== id));
+                } else {
+                    alert('Erro ao excluir conta do banco de dados.');
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+    };
+
+    const handleAddCard = async () => {
         if (!newCard.name || !newCard.limit) return;
 
-        if (editingCardId) {
-            setCreditCards(prev => prev.map(card => card.id === editingCardId ? { ...card, ...newCard } as CreditCard : card));
-        } else {
-            const card: CreditCard = {
-                id: Date.now().toString(),
+        try {
+            const cardToSave: CreditCard = {
+                id: editingCardId || Date.now().toString(),
                 name: newCard.name,
                 brand: newCard.brand || 'Visa',
                 limit: newCard.limit,
-                availableLimit: newCard.limit,
+                availableLimit: editingCardId ? (newCard.availableLimit ?? newCard.limit) : newCard.limit,
                 closingDay: newCard.closingDay || 25,
                 dueDate: newCard.dueDate || 5,
                 color: newCard.color || '#000000',
                 status: 'ACTIVE'
             };
-            setCreditCards(prev => [...prev, card]);
-        }
 
-        setIsCardModalOpen(false);
-        setEditingCardId(null);
-        setNewCard({ status: 'ACTIVE', limit: 0, availableLimit: 0, color: '#000000', brand: 'Visa' });
+            const result = await saveCreditCard(cardToSave);
+            if (result.success) {
+                if (editingCardId) {
+                    setCreditCards(prev => prev.map(card => card.id === editingCardId ? cardToSave : card));
+                } else {
+                    setCreditCards(prev => [...prev, cardToSave]);
+                }
+                setIsCardModalOpen(false);
+                setEditingCardId(null);
+                setNewCard({ status: 'ACTIVE', limit: 0, availableLimit: 0, color: '#000000', brand: 'Visa' });
+            } else {
+                alert('Erro ao salvar cartão no banco de dados.');
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleDeleteCard = async (id: string) => {
+        const confirm = await openConfirm({
+            title: 'Excluir Cartão',
+            description: 'Tem certeza que deseja excluir este cartão? Todas as faturas associadas a ele podem ser impactadas.',
+            variant: 'danger'
+        });
+
+        if (confirm) {
+            try {
+                const result = await deleteCreditCard(id);
+                if (result.success) {
+                    setCreditCards(prev => prev.filter(c => c.id !== id));
+                    // Opcional: Limpar faturas associadas se necessário
+                } else {
+                    alert('Erro ao excluir cartão do banco de dados.');
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
     };
 
     const startEditAccount = (acc: BankAccount) => {
@@ -935,9 +997,17 @@ export const Financials: React.FC<FinancialsProps> = ({
                                             <div className="flex gap-2">
                                                 <button 
                                                     onClick={() => startEditAccount(acc)}
-                                                    className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                    className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                                                    title="Editar"
                                                 >
                                                     <Edit2 size={14} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteAccount(acc.id)}
+                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                    title="Excluir"
+                                                >
+                                                    <Trash2 size={14} />
                                                 </button>
                                                 <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${acc.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
                                                     {acc.status === 'ACTIVE' ? 'Ativa' : 'Inativa'}
@@ -984,11 +1054,19 @@ export const Financials: React.FC<FinancialsProps> = ({
                                             <div className="flex gap-3 items-start">
                                                 <button 
                                                     onClick={() => startEditCard(card)}
-                                                    className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                    className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                                                    title="Editar"
                                                 >
                                                     <Edit2 size={14} />
                                                 </button>
-                                                <div className="text-right">
+                                                <button 
+                                                    onClick={() => handleDeleteCard(card.id)}
+                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                    title="Excluir"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                                <div className="text-right ml-2">
                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</p>
                                                     <p className="text-sm font-black text-slate-800">Dia {card.dueDate}</p>
                                                 </div>
