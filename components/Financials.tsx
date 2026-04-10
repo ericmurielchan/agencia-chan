@@ -57,7 +57,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { initialCategories } from '../utils/mockData';
 import { analyzeFinancialHealth } from '../services/aiService';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
-import { saveCreditCard, deleteCreditCard, saveBankAccount, deleteBankAccount } from '../services/supabaseService';
+import { saveCreditCard, deleteCreditCard, saveBankAccount, deleteBankAccount, saveFinancialTransaction, deleteFinancialTransaction, saveNotification } from '../services/supabaseService';
 
 interface FinancialsProps {
     bankAccounts: BankAccount[];
@@ -77,6 +77,7 @@ interface FinancialsProps {
     onClearSelectedTransaction?: () => void;
     selectedInvoiceId?: string | null;
     onClearSelectedInvoice?: () => void;
+    onSaveNotification?: (notif: Notification) => void;
     stock: StockItem[];
     setStock: React.Dispatch<React.SetStateAction<StockItem[]>>;
     assets: Asset[];
@@ -114,7 +115,8 @@ export const Financials: React.FC<FinancialsProps> = ({
     selectedTransactionId,
     onClearSelectedTransaction,
     selectedInvoiceId,
-    onClearSelectedInvoice
+    onClearSelectedInvoice,
+    onSaveNotification
 }) => {
     const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
     const [searchTerm, setSearchTerm] = useState('');
@@ -470,6 +472,9 @@ export const Financials: React.FC<FinancialsProps> = ({
         }
 
         setTransactions(prev => [...newTransactions, ...prev]);
+        
+        // Sync with Supabase
+        newTransactions.forEach(tx => saveFinancialTransaction(tx));
 
         // Update Account Balance/Card Limit ONLY for the first transaction if PAID
         const firstTx = newTransactions[0];
@@ -727,6 +732,9 @@ export const Financials: React.FC<FinancialsProps> = ({
         }
 
         setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: newStatus } : t));
+        
+        // Sync with Supabase
+        saveFinancialTransaction({ ...tx, status: newStatus });
     };
 
     const handleDeleteTransaction = async (tx: FinancialTransaction) => {
@@ -781,10 +789,16 @@ export const Financials: React.FC<FinancialsProps> = ({
                 const toDelete = transactions.filter(t => t.recurrenceId === tx.recurrenceId);
                 toDelete.forEach(revertBalance);
                 setTransactions(prev => prev.filter(t => t.recurrenceId !== tx.recurrenceId));
+                
+                // Sync with Supabase
+                toDelete.forEach(t => deleteFinancialTransaction(t.id));
             } else if (deleteType === false) {
                 // Delete only this one
                 revertBalance(tx);
                 setTransactions(prev => prev.filter(t => t.id !== tx.id));
+                
+                // Sync with Supabase
+                deleteFinancialTransaction(tx.id);
             }
         } else {
             const confirm = await openConfirm({
@@ -795,6 +809,9 @@ export const Financials: React.FC<FinancialsProps> = ({
             if (confirm) {
                 revertBalance(tx);
                 setTransactions(prev => prev.filter(t => t.id !== tx.id));
+                
+                // Sync with Supabase
+                deleteFinancialTransaction(tx.id);
             }
         }
     };

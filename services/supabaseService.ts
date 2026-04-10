@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads, initialCreditCards } from '../utils/mockData';
-import { User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount } from '../types';
+import { User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount, FinancialTransaction, Notification as AppNotification, ApprovalBatch, ApprovalItem, ApprovalComment } from '../types';
 
 /**
  * Mapeia uma squad do Supabase para o formato do App
@@ -155,6 +155,63 @@ export const fetchTasks = async () => {
 };
 
 /**
+ * Salva ou atualiza uma tarefa no banco de dados
+ */
+export const saveTask = async (task: Partial<Task>) => {
+  // Se o ID for um timestamp temporário (mock), removemos para o Supabase gerar um novo ou tentamos converter
+  // No entanto, para o upsert funcionar como update, precisamos do ID real.
+  // Se for uma tarefa nova (ID gerado por Date.now()), o ideal é deixar o Supabase gerar o UUID.
+  const isNew = !task.id || task.id.startsWith('task-') || /^\d+$/.test(task.id);
+
+  const taskData: any = {
+    client_id: task.clientId,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    due_date: task.dueDate ? new Date(task.dueDate).toISOString() : null,
+    estimated_time: task.estimatedTime,
+    assignee_ids: task.assigneeIds,
+    squad_id: task.squadId,
+    is_tracking: task.isTracking,
+    approval_status: task.approvalStatus,
+    archived: task.archived,
+    created_at: task.createdAt ? new Date(task.createdAt).toISOString() : new Date().toISOString(),
+    cover: task.cover,
+    cover_type: task.coverType,
+    cover_value: task.coverValue,
+    time_logs: task.timeLogs,
+    checklists: task.checklists,
+    comments: task.comments,
+    history: task.history
+  };
+
+  if (!isNew) {
+    taskData.id = task.id;
+  }
+
+  const { data, error } = await supabase.from('tasks').upsert(taskData).select();
+
+  if (error) {
+    console.error('Erro detalhado ao salvar tarefa:', error);
+    return { success: false, error };
+  }
+  return { success: true, data: data?.[0] };
+};
+
+/**
+ * Exclui uma tarefa do banco de dados
+ */
+export const deleteTask = async (id: string) => {
+  const { error } = await supabase.from('tasks').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir tarefa:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
  * Busca todos os clientes do banco de dados
  */
 export const fetchClients = async () => {
@@ -265,21 +322,28 @@ export const fetchBankAccounts = async () => {
  * Salva ou atualiza uma conta bancária
  */
 export const saveBankAccount = async (account: Partial<BankAccount>) => {
-  const { error } = await supabase.from('bank_accounts').upsert({
-    id: account.id || undefined,
+  const isNew = !account.id || /^\d+$/.test(account.id);
+  
+  const accountData: any = {
     name: account.name,
     type: account.type,
     bank_name: account.bankName,
     balance: account.balance,
     color: account.color,
     status: account.status
-  });
+  };
+
+  if (!isNew) {
+    accountData.id = account.id;
+  }
+
+  const { data, error } = await supabase.from('bank_accounts').upsert(accountData).select();
 
   if (error) {
-    console.error('Erro ao salvar conta:', error);
+    console.error('Erro detalhado ao salvar conta:', error);
     return { success: false, error };
   }
-  return { success: true };
+  return { success: true, data: data?.[0] };
 };
 
 /**
@@ -390,6 +454,307 @@ export const deleteSquad = async (id: string) => {
     return { success: false, error };
   }
   return { success: true };
+};
+
+/**
+ * Salva ou atualiza um lead no banco de dados
+ */
+export const saveLead = async (lead: Partial<Lead>) => {
+  const { error } = await supabase.from('leads').upsert({
+    id: lead.id || undefined,
+    name: lead.name,
+    company: lead.company,
+    value: lead.value,
+    stage_id: lead.stageId,
+    status: lead.status,
+    email: lead.email,
+    phone: lead.phone,
+    priority: lead.priority,
+    temperature: lead.temperature,
+    responsible_id: lead.responsibleId,
+    notes: lead.notes,
+    tags: lead.tags,
+    source: lead.source,
+    loss_reason: lead.lossReasonId,
+    tasks: lead.tasks,
+    history: lead.history,
+    created_at: lead.createdAt ? new Date(lead.createdAt).toISOString() : new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar lead:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um lead do banco de dados
+ */
+export const deleteLead = async (id: string) => {
+  const { error } = await supabase.from('leads').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir lead:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Salva ou atualiza um cliente no banco de dados
+ */
+export const saveClient = async (client: Partial<Client>) => {
+  const { error } = await supabase.from('clients').upsert({
+    id: client.id || undefined,
+    name: client.name,
+    legal_name: client.legalName,
+    document: client.document,
+    status: client.status,
+    responsible_id: client.responsibleId,
+    squad_id: client.squadId,
+    monthly_value: client.monthlyValue,
+    is_recurring: client.isRecurring,
+    level: client.level,
+    summary: client.summary,
+    contract_url: client.contractUrl,
+    assets_folder_url: client.assetsFolderUrl,
+    contact_info: client.contact,
+    contacts: client.contacts,
+    tags: client.tags,
+    internal_notes: client.internalNotes,
+    entry_date: client.entryDate ? new Date(client.entryDate).toISOString() : new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar cliente:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um cliente do banco de dados
+ */
+export const deleteClient = async (id: string) => {
+  const { error } = await supabase.from('clients').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir cliente:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Salva ou atualiza uma transação financeira
+ */
+export const saveFinancialTransaction = async (transaction: Partial<FinancialTransaction>) => {
+  const { error } = await supabase.from('financial_transactions').upsert({
+    id: transaction.id || undefined,
+    description: transaction.description,
+    amount: transaction.amount,
+    type: transaction.type,
+    date: transaction.date,
+    status: transaction.status,
+    category_id: transaction.categoryId,
+    bank_account_id: transaction.bankAccountId,
+    credit_card_id: transaction.creditCardId,
+    client_id: transaction.clientId,
+    squad_id: transaction.squadId,
+    responsible_id: transaction.responsibleId,
+    installments: transaction.installments,
+    recurrence_id: transaction.recurrenceId,
+    created_at: transaction.createdAt ? new Date(transaction.createdAt).toISOString() : new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar transação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui uma transação financeira
+ */
+export const deleteFinancialTransaction = async (id: string) => {
+  const { error } = await supabase.from('financial_transactions').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir transação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Salva uma notificação
+ */
+export const saveNotification = async (notification: Partial<AppNotification>) => {
+  const { error } = await supabase.from('notifications').upsert({
+    id: notification.id || undefined,
+    title: notification.title,
+    message: notification.message,
+    type: notification.type,
+    priority: notification.priority,
+    status: notification.status,
+    origin_module: notification.originModule,
+    timestamp: notification.timestamp ? new Date(notification.timestamp).toISOString() : new Date().toISOString(),
+    target_user_id: notification.targetUserId,
+    target_role: notification.targetRole,
+    nav_to_view: notification.navToView,
+    metadata: notification.metadata
+  });
+
+  if (error) {
+    console.error('Erro ao salvar notificação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todas as notificações do banco de dados
+ */
+export const fetchNotifications = async () => {
+  const { data, error } = await supabase.from('notifications').select('*');
+  if (error) {
+    console.error('Erro ao buscar notificações:', error);
+    return [];
+  }
+  return (data || []).map((n: any): AppNotification => ({
+    id: n.id,
+    title: n.title,
+    message: n.message,
+    type: n.type,
+    priority: n.priority,
+    status: n.status,
+    originModule: n.origin_module,
+    timestamp: new Date(n.timestamp).getTime(),
+    targetUserId: n.target_user_id,
+    targetRole: n.target_role,
+    navToView: n.nav_to_view,
+    metadata: n.metadata
+  }));
+};
+
+/**
+ * Salva ou atualiza um lote de aprovação
+ */
+export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
+  const { error } = await supabase.from('approval_batches').upsert({
+    id: batch.id || undefined,
+    title: batch.title,
+    status: batch.status,
+    client_id: batch.clientId,
+    created_at: batch.createdAt ? new Date(batch.createdAt).toISOString() : new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar lote de aprovação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os lotes de aprovação
+ */
+export const fetchApprovalBatches = async () => {
+  const { data, error } = await supabase.from('approval_batches').select('*');
+  if (error) {
+    console.error('Erro ao buscar lotes de aprovação:', error);
+    return [];
+  }
+  return (data || []).map(b => ({
+    id: b.id,
+    title: b.title,
+    description: b.description,
+    status: b.status,
+    requesterId: b.requester_id,
+    clientId: b.client_id,
+    createdAt: new Date(b.created_at).getTime(),
+    items: b.items || []
+  }));
+};
+
+/**
+ * Salva ou atualiza um item de aprovação
+ */
+export const saveApprovalItem = async (item: Partial<ApprovalItem> & { batchId?: string }) => {
+  const { error } = await supabase.from('approval_items').upsert({
+    id: item.id || undefined,
+    batch_id: item.batchId,
+    title: item.title,
+    category: item.category,
+    status: item.status,
+    files: item.files,
+    caption: item.caption,
+    created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar item de aprovação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os itens de aprovação
+ */
+export const fetchApprovalItems = async () => {
+  const { data, error } = await supabase.from('approval_items').select('*');
+  if (error) {
+    console.error('Erro ao buscar itens de aprovação:', error);
+    return [];
+  }
+  return (data || []).map(i => ({
+    id: i.id,
+    batchId: i.batch_id,
+    title: i.title,
+    category: i.category,
+    status: i.status,
+    files: i.files || [],
+    caption: i.caption,
+    createdAt: new Date(i.created_at).getTime()
+  }));
+};
+
+/**
+ * Salva ou atualiza um comentário de aprovação
+ */
+export const saveApprovalComment = async (comment: Partial<ApprovalComment> & { itemId?: string }) => {
+  const { error } = await supabase.from('approval_comments').upsert({
+    id: comment.id || undefined,
+    item_id: comment.itemId,
+    user_id: comment.userId,
+    text: comment.text,
+    timestamp: comment.timestamp ? new Date(comment.timestamp).toISOString() : new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar comentário de aprovação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os comentários de aprovação
+ */
+export const fetchApprovalComments = async () => {
+  const { data, error } = await supabase.from('approval_comments').select('*');
+  if (error) {
+    console.error('Erro ao buscar comentários de aprovação:', error);
+    return [];
+  }
+  return (data || []).map(c => ({
+    id: c.id,
+    itemId: c.item_id,
+    userId: c.user_id,
+    text: c.text,
+    createdAt: new Date(c.created_at).getTime()
+  }));
 };
 
 /**

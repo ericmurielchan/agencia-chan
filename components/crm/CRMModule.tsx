@@ -28,12 +28,16 @@ interface CRMModuleProps {
     openConfirm: (options: ConfirmOptions) => Promise<boolean>;
     selectedLeadId?: string | null;
     onClearSelectedLead?: () => void;
+    onSaveLead?: (lead: Lead) => void;
+    onDeleteLead?: (id: string) => void;
+    onSaveClient?: (client: Client) => void;
+    onSaveNotification?: (notif: Notification) => void;
 }
 
 export const CRMModule: React.FC<CRMModuleProps> = ({ 
     leads, setLeads, stages, setStages, lossReasons, setLossReasons, 
     users, currentUser, clients, setClients, notifications, setNotifications, openConfirm,
-    selectedLeadId, onClearSelectedLead
+    selectedLeadId, onClearSelectedLead, onSaveLead, onDeleteLead, onSaveClient, onSaveNotification
 }) => {
     const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PIPELINE' | 'LIST' | 'REPORTS'>('PIPELINE');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,6 +87,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                     navToView: 'crm'
                                 };
                                 setNotifications(prev => [overdueNotif, ...prev]);
+                                if (onSaveNotification) onSaveNotification(overdueNotif);
                             }
                             // Task in 1 hour
                             else if (diff > 0 && diff < oneHour && !notifications.find(n => n.id === `soon_${task.id}`)) {
@@ -99,6 +104,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                     navToView: 'crm'
                                 };
                                 setNotifications(prev => [soonNotif, ...prev]);
+                                if (onSaveNotification) onSaveNotification(soonNotif);
                             }
                         }
                     });
@@ -142,6 +148,8 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
         
         if (isNew) {
             setLeads(prev => [...prev, lead]);
+            if (onSaveLead) onSaveLead(lead);
+            
             // Notify responsible if assigned
             if (lead.responsibleId && lead.responsibleId !== currentUser.id) {
                 const newNotification: Notification = {
@@ -157,9 +165,11 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     navToView: 'crm'
                 };
                 setNotifications(prev => [newNotification, ...prev]);
+                if (onSaveNotification) onSaveNotification(newNotification);
             }
         } else {
             setLeads(prev => prev.map(l => l.id === lead.id ? lead : l));
+            if (onSaveLead) onSaveLead(lead);
         }
 
         // Check if WON to create Client
@@ -187,6 +197,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     internalNotes: `Cliente originado do CRM. Notas: ${lead.notes || ''}`
                 };
                 setClients(prev => [...prev, newClient]);
+                if (onSaveClient) onSaveClient(newClient);
                 
                 // Notify Admin/Finance
                 const winNotification: Notification = {
@@ -202,6 +213,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     navToView: 'clients'
                 };
                 setNotifications(prev => [winNotification, ...prev]);
+                if (onSaveNotification) onSaveNotification(winNotification);
             }
         }
 
@@ -219,6 +231,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
 
         if (confirmed) {
             setLeads(prev => prev.filter(l => l.id !== id));
+            if (onDeleteLead) onDeleteLead(id);
             setIsModalOpen(false);
             setEditingLead(null);
         }

@@ -26,11 +26,14 @@ interface KanbanBoardProps {
   initialFilter?: any;
   onClearFilter?: () => void;
   onNavigate?: (view: string, refId?: string) => void;
+  onSaveTask?: (task: Task) => void;
+  onDeleteTask?: (id: string) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
   tasks, setTasks, users, currentUser, columns, setColumns, notifications, setNotifications, openConfirm,
-  sidebarOpen, sidebarCompact, isMobile, clients, selectedTaskId, onClearSelectedTask, initialFilter, onClearFilter, onNavigate
+  sidebarOpen, sidebarCompact, isMobile, clients, selectedTaskId, onClearSelectedTask, initialFilter, onClearFilter, onNavigate,
+  onSaveTask, onDeleteTask
 }) => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -100,11 +103,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       const task = tasks.find(t => t.id === draggedTaskId);
       if (task && task.status !== targetColId) {
           const now = Date.now();
-          setTasks(prev => prev.map(t => t.id === draggedTaskId ? { 
-              ...t, 
+          const updatedTask = { 
+              ...task, 
               status: targetColId,
-              completedAt: targetColId === 'DONE' ? now : (t.status === 'DONE' ? undefined : t.completedAt)
-          } : t));
+              completedAt: targetColId === 'DONE' ? now : (task.status === 'DONE' ? undefined : task.completedAt)
+          };
+          
+          // Update local state immediately
+          setTasks(prev => prev.map(t => t.id === draggedTaskId ? updatedTask : t));
+          
+          if (onSaveTask) {
+              onSaveTask(updatedTask);
+          }
           
           if (targetColId === 'DONE') {
               confetti({
@@ -120,6 +130,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const sidebarWidth = isMobile ? '0px' : (sidebarOpen ? (sidebarCompact ? '80px' : '256px') : '0px');
 
   const handleUpdateTask = (updatedTask: Task) => {
+    // Update local state immediately for better UX
     setTasks(prev => {
       const exists = prev.some(t => t.id === updatedTask.id);
       if (exists) {
@@ -128,6 +139,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return [...prev, updatedTask];
       }
     });
+    
+    if (onSaveTask) {
+      onSaveTask(updatedTask);
+    }
+    
     setSelectedTask(updatedTask);
   };
 
@@ -373,7 +389,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             users={users} 
             onClose={() => setSelectedTask(null)} 
             onUpdate={handleUpdateTask} 
-            onDeleteTask={(id) => { setTasks(prev => prev.filter(t => t.id !== id)); setSelectedTask(null); }} 
+            onDeleteTask={(id) => { 
+                if (onDeleteTask) {
+                    onDeleteTask(id);
+                } else {
+                    setTasks(prev => prev.filter(t => t.id !== id));
+                }
+                setSelectedTask(null); 
+            }} 
             currentUser={currentUser} 
             openConfirm={openConfirm}
             clients={clients}

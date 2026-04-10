@@ -20,10 +20,13 @@ interface ClientManagementProps {
   tasks: Task[];
   requisitions: Requisition[];
   currentUser: User;
+  onSaveClient?: (client: Client) => void;
+  onDeleteClient?: (id: string) => void;
 }
 
 export const ClientManagement: React.FC<ClientManagementProps> = ({ 
-    clients, setClients, squads, services, users, setUsers, openConfirm, tasks, requisitions, currentUser 
+    clients, setClients, squads, services, users, setUsers, openConfirm, tasks, requisitions, currentUser,
+    onSaveClient, onDeleteClient
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
@@ -57,7 +60,9 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           return;
       }
       if (editingClient.id) {
-          setClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...editingClient } as Client : c));
+          const updatedClient = { ...clients.find(c => c.id === editingClient.id), ...editingClient } as Client;
+          setClients(prev => prev.map(c => c.id === editingClient.id ? updatedClient : c));
+          if (onSaveClient) onSaveClient(updatedClient);
       } else {
           const newClient: Client = {
               ...editingClient,
@@ -74,6 +79,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
               entryDate: new Date().toISOString().split('T')[0]
           } as Client;
           setClients(prev => [...prev, newClient]);
+          if (onSaveClient) onSaveClient(newClient);
       }
       setIsModalOpen(false);
   };

@@ -35,7 +35,23 @@ import {
   fetchSquads,
   fetchCreditCards,
   saveCreditCard,
-  deleteCreditCard
+  deleteCreditCard,
+  saveTask,
+  deleteTask,
+  saveLead,
+  deleteLead,
+  saveClient,
+  deleteClient,
+  saveFinancialTransaction,
+  deleteFinancialTransaction,
+  saveNotification,
+  fetchNotifications,
+  saveApprovalBatch,
+  fetchApprovalBatches,
+  saveApprovalItem,
+  fetchApprovalItems,
+  saveApprovalComment,
+  fetchApprovalComments
 } from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from './types';
@@ -97,7 +113,7 @@ const App: React.FC = () => {
         const connection = await testSupabaseConnection();
         if (connection.success) {
           console.log('Carregando dados reais do Supabase...');
-          const [dbUsers, tasksData, clientsData, leadsData, financialData, bankData, settingsData, squadsData, cardsData] = await Promise.all([
+          const [dbUsers, tasksData, clientsData, leadsData, financialData, bankData, settingsData, squadsData, cardsData, notifsData, approvalsData, approvalItemsData, approvalCommentsData] = await Promise.all([
             fetchUsers(),
             fetchTasks(),
             fetchClients(),
@@ -106,7 +122,11 @@ const App: React.FC = () => {
             fetchBankAccounts(),
             fetchSystemSettings(),
             fetchSquads(),
-            fetchCreditCards()
+            fetchCreditCards(),
+            fetchNotifications(),
+            fetchApprovalBatches(),
+            fetchApprovalItems(),
+            fetchApprovalComments()
           ]);
           
           setUsers(dbUsers as any);
@@ -118,6 +138,19 @@ const App: React.FC = () => {
           if (settingsData) setSystemSettings(settingsData);
           if (squadsData.length > 0) setSquads(squadsData as any);
           if (cardsData.length > 0) setCreditCards(cardsData as any);
+          if (notifsData.length > 0) setNotifications(notifsData as any);
+          
+          if (approvalsData.length > 0) {
+            // Reconstruct batches with items and comments
+            const reconstructedBatches = approvalsData.map(batch => {
+              const items = (approvalItemsData as any[]).filter(i => i.batchId === batch.id).map(item => {
+                const comments = (approvalCommentsData as any[]).filter(c => c.itemId === item.id);
+                return { ...item, comments };
+              });
+              return { ...batch, items };
+            });
+            setApprovalBatches(reconstructedBatches as any);
+          }
         } else {
           console.warn('Conexão com Supabase falhou, usando dados mock.');
         }
@@ -452,6 +485,22 @@ const App: React.FC = () => {
                   if (view === 'crm' && refId) setSelectedLeadId(refId);
                   if (view === 'finance' && refId) setSelectedTransactionId(refId);
                 }}
+                onSaveTask={async (task) => {
+                    const result = await saveTask(task);
+                    if (result.success) {
+                        setTasks(prev => {
+                            const exists = prev.some(t => t.id === task.id);
+                            if (exists) return prev.map(t => t.id === task.id ? task : t);
+                            return [...prev, task];
+                        });
+                    }
+                }}
+                onDeleteTask={async (id) => {
+                    const result = await deleteTask(id);
+                    if (result.success) {
+                        setTasks(prev => prev.filter(t => t.id !== id));
+                    }
+                }}
               />
             )}
             {currentView === 'crm' && (
@@ -477,6 +526,10 @@ const App: React.FC = () => {
                   if (view === 'crm' && refId) setSelectedLeadId(refId);
                   if (view === 'finance' && refId) setSelectedTransactionId(refId);
                 }}
+                onSaveLead={saveLead}
+                onDeleteLead={deleteLead}
+                onSaveClient={saveClient}
+                onSaveNotification={saveNotification}
               />
             )}
             {currentView === 'requisitions' && <Requisitions requisitions={requisitions} setRequisitions={setRequisitions} currentUser={currentUser} users={users} setNotifications={setNotifications} setTransactions={setFinancialTransactions} clients={clients} />}
@@ -528,7 +581,7 @@ const App: React.FC = () => {
                 tasks={tasks} 
                 setTasks={setTasks} 
                 users={users} 
-                squads={initialSquads} 
+                squads={squads} 
                 clients={clients} 
                 currentUser={currentUser} 
                 setNotifications={setNotifications} 
@@ -543,7 +596,22 @@ const App: React.FC = () => {
             {currentView === 'catalog' && <ServiceCatalog services={services} setServices={setServices} currentUser={currentUser} openConfirm={openConfirm} />}
             {currentView === 'teams' && <TeamManagement users={users} setUsers={setUsers} squads={squads} setSquads={setSquads} openConfirm={openConfirm} />}
             {currentView === 'permissions' && <PermissionsManager permissions={rolePermissions} setPermissions={setRolePermissions} openConfirm={openConfirm} />}
-            {currentView === 'clients' && <ClientManagement clients={clients} setClients={setClients} squads={initialSquads} services={services} users={users} setUsers={setUsers} openConfirm={openConfirm} tasks={tasks} requisitions={requisitions} currentUser={currentUser} />}
+            {currentView === 'clients' && (
+              <ClientManagement 
+                clients={clients} 
+                setClients={setClients} 
+                squads={squads} 
+                services={services} 
+                users={users} 
+                setUsers={setUsers} 
+                openConfirm={openConfirm} 
+                tasks={tasks} 
+                requisitions={requisitions} 
+                currentUser={currentUser}
+                onSaveClient={saveClient}
+                onDeleteClient={deleteClient}
+              />
+            )}
             {currentView === 'system-admin' && (
               <SystemAdmin 
                 settings={systemSettings} 
@@ -566,6 +634,10 @@ const App: React.FC = () => {
                 setSelectedBatchId={setSelectedApprovalBatchId}
                 selectedItemId={selectedApprovalItemId}
                 setSelectedItemId={setSelectedApprovalItemId}
+                onSaveBatch={saveApprovalBatch}
+                onSaveItem={saveApprovalItem}
+                onSaveComment={saveApprovalComment}
+                onSaveNotification={saveNotification}
               />
             )}
             {currentView === 'help' && <HelpCenter currentUser={currentUser} />}
