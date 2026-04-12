@@ -115,6 +115,10 @@ const mapClient = (c: any): Client => ({
   financialContact: c.financial_contact,
   tags: c.tags || [],
   internalNotes: c.internal_notes,
+  classification: c.classification,
+  documentationLinks: c.documentation_links || [],
+  serviceIds: c.service_ids || [],
+  entryDate: c.entry_date,
   contacts: c.contacts || [],
   passwords: c.passwords || [],
   passwordLogs: c.password_logs || [],
@@ -240,8 +244,13 @@ export const saveClient = async (client: Partial<Client>) => {
     financial_contact: client.financialContact,
     tags: client.tags,
     internal_notes: client.internalNotes,
+    classification: client.classification,
+    documentation_links: client.documentationLinks,
+    service_ids: client.serviceIds,
+    entry_date: client.entryDate,
     contacts: client.contacts,
     passwords: client.passwords,
+    password_logs: client.passwordLogs,
     system_accesses: client.systemAccesses,
     updated_at: Date.now()
   });
@@ -857,6 +866,23 @@ export const saveRequisition = async (req: Partial<Requisition>) => {
 };
 
 /**
+ * Mapeia um serviço da agência do Supabase para o formato do App
+ */
+const mapAgencyService = (s: any): AgencyService => ({
+  id: s.id,
+  name: s.name,
+  description: s.description || '',
+  type: s.type || 'RECURRENT',
+  category: s.category || '',
+  status: s.status || 'ACTIVE',
+  basePrice: s.base_price || 0,
+  deliveries: s.deliveries || [],
+  taskTemplates: s.task_templates || [],
+  tags: s.tags || [],
+  observations: s.observations || ''
+});
+
+/**
  * Busca todos os serviços da agência
  */
 export const fetchAgencyServices = async () => {
@@ -865,7 +891,7 @@ export const fetchAgencyServices = async () => {
     console.error('Erro ao buscar serviços:', error);
     return [];
   }
-  return data || [];
+  return (data || []).map(mapAgencyService);
 };
 
 /**
@@ -883,7 +909,8 @@ export const saveAgencyService = async (service: Partial<AgencyService>) => {
     deliveries: service.deliveries,
     task_templates: service.taskTemplates,
     tags: service.tags,
-    observations: service.observations
+    observations: service.observations,
+    updated_at: Date.now()
   });
 
   if (error) {
@@ -976,7 +1003,7 @@ export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
     client_id: batch.clientId,
     status: batch.status,
     items: batch.items,
-    created_at: batch.createdAt,
+    created_at: batch.createdAt || Date.now(),
     updated_at: Date.now()
   });
 

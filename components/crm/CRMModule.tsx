@@ -366,6 +366,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                             onNewLead={(stageId) => { setEditingLead({ stageId }); setIsModalOpen(true); }}
                             onWinLead={(l) => handleSaveLead({...l, status: 'WON'})}
                             onLoseLead={(l) => { setEditingLead(l); setIsModalOpen(true); }}
+                            onSaveLead={onSaveLead}
                             externalSearchTerm={pipelineSearchTerm}
                         />
                     </div>

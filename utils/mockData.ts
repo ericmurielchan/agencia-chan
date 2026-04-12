@@ -703,10 +703,6 @@ export const initialAssets: Asset[] = [
     { id: 'as3', name: 'Licença Adobe Creative Cloud', category: 'SOFTWARE', purchaseDate: '2024-01-01', purchaseValue: 2500, currentValue: 2500, status: 'ACTIVE' }
 ];
 
-export const initialCashSessions: CashRegisterSession[] = [
-    { id: 'cs1', openedAt: new Date().toISOString(), openedBy: 'u3', initialAmount: 500, status: 'OPEN' }
-];
+export const initialCashSessions: CashRegisterSession[] = [];
 
-export const initialCashMovements: CashMovement[] = [
-    { id: 'cm1', sessionId: 'cs1', type: 'IN', amount: 150, description: 'Venda Avulsa', timestamp: new Date().toISOString(), category: 'SALE' }
-];
+export const initialCashMovements: CashMovement[] = [];

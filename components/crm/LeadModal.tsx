@@ -98,6 +98,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             type: newTask.type || 'TASK',
             completed: false,
             dueDate: newTask.dueDate,
+            time: newTask.time,
             createdAt: Date.now()
         };
         setFormData({ ...formData, tasks: [...(formData.tasks || []), task] });
@@ -329,6 +330,12 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                             value={newTask.dueDate}
                                             onChange={e => setNewTask({...newTask, dueDate: e.target.value})}
                                         />
+                                        <input 
+                                            type="time"
+                                            className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 transition-all" 
+                                            value={newTask.time}
+                                            onChange={e => setNewTask({...newTask, time: e.target.value})}
+                                        />
                                         <button 
                                             onClick={addTask}
                                             className="bg-indigo-600 text-white p-3 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20"
@@ -353,6 +360,12 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                                     <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-slate-400">
                                                         <Calendar size={12} />
                                                         {new Date(task.dueDate).toLocaleDateString()}
+                                                        {task.time && (
+                                                            <>
+                                                                <Clock size={12} className="ml-1" />
+                                                                {task.time}
+                                                            </>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>

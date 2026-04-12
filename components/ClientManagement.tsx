@@ -66,13 +66,13 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           status: editingClient.status || 'ACTIVE',
           isRecurring: editingClient.isRecurring || false,
           level: editingClient.level || 'BASIC',
-          contacts: [],
-          passwords: [],
-          passwordLogs: [],
-          documentationLinks: [],
-          tags: [],
+          contacts: editingClient.contacts || [],
+          passwords: editingClient.passwords || [],
+          passwordLogs: editingClient.passwordLogs || [],
+          documentationLinks: editingClient.documentationLinks || [],
+          tags: editingClient.tags || [],
           systemAccesses: editingClient.systemAccesses || [],
-          entryDate: new Date().toISOString().split('T')[0]
+          entryDate: editingClient.entryDate || new Date().toISOString().split('T')[0]
       } as Client;
 
       if (onSaveClient) {

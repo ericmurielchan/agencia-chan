@@ -95,7 +95,7 @@ interface FinancialsProps {
     onSaveCashMovement?: (movement: Partial<CashMovement>) => Promise<void>;
 }
 
-type TabType = 'DASHBOARD' | 'ACCOUNTS' | 'CARDS' | 'TRANSACTIONS' | 'INVOICES' | 'CASH_REGISTER' | 'STOCK' | 'ASSETS' | 'REPORTS';
+type TabType = 'DASHBOARD' | 'ACCOUNTS' | 'CARDS' | 'TRANSACTIONS' | 'INVOICES' | 'STOCK' | 'ASSETS' | 'REPORTS';
 
 export const Financials: React.FC<FinancialsProps> = ({
     bankAccounts,
@@ -135,6 +135,7 @@ export const Financials: React.FC<FinancialsProps> = ({
     const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
     const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
+    const [selectedPeriod, setSelectedPeriod] = useState<'TODAY' | '7DAYS' | '30DAYS' | '6MONTHS' | 'CUSTOM'>('30DAYS');
     
     // Period Filter State
     const [startDate, setStartDate] = useState(() => {
@@ -145,6 +146,35 @@ export const Financials: React.FC<FinancialsProps> = ({
         const d = new Date();
         return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
     });
+
+    useEffect(() => {
+        const now = new Date();
+        let start = new Date();
+        let end = new Date();
+
+        switch (selectedPeriod) {
+            case 'TODAY':
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+                break;
+            case '7DAYS':
+                start.setDate(now.getDate() - 7);
+                break;
+            case '30DAYS':
+                start.setDate(now.getDate() - 30);
+                break;
+            case '6MONTHS':
+                start.setMonth(now.getMonth() - 6);
+                break;
+            case 'CUSTOM':
+                return; // Don't update automatically
+        }
+
+        if (selectedPeriod !== 'CUSTOM') {
+            setStartDate(start.toISOString().split('T')[0]);
+            setEndDate(end.toISOString().split('T')[0]);
+        }
+    }, [selectedPeriod]);
 
     const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -273,8 +303,43 @@ export const Financials: React.FC<FinancialsProps> = ({
             
         const cardDebt = creditCards.reduce((acc, curr) => acc + (curr.limit - curr.availableLimit), 0);
 
-        return { totalBalance, monthlyIncome, monthlyExpense, cardDebt };
-    }, [bankAccounts, transactions, creditCards, startDate, endDate]);
+        const activeAssetsValue = assets
+            .filter(a => a.status === 'ACTIVE')
+            .reduce((acc, curr) => acc + (curr.currentValue || 0), 0);
+            
+        const disposedAssetsValue = assets
+            .filter(a => a.status === 'DISPOSED')
+            .reduce((acc, curr) => acc + (curr.currentValue || 0), 0);
+
+        return { totalBalance, monthlyIncome, monthlyExpense, cardDebt, activeAssetsValue, disposedAssetsValue };
+    }, [bankAccounts, transactions, creditCards, assets, startDate, endDate]);
+
+    const handleDownloadReport = () => {
+        const headers = ['Data', 'Descrição', 'Tipo', 'Valor', 'Status', 'Categoria'];
+        const rows = filteredTransactions.map(t => [
+            t.date.split('-').reverse().join('/'),
+            t.description,
+            t.type === 'INCOME' ? 'Receita' : 'Despesa',
+            t.amount.toString(),
+            t.status === 'PAID' ? 'Pago' : 'Pendente',
+            initialCategories.find(c => c.id === t.categoryId)?.name || 'Outros'
+        ]);
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(r => r.join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `relatorio_financeiro_${startDate}_${endDate}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const filteredInvoices = useMemo(() => {
         return cardInvoices
@@ -930,7 +995,6 @@ export const Financials: React.FC<FinancialsProps> = ({
                                         { id: 'CARDS', label: 'Cartões', icon: CardIcon },
                                         { id: 'TRANSACTIONS', label: 'Transações', icon: History },
                                         { id: 'INVOICES', label: 'Faturas', icon: FileText },
-                                        { id: 'CASH_REGISTER', label: 'Caixa', icon: Calculator },
                                         { id: 'STOCK', label: 'Estoque', icon: Package },
                                         { id: 'ASSETS', label: 'Ativos', icon: Box },
                                         { id: 'REPORTS', label: 'Relatórios', icon: BarChart3 },
@@ -964,7 +1028,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                             exit={{ opacity: 0, y: -20 }}
                             className="space-y-6"
                         >
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Wallet size={80} className="text-blue-500" /></div>
                                     <p className="text-blue-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Saldo em Contas</p>
@@ -991,6 +1055,20 @@ export const Financials: React.FC<FinancialsProps> = ({
                                     <p className="text-pink-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Dívida Cartões</p>
                                     <h3 className="text-3xl font-black tracking-tighter">R$ {(stats.cardDebt || 0).toLocaleString('pt-BR')}</h3>
                                     <div className="mt-4 h-1 w-12 bg-pink-400 rounded-full opacity-40 group-hover:w-full transition-all duration-500" />
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Box size={80} className="text-purple-500" /></div>
+                                    <p className="text-purple-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Saldo de Ativos</p>
+                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {(stats.activeAssetsValue || 0).toLocaleString('pt-BR')}</h3>
+                                    <div className="mt-4 h-1 w-12 bg-purple-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Trash2 size={80} className="text-slate-400" /></div>
+                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Ativo Cancelado</p>
+                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {(stats.disposedAssetsValue || 0).toLocaleString('pt-BR')}</h3>
+                                    <div className="mt-4 h-1 w-12 bg-slate-400 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
                                 </div>
                             </div>
 
@@ -1385,99 +1463,6 @@ export const Financials: React.FC<FinancialsProps> = ({
                             </div>
                         </motion.div>
                     )}
-                    {activeTab === 'CASH_REGISTER' && (
-                        <motion.div 
-                            key="cash_register"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            {!currentCashSession ? (
-                                <div className="bg-white p-12 rounded-[40px] border border-slate-100 shadow-premium text-center">
-                                    <Calculator size={64} className="mx-auto text-slate-200 mb-6" />
-                                    <h3 className="text-2xl font-black text-slate-800 mb-2">Caixa Fechado</h3>
-                                    <p className="text-slate-400 font-bold mb-8">Abra o caixa para começar a registrar movimentações em dinheiro.</p>
-                                    <button 
-                                        onClick={handleOpenCashRegister}
-                                        className="px-8 py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-                                    >
-                                        Abrir Caixa Agora
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium">
-                                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Valor Inicial</p>
-                                            <h4 className="text-2xl font-black text-slate-800">R$ {(currentCashSession.initialAmount || 0).toLocaleString('pt-BR')}</h4>
-                                        </div>
-                                        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium">
-                                            <p className="text-emerald-500 text-[10px] font-black uppercase tracking-widest mb-1">Entradas</p>
-                                            <h4 className="text-2xl font-black text-emerald-600">R$ {sessionMovements.filter(m => m.type === 'IN').reduce((acc, m) => acc + m.amount, 0).toLocaleString('pt-BR')}</h4>
-                                        </div>
-                                        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium">
-                                            <p className="text-red-500 text-[10px] font-black uppercase tracking-widest mb-1">Saídas</p>
-                                            <h4 className="text-2xl font-black text-red-600">R$ {sessionMovements.filter(m => m.type === 'OUT').reduce((acc, m) => acc + m.amount, 0).toLocaleString('pt-BR')}</h4>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
-                                        <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
-                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                                                <History size={18} className="text-pink-500" /> Movimentações do Dia
-                                            </h3>
-                                            <div className="flex gap-3">
-                                                <button 
-                                                    onClick={() => setIsCashMovementModalOpen(true)}
-                                                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all"
-                                                >
-                                                    <Plus size={14} /> Nova Movimentação
-                                                </button>
-                                                <button 
-                                                    onClick={handleCloseCashRegister}
-                                                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all"
-                                                >
-                                                    <X size={14} /> Fechar Caixa
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead>
-                                                    <tr className="bg-slate-50/50">
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora</th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-50">
-                                                    {sessionMovements.map(m => (
-                                                        <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
-                                                            <td className="px-6 py-4 text-xs font-bold text-slate-500">{new Date(m.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
-                                                            <td className="px-6 py-4 text-xs font-black text-slate-800">{m.description}</td>
-                                                            <td className="px-6 py-4">
-                                                                <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest">{m.category}</span>
-                                                            </td>
-                                                            <td className={`px-6 py-4 text-right text-xs font-black ${m.type === 'IN' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                                {m.type === 'IN' ? '+' : '-'} R$ {(m.amount || 0).toLocaleString('pt-BR')}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                    {sessionMovements.length === 0 && (
-                                                        <tr>
-                                                            <td colSpan={4} className="px-6 py-12 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma movimentação registrada</td>
-                                                        </tr>
-                                                    )}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </motion.div>
-                    )}
 
                     {activeTab === 'STOCK' && (
                         <motion.div 
@@ -1625,14 +1610,49 @@ export const Financials: React.FC<FinancialsProps> = ({
                             exit={{ opacity: 0, scale: 0.95 }}
                             className="space-y-6"
                         >
+                            {/* Period Selector */}
+                            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-wrap items-center gap-4">
+                                <div className="flex bg-slate-100 p-1 rounded-xl">
+                                    {(['TODAY', '7DAYS', '30DAYS', '6MONTHS', 'CUSTOM'] as const).map(p => (
+                                        <button
+                                            key={p}
+                                            onClick={() => setSelectedPeriod(p)}
+                                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${selectedPeriod === p ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            {p === 'TODAY' ? 'Hoje' : p === '7DAYS' ? '7 Dias' : p === '30DAYS' ? '30 Dias' : p === '6MONTHS' ? '6 Meses' : 'Personalizado'}
+                                        </button>
+                                    ))}
+                                </div>
+                                {selectedPeriod === 'CUSTOM' && (
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="date" 
+                                            value={startDate} 
+                                            onChange={e => setStartDate(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-slate-400"
+                                        />
+                                        <span className="text-slate-400 font-black text-[10px]">ATÉ</span>
+                                        <input 
+                                            type="date" 
+                                            value={endDate} 
+                                            onChange={e => setEndDate(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-slate-400"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <div className="lg:col-span-2 bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
                                     <div className="flex items-center justify-between mb-8">
                                         <div>
                                             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Fluxo de Caixa</h3>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Receitas vs Despesas (Últimos 15 dias)</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Receitas vs Despesas no Período</p>
                                         </div>
-                                        <button className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all">
+                                        <button 
+                                            onClick={handleDownloadReport}
+                                            className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all"
+                                        >
                                             <Download size={18} />
                                         </button>
                                     </div>
@@ -1672,47 +1692,85 @@ export const Financials: React.FC<FinancialsProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="bg-slate-900 p-8 rounded-[40px] border border-slate-800 shadow-xl text-white relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-8 opacity-10">
-                                        <Cpu size={120} />
-                                    </div>
-                                    <div className="relative z-10">
-                                        <div className="flex items-center gap-3 mb-8">
-                                            <div className="p-3 bg-pink-500 rounded-2xl shadow-lg shadow-pink-500/20">
-                                                <BarChart3 size={24} />
+                                <div className="space-y-6">
+                                    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Resumo do Período</h4>
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-500">Receitas</span>
+                                                <span className="text-sm font-black text-emerald-600">R$ {transactions.filter(t => t.type === 'INCOME' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</span>
                                             </div>
-                                            <h3 className="text-lg font-black uppercase tracking-tight">IA Insights</h3>
-                                        </div>
-                                        
-                                        <div className="space-y-6">
-                                            {aiAnalysis ? (
-                                                <div className="text-sm font-medium leading-relaxed text-slate-300">
-                                                    {aiAnalysis.split('\n').map((line, i) => (
-                                                        <p key={i} className="mb-2">{line}</p>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <div className="py-12 text-center">
-                                                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">Analise sua saúde financeira com inteligência artificial</p>
-                                                    <button 
-                                                        onClick={handleAiAnalysis}
-                                                        disabled={isAiAnalysisLoading}
-                                                        className="w-full py-4 bg-pink-600 hover:bg-pink-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-pink-600/20 disabled:opacity-50"
-                                                    >
-                                                        {isAiAnalysisLoading ? 'Analisando...' : 'Gerar Relatório IA'}
-                                                    </button>
-                                                </div>
-                                            )}
-                                            {aiAnalysis && (
-                                                <button 
-                                                    onClick={() => setAiAnalysis(null)}
-                                                    className="text-[10px] font-black text-pink-400 uppercase tracking-widest hover:text-pink-300 transition-colors"
-                                                >
-                                                    Limpar Análise
-                                                </button>
-                                            )}
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-500">Despesas</span>
+                                                <span className="text-sm font-black text-red-600">R$ {transactions.filter(t => t.type === 'EXPENSE' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</span>
+                                            </div>
+                                            <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+                                                <span className="text-xs font-black text-slate-800">Saldo Líquido</span>
+                                                <span className={`text-sm font-black ${transactions.filter(t => t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + (t.type === 'INCOME' ? t.amount : -t.amount), 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                    R$ {transactions.filter(t => t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + (t.type === 'INCOME' ? t.amount : -t.amount), 0).toLocaleString()}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    <div className="bg-slate-900 p-6 rounded-[32px] shadow-xl text-white">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Patrimônio & Estoque</h4>
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-300">Valor em Estoque</span>
+                                                <span className="text-sm font-black text-white">R$ {stock.reduce((acc, item) => acc + (item.quantity * (item.price || 0)), 0).toLocaleString()}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-300">Valor em Ativos</span>
+                                                <span className="text-sm font-black text-white">R$ {assets.reduce((acc, asset) => acc + (asset.currentValue || 0), 0).toLocaleString()}</span>
+                                            </div>
+                                            <div className="pt-4 border-t border-slate-800 flex justify-between items-center">
+                                                <span className="text-xs font-black text-slate-100">Total Imobilizado</span>
+                                                <span className="text-sm font-black text-blue-400">
+                                                    R$ {(stock.reduce((acc, item) => acc + (item.quantity * (item.price || 0)), 0) + assets.reduce((acc, asset) => acc + (asset.currentValue || 0), 0)).toLocaleString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Detailed Reports Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><TrendingUp size={16} /></div>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novas Vendas</h4>
+                                    </div>
+                                    <p className="text-2xl font-black text-slate-800">R$ {transactions.filter(t => t.type === 'INCOME' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{transactions.filter(t => t.type === 'INCOME' && t.date >= startDate && t.date <= endDate).length} transações</p>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="p-2 bg-red-50 text-red-600 rounded-xl"><TrendingDown size={16} /></div>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Despesas</h4>
+                                    </div>
+                                    <p className="text-2xl font-black text-slate-800">R$ {transactions.filter(t => t.type === 'EXPENSE' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{transactions.filter(t => t.type === 'EXPENSE' && t.date >= startDate && t.date <= endDate).length} transações</p>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><FileText size={16} /></div>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faturas</h4>
+                                    </div>
+                                    <p className="text-2xl font-black text-slate-800">R$ {cardInvoices.filter(i => i.month === new Date(startDate).getMonth() + 1).reduce((acc, i) => acc + i.amount, 0).toLocaleString()}</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Neste mês</p>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="p-2 bg-amber-50 text-amber-600 rounded-xl"><Package size={16} /></div>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Itens em Alerta</h4>
+                                    </div>
+                                    <p className="text-2xl font-black text-slate-800">{stock.filter(i => i.quantity <= i.minQuantity).length}</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Abaixo do estoque mínimo</p>
                                 </div>
                             </div>
                         </motion.div>

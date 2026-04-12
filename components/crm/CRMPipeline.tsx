@@ -18,11 +18,12 @@ interface CRMPipelineProps {
     onNewLead: (stageId: string) => void;
     onWinLead: (lead: Lead) => void;
     onLoseLead: (lead: Lead) => void;
+    onSaveLead?: (lead: Lead) => Promise<void>;
     externalSearchTerm?: string;
 }
 
 export const CRMPipeline: React.FC<CRMPipelineProps> = ({ 
-    leads, setLeads, stages, users, currentUser, onEditLead, onNewLead, onWinLead, onLoseLead, externalSearchTerm = ''
+    leads, setLeads, stages, users, currentUser, onEditLead, onNewLead, onWinLead, onLoseLead, onSaveLead, externalSearchTerm = ''
 }) => {
     const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
 
@@ -71,6 +72,10 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({
                 // Special handling for WON/LOST if stages represent that
                 if (stageId === 'WON') onWinLead(updatedLead);
                 if (stageId === 'LOST') onLoseLead(updatedLead);
+                
+                if (onSaveLead) {
+                    onSaveLead(updatedLead);
+                }
                 
                 return updatedLead;
             }
