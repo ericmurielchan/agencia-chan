@@ -19,26 +19,26 @@ const DEFAULT_PERMISSIONS: RolePermissions = {
     'ADMIN': [
         'dashboard', 'kanban', 'productivity', 'teams', 'clients', 'catalog', 
         'crm', 'finance', 'permissions', 'system-admin', 
-        'requisitions', 'help',
+        'requisitions', 'help', 'approvals', 'stock', 'assets',
         'action:delete', 'action:export', 'action:approve_budget', 'action:manage_users'
     ],
     'MANAGER': [
         'dashboard', 'kanban', 'productivity', 'teams', 'clients', 'catalog', 
-        'crm', 'requisitions', 'help',
-        'action:approve_budget'
+        'crm', 'finance', 'requisitions', 'help', 'approvals', 'stock', 'assets',
+        'action:approve_budget', 'action:export'
     ],
     'EMPLOYEE': [
-        'kanban', 'productivity', 'requisitions', 'help'
+        'kanban', 'productivity', 'requisitions', 'help', 'approvals'
     ],
     'FREELANCER': [
         'dashboard', 'kanban', 'crm', 'requisitions', 'help'
     ],
     'FINANCE': [
-        'dashboard', 'finance', 'clients', 'requisitions', 'help',
+        'dashboard', 'finance', 'clients', 'requisitions', 'help', 'approvals', 'stock', 'assets',
         'action:approve_budget', 'action:export'
     ],
     'CLIENT': [
-        'client-portal', 'help'
+        'client-portal', 'help', 'approvals'
     ]
 };
 
@@ -51,6 +51,7 @@ const PAGE_MODULES = [
             { id: 'crm', label: 'CRM / Vendas', desc: 'Pipeline de oportunidades' },
             { id: 'client-portal', label: 'Portal do Cliente', desc: 'Interface exclusiva do cliente' },
             { id: 'requisitions', label: 'Solicitações', desc: 'Criar pedidos de compra' },
+            { id: 'approvals', label: 'Aprovações', desc: 'Fluxo de validação de lotes' },
         ]
     },
     {
@@ -60,6 +61,8 @@ const PAGE_MODULES = [
             { id: 'dashboard', label: 'Dashboard Geral', desc: 'KPIs globais da agência' },
             { id: 'productivity', label: 'Produtividade', desc: 'Relatórios de time' },
             { id: 'finance', label: 'Financeiro', desc: 'Fluxo de caixa e DRE' },
+            { id: 'stock', label: 'Estoque', desc: 'Controle de materiais e insumos' },
+            { id: 'assets', label: 'Ativos', desc: 'Gestão de patrimônio' },
         ]
     },
     {
@@ -70,7 +73,8 @@ const PAGE_MODULES = [
             { id: 'clients', label: 'Gestão de Clientes', desc: 'Cadastros e contratos' },
             { id: 'catalog', label: 'Catálogo', desc: 'Produtos e serviços' },
             { id: 'permissions', label: 'Controle de Acessos', desc: 'Esta tela (RBAC)' },
-            { id: 'system-admin', label: 'Config. Sistema', desc: 'Branding e Cores' }
+            { id: 'system-admin', label: 'Config. Sistema', desc: 'Branding e Cores' },
+            { id: 'help', label: 'Central de Ajuda', desc: 'Tutoriais e suporte' }
         ]
     }
 ];

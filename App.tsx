@@ -589,7 +589,7 @@ const App: React.FC = () => {
                 }}
               />
             )}
-            {currentView === 'finance' && (
+            {(currentView === 'finance' || currentView === 'stock' || currentView === 'assets') && (
               <Financials 
                 bankAccounts={bankAccounts}
                 setBankAccounts={setBankAccounts}
@@ -680,6 +680,7 @@ const App: React.FC = () => {
                         setCashMovements(prev => [...prev, movement as CashMovement]);
                     }
                 }}
+                initialTab={currentView === 'stock' ? 'STOCK' : currentView === 'assets' ? 'ASSETS' : 'DASHBOARD'}
               />
             )}
             {currentView === 'client-portal' && (

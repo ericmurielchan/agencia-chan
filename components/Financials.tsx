@@ -93,6 +93,7 @@ interface FinancialsProps {
     onDeleteAsset?: (id: string) => Promise<void>;
     onSaveCashSession?: (session: Partial<CashRegisterSession>) => Promise<void>;
     onSaveCashMovement?: (movement: Partial<CashMovement>) => Promise<void>;
+    initialTab?: TabType;
 }
 
 type TabType = 'DASHBOARD' | 'ACCOUNTS' | 'CARDS' | 'TRANSACTIONS' | 'INVOICES' | 'STOCK' | 'ASSETS' | 'REPORTS';
@@ -130,9 +131,16 @@ export const Financials: React.FC<FinancialsProps> = ({
     onSaveAsset,
     onDeleteAsset,
     onSaveCashSession,
-    onSaveCashMovement
+    onSaveCashMovement,
+    initialTab
 }) => {
-    const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
+    const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'DASHBOARD');
+
+    useEffect(() => {
+        if (initialTab) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab]);
     const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
     const [selectedPeriod, setSelectedPeriod] = useState<'TODAY' | '7DAYS' | '30DAYS' | '6MONTHS' | 'CUSTOM'>('30DAYS');

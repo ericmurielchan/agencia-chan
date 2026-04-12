@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Kanban, Users, DollarSign, Briefcase, LogOut, 
   PieChart, BarChart2, Shield, HeartHandshake, ShoppingBag, 
   ShoppingCart, Settings, HelpCircle, ChevronLeft, ChevronRight, X,
-  CheckCircle2
+  CheckCircle2, Package, Box
 } from 'lucide-react';
 import { Role, RolePermissions, SystemSettings } from '../types';
 
@@ -47,6 +47,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'crm', label: 'CRM / Vendas', icon: Briefcase },
     { id: 'approvals', label: 'Aprovações', icon: CheckCircle2 },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
+    { id: 'stock', label: 'Estoque', icon: Package },
+    { id: 'assets', label: 'Ativos', icon: Box },
     { id: 'permissions', label: 'Acessos (Admin)', icon: Shield },
     { id: 'system-admin', label: 'Config. Sistema', icon: Settings },
     { id: 'help', label: 'Central de Ajuda', icon: HelpCircle },

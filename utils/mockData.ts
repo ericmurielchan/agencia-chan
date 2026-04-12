@@ -358,13 +358,13 @@ export const initialRolePermissions: RolePermissions = {
     'ADMIN': [
         'dashboard', 'kanban', 'productivity', 'teams', 'clients', 'catalog', 
         'crm', 'finance', 'permissions', 'system-admin', 
-        'requisitions', 'help', 'approvals',
+        'requisitions', 'help', 'approvals', 'stock', 'assets',
         'action:delete', 'action:export', 'action:approve_budget', 'action:manage_users'
     ],
     'MANAGER': [
         'dashboard', 'kanban', 'productivity', 'teams', 'clients', 'catalog', 
-        'crm', 'finance', 'requisitions', 'help', 'approvals',
-        'action:approve_budget'
+        'crm', 'finance', 'requisitions', 'help', 'approvals', 'stock', 'assets',
+        'action:approve_budget', 'action:export'
     ],
     'EMPLOYEE': [
         'kanban', 'productivity', 'requisitions', 'help', 'approvals'
@@ -373,7 +373,7 @@ export const initialRolePermissions: RolePermissions = {
         'dashboard', 'kanban', 'crm', 'requisitions', 'help'
     ],
     'FINANCE': [
-        'dashboard', 'finance', 'clients', 'requisitions', 'help', 'approvals',
+        'dashboard', 'finance', 'clients', 'requisitions', 'help', 'approvals', 'stock', 'assets',
         'action:approve_budget', 'action:export'
     ],
     'CLIENT': [
