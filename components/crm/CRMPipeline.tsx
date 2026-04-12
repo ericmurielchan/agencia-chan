@@ -138,7 +138,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({
                                     <div className="flex justify-between items-center pt-3 sm:pt-4 border-t border-slate-50">
                                         <div className="flex items-center gap-1 text-slate-800 font-black text-xs sm:text-sm">
                                             <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold">R$</span>
-                                            {lead.value.toLocaleString()}
+                                            {(lead.value || 0).toLocaleString()}
                                         </div>
                                         <div className="flex items-center gap-1">
                                             {lead.temperature === 'HOT' && <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500" title="Quente" />}
@@ -170,7 +170,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({
                         <div className="p-3 sm:p-4 border-t border-slate-100 bg-white/50 rounded-b-[24px] sm:rounded-b-[32px]">
                             <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">
                                 <span>Total</span>
-                                <span className="text-slate-800">R$ {filteredLeads.filter(l => l.stageId === stage.id).reduce((acc, l) => acc + l.value, 0).toLocaleString()}</span>
+                                <span className="text-slate-800">R$ {(filteredLeads.filter(l => l.stageId === stage.id).reduce((acc, l) => acc + (l.value || 0), 0)).toLocaleString()}</span>
                             </div>
                         </div>
                     </div>

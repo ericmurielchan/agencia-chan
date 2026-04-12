@@ -407,7 +407,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                                     </div>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4">
-                                                    <span className="text-xs sm:text-sm font-black text-slate-800">R$ {lead.value.toLocaleString()}</span>
+                                                    <span className="text-xs sm:text-sm font-black text-slate-800">R$ {(lead.value || 0).toLocaleString()}</span>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4">
                                                     <span className="px-2 sm:px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest">

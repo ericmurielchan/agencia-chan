@@ -229,7 +229,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     if (stats.delinquency > 0) {
         list.push({ 
             type: 'FINANCE', 
-            message: `Inadimplência: R$ ${stats.delinquency.toLocaleString('pt-BR')}`, 
+            message: `Inadimplência: R$ ${(stats.delinquency || 0).toLocaleString('pt-BR')}`, 
             icon: AlertTriangle, 
             color: 'text-pink-500', 
             bg: 'bg-pink-50',
@@ -314,15 +314,15 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
             <>
                 <div onClick={() => setCurrentView('finance')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-emerald-200 transition-all">
                     <p className="text-emerald-500 text-[9px] font-black uppercase tracking-widest mb-1">Receita</p>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {stats.revenue.toLocaleString('pt-BR')}</h3>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {(stats.revenue || 0).toLocaleString('pt-BR')}</h3>
                 </div>
                 <div onClick={() => setCurrentView('finance')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-red-200 transition-all">
                     <p className="text-red-500 text-[9px] font-black uppercase tracking-widest mb-1">Despesas</p>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {stats.expenses.toLocaleString('pt-BR')}</h3>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {(stats.expenses || 0).toLocaleString('pt-BR')}</h3>
                 </div>
                 <div onClick={() => setCurrentView('finance')} className={`p-5 rounded-3xl border shadow-premium cursor-pointer transition-all ${stats.profit >= 0 ? 'bg-emerald-50 border-emerald-100 hover:border-emerald-300' : 'bg-red-50 border-red-100 hover:border-red-300'}`}>
                     <p className={`${stats.profit >= 0 ? 'text-emerald-600' : 'text-red-600'} text-[9px] font-black uppercase tracking-widest mb-1`}>Lucro</p>
-                    <h3 className={`text-xl font-black tracking-tighter ${stats.profit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {stats.profit.toLocaleString('pt-BR')}</h3>
+                    <h3 className={`text-xl font-black tracking-tighter ${stats.profit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>R$ {(stats.profit || 0).toLocaleString('pt-BR')}</h3>
                 </div>
             </>
         )}
@@ -336,7 +336,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
                 </div>
                 <div onClick={() => setCurrentView('crm')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-indigo-200 transition-all">
                     <p className="text-indigo-500 text-[9px] font-black uppercase tracking-widest mb-1">Em Negociação</p>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {stats.valueInNegotiation.toLocaleString('pt-BR')}</h3>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tighter">R$ {(stats.valueInNegotiation || 0).toLocaleString('pt-BR')}</h3>
                 </div>
                 <div onClick={() => setCurrentView('crm')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-amber-200 transition-all">
                     <p className="text-amber-500 text-[9px] font-black uppercase tracking-widest mb-1">Conversão</p>
@@ -373,7 +373,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
                       <div className="grid grid-cols-2 gap-4">
                           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                               <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Total Negociação</p>
-                              <p className="text-lg font-black text-slate-800">R$ {stats.valueInNegotiation.toLocaleString('pt-BR')}</p>
+                              <p className="text-lg font-black text-slate-800">R$ {(stats.valueInNegotiation || 0).toLocaleString('pt-BR')}</p>
                           </div>
                           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                               <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Taxa Conversão</p>
@@ -397,16 +397,16 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
                       <div className="space-y-6">
                           <div>
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Atual</p>
-                              <h3 className="text-3xl font-black tracking-tighter">R$ {stats.totalBalance.toLocaleString('pt-BR')}</h3>
+                              <h3 className="text-3xl font-black tracking-tighter">R$ {(stats.totalBalance || 0).toLocaleString('pt-BR')}</h3>
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                               <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700">
                                   <p className="text-[9px] font-black text-slate-400 uppercase mb-1">A Vencer (7D)</p>
-                                  <p className="text-lg font-black text-white">R$ {stats.accountsToPayNextDays.toLocaleString('pt-BR')}</p>
+                                  <p className="text-lg font-black text-white">R$ {(stats.accountsToPayNextDays || 0).toLocaleString('pt-BR')}</p>
                               </div>
                               <div onClick={() => setCurrentView('finance')} className="bg-red-900/30 p-4 rounded-2xl border border-red-900/50 cursor-pointer hover:bg-red-900/50 transition-all">
                                   <p className="text-[9px] font-black text-red-400 uppercase mb-1">Inadimplência</p>
-                                  <p className="text-lg font-black text-red-400">R$ {stats.delinquency.toLocaleString('pt-BR')}</p>
+                                  <p className="text-lg font-black text-red-400">R$ {(stats.delinquency || 0).toLocaleString('pt-BR')}</p>
                               </div>
                           </div>
                       </div>

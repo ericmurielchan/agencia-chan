@@ -968,28 +968,28 @@ export const Financials: React.FC<FinancialsProps> = ({
                                 <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Wallet size={80} className="text-blue-500" /></div>
                                     <p className="text-blue-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Saldo em Contas</p>
-                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {stats.totalBalance.toLocaleString('pt-BR')}</h3>
+                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {(stats.totalBalance || 0).toLocaleString('pt-BR')}</h3>
                                     <div className="mt-4 h-1 w-12 bg-blue-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingUp size={80} className="text-emerald-500" /></div>
                                     <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Receita no Período</p>
-                                    <h3 className="text-3xl font-black text-emerald-600 tracking-tighter">R$ {stats.monthlyIncome.toLocaleString('pt-BR')}</h3>
+                                    <h3 className="text-3xl font-black text-emerald-600 tracking-tighter">R$ {(stats.monthlyIncome || 0).toLocaleString('pt-BR')}</h3>
                                     <div className="mt-4 h-1 w-12 bg-emerald-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
                                 </div>
 
                                 <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
                                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingDown size={80} className="text-red-500" /></div>
                                     <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Despesa no Período</p>
-                                    <h3 className="text-3xl font-black text-red-600 tracking-tighter">R$ {stats.monthlyExpense.toLocaleString('pt-BR')}</h3>
+                                    <h3 className="text-3xl font-black text-red-600 tracking-tighter">R$ {(stats.monthlyExpense || 0).toLocaleString('pt-BR')}</h3>
                                     <div className="mt-4 h-1 w-12 bg-red-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
                                 </div>
 
                                 <div className="bg-slate-900 p-6 rounded-[32px] border border-slate-800 shadow-xl relative overflow-hidden group text-white">
                                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><CardIcon size={80} className="text-pink-400" /></div>
                                     <p className="text-pink-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Dívida Cartões</p>
-                                    <h3 className="text-3xl font-black tracking-tighter">R$ {stats.cardDebt.toLocaleString('pt-BR')}</h3>
+                                    <h3 className="text-3xl font-black tracking-tighter">R$ {(stats.cardDebt || 0).toLocaleString('pt-BR')}</h3>
                                     <div className="mt-4 h-1 w-12 bg-pink-400 rounded-full opacity-40 group-hover:w-full transition-all duration-500" />
                                 </div>
                             </div>
@@ -1014,7 +1014,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                                         <p className="text-[10px] text-slate-400 font-bold uppercase">{acc.bankName}</p>
                                                     </div>
                                                 </div>
-                                                <p className="text-sm font-black text-slate-700">R$ {acc.balance.toLocaleString('pt-BR')}</p>
+                                                <p className="text-sm font-black text-slate-700">R$ {(acc.balance || 0).toLocaleString('pt-BR')}</p>
                                             </div>
                                         ))}
                                     </div>
@@ -1048,7 +1048,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                                     </div>
                                                 </div>
                                                 <p className={`text-xs font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {tx.amount.toLocaleString('pt-BR')}
+                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {(tx.amount || 0).toLocaleString('pt-BR')}
                                                 </p>
                                             </div>
                                         ))}
@@ -1106,7 +1106,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-6">{acc.bankName}</p>
                                         <div className="pt-6 border-t border-slate-50">
                                             <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Saldo Atual</p>
-                                            <p className="text-2xl font-black text-slate-800">R$ {acc.balance.toLocaleString('pt-BR')}</p>
+                                            <p className="text-2xl font-black text-slate-800">R$ {(acc.balance || 0).toLocaleString('pt-BR')}</p>
                                         </div>
                                     </div>
                                 ))}
@@ -1167,7 +1167,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                             <div>
                                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2">
                                                     <span className="text-slate-400">Limite Utilizado</span>
-                                                    <span className="text-slate-800">R$ {(card.limit - card.availableLimit).toLocaleString('pt-BR')}</span>
+                                                    <span className="text-slate-800">R$ {((card.limit || 0) - (card.availableLimit || 0)).toLocaleString('pt-BR')}</span>
                                                 </div>
                                                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                                                     <div 
@@ -1179,11 +1179,11 @@ export const Financials: React.FC<FinancialsProps> = ({
                                             <div className="flex justify-between pt-4 border-t border-slate-50">
                                                 <div>
                                                     <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Disponível</p>
-                                                    <p className="text-lg font-black text-emerald-600">R$ {card.availableLimit.toLocaleString('pt-BR')}</p>
+                                                    <p className="text-lg font-black text-emerald-600">R$ {(card.availableLimit || 0).toLocaleString('pt-BR')}</p>
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Limite Total</p>
-                                                    <p className="text-lg font-black text-slate-800">R$ {card.limit.toLocaleString('pt-BR')}</p>
+                                                    <p className="text-lg font-black text-slate-800">R$ {(card.limit || 0).toLocaleString('pt-BR')}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -1318,7 +1318,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                                         <td className="px-6 py-4 text-right">
                                                             <div className="flex items-center justify-end gap-3">
                                                                 <p className={`text-sm font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {tx.amount.toLocaleString('pt-BR')}
+                                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {(tx.amount || 0).toLocaleString('pt-BR')}
                                                                 </p>
                                                                 <button 
                                                                     onClick={() => handleDeleteTransaction(tx)}
@@ -1371,7 +1371,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Valor</p>
-                                                <p className="text-xl font-black text-slate-800">R$ {inv.amount.toLocaleString('pt-BR')}</p>
+                                                <p className="text-xl font-black text-slate-800">R$ {(inv.amount || 0).toLocaleString('pt-BR')}</p>
                                             </div>
                                         </div>
                                     );
@@ -1410,7 +1410,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium">
                                             <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Valor Inicial</p>
-                                            <h4 className="text-2xl font-black text-slate-800">R$ {currentCashSession.initialAmount.toLocaleString('pt-BR')}</h4>
+                                            <h4 className="text-2xl font-black text-slate-800">R$ {(currentCashSession.initialAmount || 0).toLocaleString('pt-BR')}</h4>
                                         </div>
                                         <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium">
                                             <p className="text-emerald-500 text-[10px] font-black uppercase tracking-widest mb-1">Entradas</p>
@@ -1461,7 +1461,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                                                 <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest">{m.category}</span>
                                                             </td>
                                                             <td className={`px-6 py-4 text-right text-xs font-black ${m.type === 'IN' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                                {m.type === 'IN' ? '+' : '-'} R$ {m.amount.toLocaleString('pt-BR')}
+                                                                {m.type === 'IN' ? '+' : '-'} R$ {(m.amount || 0).toLocaleString('pt-BR')}
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -1599,7 +1599,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
                                             <div>
                                                 <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Valor Compra</p>
-                                                <p className="text-xs font-black text-slate-800">R$ {asset.purchaseValue.toLocaleString('pt-BR')}</p>
+                                                <p className="text-xs font-black text-slate-800">R$ {(asset.purchaseValue || 0).toLocaleString('pt-BR')}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Status</p>

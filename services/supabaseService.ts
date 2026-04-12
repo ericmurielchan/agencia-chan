@@ -243,7 +243,7 @@ export const saveClient = async (client: Partial<Client>) => {
     contacts: client.contacts,
     passwords: client.passwords,
     system_accesses: client.systemAccesses,
-    updated_at: new Date().toISOString()
+    updated_at: Date.now()
   });
 
   if (error) {
@@ -418,7 +418,7 @@ export const updateSystemSettings = async (settings: SystemSettings) => {
     favicon: settings.favicon,
     primary_color: settings.primaryColor,
     sidebar_color: settings.sidebarColor,
-    updated_at: new Date().toISOString()
+    updated_at: Date.now()
   });
   
   if (error) {
@@ -1077,7 +1077,7 @@ export const saveRolePermissions = async (permissions: RolePermissions) => {
   const { error } = await supabase.from('role_permissions').upsert({
     id: 1, // ID fixo para permissões globais
     permissions,
-    updated_at: new Date().toISOString()
+    updated_at: Date.now()
   });
 
   if (error) {

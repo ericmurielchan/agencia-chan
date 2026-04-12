@@ -99,8 +99,8 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
                         </span>
                     </div>
                     <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Receita Ganhos</p>
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">R$ {stats.valueWon.toLocaleString()}</h3>
-                    <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1 font-bold">Ticket Médio: R$ {stats.avgTicket.toLocaleString()}</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">R$ {(stats.valueWon || 0).toLocaleString()}</h3>
+                    <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1 font-bold">Ticket Médio: R$ {(stats.avgTicket || 0).toLocaleString()}</p>
                 </div>
 
                 <div className="bg-white p-4 sm:p-6 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">

@@ -212,7 +212,7 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                             <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
                                 <div>
                                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Valor Base</p>
-                                    <p className="text-lg font-black text-slate-800">R$ {service.basePrice.toLocaleString()}</p>
+                                    <p className="text-lg font-black text-slate-800">R$ {(service.basePrice || 0).toLocaleString()}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button 
