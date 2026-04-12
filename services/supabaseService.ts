@@ -1,6 +1,11 @@
 import { supabase } from '../lib/supabaseClient';
 import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads, initialCreditCards } from '../utils/mockData';
-import { User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount, FinancialTransaction, Notification as AppNotification, ApprovalBatch, ApprovalItem, ApprovalComment } from '../types';
+import { 
+  User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount,
+  FinancialTransaction, StockItem, Asset, CashRegisterSession, CashMovement,
+  Requisition, AgencyService, Notification, ApprovalBatch, ProductivityGoal,
+  RolePermissions
+} from '../types';
 
 /**
  * Mapeia uma squad do Supabase para o formato do App
@@ -158,12 +163,8 @@ export const fetchTasks = async () => {
  * Salva ou atualiza uma tarefa no banco de dados
  */
 export const saveTask = async (task: Partial<Task>) => {
-  // Se o ID for um timestamp temporário (mock), removemos para o Supabase gerar um novo ou tentamos converter
-  // No entanto, para o upsert funcionar como update, precisamos do ID real.
-  // Se for uma tarefa nova (ID gerado por Date.now()), o ideal é deixar o Supabase gerar o UUID.
-  const isNew = !task.id || task.id.startsWith('task-') || /^\d+$/.test(task.id);
-
-  const taskData: any = {
+  const { error } = await supabase.from('tasks').upsert({
+    id: task.id || undefined,
     client_id: task.clientId,
     title: task.title,
     description: task.description,
@@ -176,7 +177,7 @@ export const saveTask = async (task: Partial<Task>) => {
     is_tracking: task.isTracking,
     approval_status: task.approvalStatus,
     archived: task.archived,
-    created_at: task.createdAt ? new Date(task.createdAt).toISOString() : new Date().toISOString(),
+    created_at: task.createdAt || Date.now(),
     cover: task.cover,
     cover_type: task.coverType,
     cover_value: task.coverValue,
@@ -184,19 +185,13 @@ export const saveTask = async (task: Partial<Task>) => {
     checklists: task.checklists,
     comments: task.comments,
     history: task.history
-  };
-
-  if (!isNew) {
-    taskData.id = task.id;
-  }
-
-  const { data, error } = await supabase.from('tasks').upsert(taskData).select();
+  });
 
   if (error) {
-    console.error('Erro detalhado ao salvar tarefa:', error);
+    console.error('Erro ao salvar tarefa:', error);
     return { success: false, error };
   }
-  return { success: true, data: data?.[0] };
+  return { success: true };
 };
 
 /**
@@ -224,6 +219,53 @@ export const fetchClients = async () => {
 };
 
 /**
+ * Salva ou atualiza um cliente no banco de dados
+ */
+export const saveClient = async (client: Partial<Client>) => {
+  const { error } = await supabase.from('clients').upsert({
+    id: client.id || undefined,
+    name: client.name,
+    legal_name: client.legalName,
+    document: client.document,
+    status: client.status,
+    responsible_id: client.responsibleId,
+    squad_id: client.squadId,
+    monthly_value: client.monthlyValue,
+    is_recurring: client.isRecurring,
+    level: client.level,
+    summary: client.summary,
+    contract_url: client.contractUrl,
+    assets_folder_url: client.assetsFolderUrl,
+    contact_info: client.contact,
+    financial_contact: client.financialContact,
+    tags: client.tags,
+    internal_notes: client.internalNotes,
+    contacts: client.contacts,
+    passwords: client.passwords,
+    system_accesses: client.systemAccesses,
+    updated_at: new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar cliente:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um cliente do banco de dados
+ */
+export const deleteClient = async (id: string) => {
+  const { error } = await supabase.from('clients').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir cliente:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
  * Busca todos os leads do banco de dados
  */
 export const fetchLeads = async () => {
@@ -233,6 +275,53 @@ export const fetchLeads = async () => {
     return [];
   }
   return (data || []).map(mapLead);
+};
+
+/**
+ * Salva ou atualiza um lead no banco de dados
+ */
+export const saveLead = async (lead: Partial<Lead>) => {
+  const { error } = await supabase.from('leads').upsert({
+    id: lead.id || undefined,
+    name: lead.name,
+    company: lead.company,
+    value: lead.value,
+    stage_id: lead.stageId,
+    status: lead.status,
+    loss_reason_id: lead.lossReasonId,
+    email: lead.email,
+    phone: lead.phone,
+    priority: lead.priority,
+    temperature: lead.temperature,
+    responsible_id: lead.responsibleId,
+    notes: lead.notes,
+    tags: lead.tags,
+    source: lead.source,
+    rating: lead.rating,
+    tasks: lead.tasks,
+    history: lead.history,
+    last_contact: lead.lastContact,
+    created_at: lead.createdAt || Date.now(),
+    updated_at: Date.now()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar lead:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um lead do banco de dados
+ */
+export const deleteLead = async (id: string) => {
+  const { error } = await supabase.from('leads').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir lead:', error);
+    return { success: false, error };
+  }
+  return { success: true };
 };
 
 /**
@@ -261,6 +350,47 @@ export const fetchFinancialTransactions = async () => {
     recurrenceId: t.recurrence_id,
     createdAt: t.created_at || Date.now()
   }));
+};
+
+/**
+ * Salva ou atualiza uma transação financeira
+ */
+export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>) => {
+  const { error } = await supabase.from('financial_transactions').upsert({
+    id: t.id || undefined,
+    description: t.description,
+    amount: t.amount,
+    type: t.type,
+    date: t.date,
+    status: t.status,
+    category_id: t.categoryId,
+    bank_account_id: t.bankAccountId,
+    credit_card_id: t.creditCardId,
+    client_id: t.clientId,
+    squad_id: t.squadId,
+    responsible_id: t.responsibleId,
+    installments: t.installments,
+    recurrence_id: t.recurrenceId,
+    created_at: t.createdAt || Date.now()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar transação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui uma transação financeira
+ */
+export const deleteFinancialTransaction = async (id: string) => {
+  const { error } = await supabase.from('financial_transactions').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir transação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
 };
 
 /**
@@ -322,28 +452,21 @@ export const fetchBankAccounts = async () => {
  * Salva ou atualiza uma conta bancária
  */
 export const saveBankAccount = async (account: Partial<BankAccount>) => {
-  const isNew = !account.id || /^\d+$/.test(account.id);
-  
-  const accountData: any = {
+  const { error } = await supabase.from('bank_accounts').upsert({
+    id: account.id || undefined,
     name: account.name,
     type: account.type,
     bank_name: account.bankName,
     balance: account.balance,
     color: account.color,
     status: account.status
-  };
-
-  if (!isNew) {
-    accountData.id = account.id;
-  }
-
-  const { data, error } = await supabase.from('bank_accounts').upsert(accountData).select();
+  });
 
   if (error) {
-    console.error('Erro detalhado ao salvar conta:', error);
+    console.error('Erro ao salvar conta:', error);
     return { success: false, error };
   }
-  return { success: true, data: data?.[0] };
+  return { success: true };
 };
 
 /**
@@ -457,307 +580,6 @@ export const deleteSquad = async (id: string) => {
 };
 
 /**
- * Salva ou atualiza um lead no banco de dados
- */
-export const saveLead = async (lead: Partial<Lead>) => {
-  const { error } = await supabase.from('leads').upsert({
-    id: lead.id || undefined,
-    name: lead.name,
-    company: lead.company,
-    value: lead.value,
-    stage_id: lead.stageId,
-    status: lead.status,
-    email: lead.email,
-    phone: lead.phone,
-    priority: lead.priority,
-    temperature: lead.temperature,
-    responsible_id: lead.responsibleId,
-    notes: lead.notes,
-    tags: lead.tags,
-    source: lead.source,
-    loss_reason: lead.lossReasonId,
-    tasks: lead.tasks,
-    history: lead.history,
-    created_at: lead.createdAt ? new Date(lead.createdAt).toISOString() : new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  });
-
-  if (error) {
-    console.error('Erro ao salvar lead:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Exclui um lead do banco de dados
- */
-export const deleteLead = async (id: string) => {
-  const { error } = await supabase.from('leads').delete().eq('id', id);
-  if (error) {
-    console.error('Erro ao excluir lead:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Salva ou atualiza um cliente no banco de dados
- */
-export const saveClient = async (client: Partial<Client>) => {
-  const { error } = await supabase.from('clients').upsert({
-    id: client.id || undefined,
-    name: client.name,
-    legal_name: client.legalName,
-    document: client.document,
-    status: client.status,
-    responsible_id: client.responsibleId,
-    squad_id: client.squadId,
-    monthly_value: client.monthlyValue,
-    is_recurring: client.isRecurring,
-    level: client.level,
-    summary: client.summary,
-    contract_url: client.contractUrl,
-    assets_folder_url: client.assetsFolderUrl,
-    contact_info: client.contact,
-    contacts: client.contacts,
-    tags: client.tags,
-    internal_notes: client.internalNotes,
-    entry_date: client.entryDate ? new Date(client.entryDate).toISOString() : new Date().toISOString()
-  });
-
-  if (error) {
-    console.error('Erro ao salvar cliente:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Exclui um cliente do banco de dados
- */
-export const deleteClient = async (id: string) => {
-  const { error } = await supabase.from('clients').delete().eq('id', id);
-  if (error) {
-    console.error('Erro ao excluir cliente:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Salva ou atualiza uma transação financeira
- */
-export const saveFinancialTransaction = async (transaction: Partial<FinancialTransaction>) => {
-  const { error } = await supabase.from('financial_transactions').upsert({
-    id: transaction.id || undefined,
-    description: transaction.description,
-    amount: transaction.amount,
-    type: transaction.type,
-    date: transaction.date,
-    status: transaction.status,
-    category_id: transaction.categoryId,
-    bank_account_id: transaction.bankAccountId,
-    credit_card_id: transaction.creditCardId,
-    client_id: transaction.clientId,
-    squad_id: transaction.squadId,
-    responsible_id: transaction.responsibleId,
-    installments: transaction.installments,
-    recurrence_id: transaction.recurrenceId,
-    created_at: transaction.createdAt ? new Date(transaction.createdAt).toISOString() : new Date().toISOString()
-  });
-
-  if (error) {
-    console.error('Erro ao salvar transação:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Exclui uma transação financeira
- */
-export const deleteFinancialTransaction = async (id: string) => {
-  const { error } = await supabase.from('financial_transactions').delete().eq('id', id);
-  if (error) {
-    console.error('Erro ao excluir transação:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Salva uma notificação
- */
-export const saveNotification = async (notification: Partial<AppNotification>) => {
-  const { error } = await supabase.from('notifications').upsert({
-    id: notification.id || undefined,
-    title: notification.title,
-    message: notification.message,
-    type: notification.type,
-    priority: notification.priority,
-    status: notification.status,
-    origin_module: notification.originModule,
-    timestamp: notification.timestamp ? new Date(notification.timestamp).toISOString() : new Date().toISOString(),
-    target_user_id: notification.targetUserId,
-    target_role: notification.targetRole,
-    nav_to_view: notification.navToView,
-    metadata: notification.metadata
-  });
-
-  if (error) {
-    console.error('Erro ao salvar notificação:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Busca todas as notificações do banco de dados
- */
-export const fetchNotifications = async () => {
-  const { data, error } = await supabase.from('notifications').select('*');
-  if (error) {
-    console.error('Erro ao buscar notificações:', error);
-    return [];
-  }
-  return (data || []).map((n: any): AppNotification => ({
-    id: n.id,
-    title: n.title,
-    message: n.message,
-    type: n.type,
-    priority: n.priority,
-    status: n.status,
-    originModule: n.origin_module,
-    timestamp: new Date(n.timestamp).getTime(),
-    targetUserId: n.target_user_id,
-    targetRole: n.target_role,
-    navToView: n.nav_to_view,
-    metadata: n.metadata
-  }));
-};
-
-/**
- * Salva ou atualiza um lote de aprovação
- */
-export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
-  const { error } = await supabase.from('approval_batches').upsert({
-    id: batch.id || undefined,
-    title: batch.title,
-    status: batch.status,
-    client_id: batch.clientId,
-    created_at: batch.createdAt ? new Date(batch.createdAt).toISOString() : new Date().toISOString()
-  });
-
-  if (error) {
-    console.error('Erro ao salvar lote de aprovação:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Busca todos os lotes de aprovação
- */
-export const fetchApprovalBatches = async () => {
-  const { data, error } = await supabase.from('approval_batches').select('*');
-  if (error) {
-    console.error('Erro ao buscar lotes de aprovação:', error);
-    return [];
-  }
-  return (data || []).map(b => ({
-    id: b.id,
-    title: b.title,
-    description: b.description,
-    status: b.status,
-    requesterId: b.requester_id,
-    clientId: b.client_id,
-    createdAt: new Date(b.created_at).getTime(),
-    items: b.items || []
-  }));
-};
-
-/**
- * Salva ou atualiza um item de aprovação
- */
-export const saveApprovalItem = async (item: Partial<ApprovalItem> & { batchId?: string }) => {
-  const { error } = await supabase.from('approval_items').upsert({
-    id: item.id || undefined,
-    batch_id: item.batchId,
-    title: item.title,
-    category: item.category,
-    status: item.status,
-    files: item.files,
-    caption: item.caption,
-    created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
-  });
-
-  if (error) {
-    console.error('Erro ao salvar item de aprovação:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Busca todos os itens de aprovação
- */
-export const fetchApprovalItems = async () => {
-  const { data, error } = await supabase.from('approval_items').select('*');
-  if (error) {
-    console.error('Erro ao buscar itens de aprovação:', error);
-    return [];
-  }
-  return (data || []).map(i => ({
-    id: i.id,
-    batchId: i.batch_id,
-    title: i.title,
-    category: i.category,
-    status: i.status,
-    files: i.files || [],
-    caption: i.caption,
-    createdAt: new Date(i.created_at).getTime()
-  }));
-};
-
-/**
- * Salva ou atualiza um comentário de aprovação
- */
-export const saveApprovalComment = async (comment: Partial<ApprovalComment> & { itemId?: string }) => {
-  const { error } = await supabase.from('approval_comments').upsert({
-    id: comment.id || undefined,
-    item_id: comment.itemId,
-    user_id: comment.userId,
-    text: comment.text,
-    timestamp: comment.timestamp ? new Date(comment.timestamp).toISOString() : new Date().toISOString()
-  });
-
-  if (error) {
-    console.error('Erro ao salvar comentário de aprovação:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Busca todos os comentários de aprovação
- */
-export const fetchApprovalComments = async () => {
-  const { data, error } = await supabase.from('approval_comments').select('*');
-  if (error) {
-    console.error('Erro ao buscar comentários de aprovação:', error);
-    return [];
-  }
-  return (data || []).map(c => ({
-    id: c.id,
-    itemId: c.item_id,
-    userId: c.user_id,
-    text: c.text,
-    createdAt: new Date(c.created_at).getTime()
-  }));
-};
-
-/**
  * Salva ou atualiza um usuário no banco de dados
  */
 export const saveUser = async (user: Partial<User>) => {
@@ -783,12 +605,483 @@ export const saveUser = async (user: Partial<User>) => {
 };
 
 /**
+ * Busca todos os itens de estoque
+ */
+export const fetchStockItems = async () => {
+  const { data, error } = await supabase.from('stock_items').select('*');
+  if (error) {
+    console.error('Erro ao buscar estoque:', error);
+    return [];
+  }
+  return data || [];
+};
+
+/**
+ * Salva ou atualiza um item de estoque
+ */
+export const saveStockItem = async (item: Partial<StockItem>) => {
+  const { error } = await supabase.from('stock_items').upsert({
+    id: item.id || undefined,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    min_quantity: item.minQuantity,
+    unit: item.unit,
+    price: item.price,
+    supplier_id: item.supplierId,
+    last_restock: item.lastRestock,
+    location: item.location
+  });
+
+  if (error) {
+    console.error('Erro ao salvar item de estoque:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um item de estoque
+ */
+export const deleteStockItem = async (id: string) => {
+  const { error } = await supabase.from('stock_items').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir item de estoque:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os ativos
+ */
+export const fetchAssets = async () => {
+  const { data, error } = await supabase.from('assets').select('*');
+  if (error) {
+    console.error('Erro ao buscar ativos:', error);
+    return [];
+  }
+  return (data || []).map(a => ({
+    id: a.id,
+    name: a.name,
+    category: a.category,
+    purchaseDate: a.purchase_date,
+    purchaseValue: a.purchase_value,
+    currentValue: a.current_value,
+    status: a.status,
+    location: a.location,
+    responsibleId: a.responsible_id,
+    serialNumber: a.serial_number,
+    description: a.description
+  }));
+};
+
+/**
+ * Salva ou atualiza um ativo
+ */
+export const saveAsset = async (asset: Partial<Asset>) => {
+  const { error } = await supabase.from('assets').upsert({
+    id: asset.id || undefined,
+    name: asset.name,
+    category: asset.category,
+    purchase_date: asset.purchaseDate,
+    purchase_value: asset.purchaseValue,
+    current_value: asset.currentValue,
+    status: asset.status,
+    location: asset.location,
+    responsible_id: asset.responsibleId,
+    serial_number: asset.serialNumber,
+    description: asset.description
+  });
+
+  if (error) {
+    console.error('Erro ao salvar ativo:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um ativo
+ */
+export const deleteAsset = async (id: string) => {
+  const { error } = await supabase.from('assets').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir ativo:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todas as sessões de caixa
+ */
+export const fetchCashSessions = async () => {
+  const { data, error } = await supabase.from('cash_register_sessions').select('*');
+  if (error) {
+    console.error('Erro ao buscar sessões de caixa:', error);
+    return [];
+  }
+  return (data || []).map(s => ({
+    id: s.id,
+    openedAt: s.opened_at,
+    closedAt: s.closed_at,
+    openedBy: s.opened_by,
+    closedBy: s.closed_by,
+    initialAmount: s.initial_amount,
+    finalAmount: s.final_amount,
+    expectedAmount: s.expected_amount,
+    status: s.status,
+    notes: s.notes
+  }));
+};
+
+/**
+ * Salva ou atualiza uma sessão de caixa
+ */
+export const saveCashSession = async (session: Partial<CashRegisterSession>) => {
+  const { error } = await supabase.from('cash_register_sessions').upsert({
+    id: session.id || undefined,
+    opened_at: session.openedAt,
+    closed_at: session.closedAt,
+    opened_by: session.openedBy,
+    closed_by: session.closedBy,
+    initial_amount: session.initialAmount,
+    final_amount: session.finalAmount,
+    expected_amount: session.expectedAmount,
+    status: session.status,
+    notes: session.notes
+  });
+
+  if (error) {
+    console.error('Erro ao salvar sessão de caixa:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os movimentos de caixa
+ */
+export const fetchCashMovements = async () => {
+  const { data, error } = await supabase.from('cash_movements').select('*');
+  if (error) {
+    console.error('Erro ao buscar movimentos de caixa:', error);
+    return [];
+  }
+  return (data || []).map(m => ({
+    id: m.id,
+    sessionId: m.session_id,
+    type: m.type,
+    amount: m.amount,
+    description: m.description,
+    timestamp: m.timestamp,
+    category: m.category
+  }));
+};
+
+/**
+ * Salva ou atualiza um movimento de caixa
+ */
+export const saveCashMovement = async (movement: Partial<CashMovement>) => {
+  const { error } = await supabase.from('cash_movements').upsert({
+    id: movement.id || undefined,
+    session_id: movement.sessionId,
+    type: movement.type,
+    amount: movement.amount,
+    description: movement.description,
+    timestamp: movement.timestamp,
+    category: movement.category
+  });
+
+  if (error) {
+    console.error('Erro ao salvar movimento de caixa:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todas as requisições
+ */
+export const fetchRequisitions = async () => {
+  const { data, error } = await supabase.from('requisitions').select('*');
+  if (error) {
+    console.error('Erro ao buscar requisições:', error);
+    return [];
+  }
+  return (data || []).map(r => ({
+    id: r.id,
+    clientId: r.client_id,
+    requesterId: r.requester_id,
+    title: r.title,
+    description: r.description,
+    estimatedCost: r.estimated_cost,
+    status: r.status,
+    date: r.date,
+    category: r.category,
+    approvedBy: r.approved_by,
+    approvedAt: r.approved_at,
+    rejectedBy: r.rejected_by,
+    rejectedAt: r.rejected_at,
+    rejectedReason: r.rejected_reason
+  }));
+};
+
+/**
+ * Salva ou atualiza uma requisição
+ */
+export const saveRequisition = async (req: Partial<Requisition>) => {
+  const { error } = await supabase.from('requisitions').upsert({
+    id: req.id || undefined,
+    client_id: req.clientId,
+    requester_id: req.requesterId,
+    title: req.title,
+    description: req.description,
+    estimated_cost: req.estimatedCost,
+    status: req.status,
+    date: req.date,
+    category: req.category,
+    approved_by: req.approvedBy,
+    approved_at: req.approvedAt,
+    rejected_by: req.rejectedBy,
+    rejected_at: req.rejectedAt,
+    rejected_reason: req.rejectedReason
+  });
+
+  if (error) {
+    console.error('Erro ao salvar requisição:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os serviços da agência
+ */
+export const fetchAgencyServices = async () => {
+  const { data, error } = await supabase.from('agency_services').select('*');
+  if (error) {
+    console.error('Erro ao buscar serviços:', error);
+    return [];
+  }
+  return data || [];
+};
+
+/**
+ * Salva ou atualiza um serviço da agência
+ */
+export const saveAgencyService = async (service: Partial<AgencyService>) => {
+  const { error } = await supabase.from('agency_services').upsert({
+    id: service.id || undefined,
+    name: service.name,
+    description: service.description,
+    type: service.type,
+    category: service.category,
+    status: service.status,
+    base_price: service.basePrice,
+    deliveries: service.deliveries,
+    task_templates: service.taskTemplates,
+    tags: service.tags,
+    observations: service.observations
+  });
+
+  if (error) {
+    console.error('Erro ao salvar serviço:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todas as notificações
+ */
+export const fetchNotifications = async () => {
+  const { data, error } = await supabase.from('notifications').select('*');
+  if (error) {
+    console.error('Erro ao buscar notificações:', error);
+    return [];
+  }
+  return (data || []).map(n => ({
+    id: n.id,
+    title: n.title,
+    message: n.message,
+    type: n.type,
+    priority: n.priority,
+    status: n.status,
+    originModule: n.origin_module,
+    timestamp: n.timestamp,
+    targetUserId: n.target_user_id,
+    targetRole: n.target_role,
+    navToView: n.nav_to_view,
+    actionLabel: n.action_label,
+    metadata: n.metadata
+  }));
+};
+
+/**
+ * Salva ou atualiza uma notificação
+ */
+export const saveNotification = async (notif: Notification) => {
+  const { error } = await supabase.from('notifications').upsert({
+    id: notif.id,
+    title: notif.title,
+    message: notif.message,
+    type: notif.type,
+    priority: notif.priority,
+    status: notif.status,
+    origin_module: notif.originModule,
+    timestamp: notif.timestamp,
+    target_user_id: notif.targetUserId,
+    target_role: notif.targetRole,
+    nav_to_view: notif.navToView,
+    action_label: notif.actionLabel,
+    metadata: notif.metadata
+  });
+
+  if (error) {
+    console.error('Erro ao salvar notificação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os lotes de aprovação
+ */
+export const fetchApprovalBatches = async () => {
+  const { data, error } = await supabase.from('approval_batches').select('*');
+  if (error) {
+    console.error('Erro ao buscar lotes de aprovação:', error);
+    return [];
+  }
+  return (data || []).map(b => ({
+    id: b.id,
+    title: b.title,
+    clientId: b.client_id,
+    status: b.status,
+    items: b.items,
+    createdAt: b.created_at,
+    updatedAt: b.updated_at
+  }));
+};
+
+/**
+ * Salva ou atualiza um lote de aprovação
+ */
+export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
+  const { error } = await supabase.from('approval_batches').upsert({
+    id: batch.id || undefined,
+    title: batch.title,
+    client_id: batch.clientId,
+    status: batch.status,
+    items: batch.items,
+    created_at: batch.createdAt,
+    updated_at: Date.now()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar lote de aprovação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todas as metas de produtividade
+ */
+export const fetchGoals = async () => {
+  const { data, error } = await supabase.from('productivity_goals').select('*');
+  if (error) {
+    console.error('Erro ao buscar metas:', error);
+    return [];
+  }
+  return (data || []).map(g => ({
+    id: g.id,
+    title: g.title,
+    type: g.type,
+    period: g.period,
+    targetValue: g.target_value,
+    squadId: g.squad_id,
+    userId: g.user_id,
+    month: g.month,
+    createdAt: g.created_at
+  }));
+};
+
+/**
+ * Salva ou atualiza uma meta de produtividade
+ */
+export const saveProductivityGoal = async (goal: Partial<ProductivityGoal>) => {
+  const { error } = await supabase.from('productivity_goals').upsert({
+    id: goal.id || undefined,
+    title: goal.title,
+    type: goal.type,
+    period: goal.period,
+    target_value: goal.targetValue,
+    squad_id: goal.squadId,
+    user_id: goal.userId,
+    month: goal.month,
+    created_at: goal.createdAt || Date.now()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar meta:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
  * Exclui um usuário do banco de dados
  */
 export const deleteUser = async (id: string) => {
   const { error } = await supabase.from('users').delete().eq('id', id);
   if (error) {
     console.error('Erro ao excluir usuário:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui um serviço da agência
+ */
+export const deleteAgencyService = async (id: string) => {
+  const { error } = await supabase.from('agency_services').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir serviço:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca as permissões de papéis
+ */
+export const fetchRolePermissions = async () => {
+  const { data, error } = await supabase.from('role_permissions').select('*').single();
+  if (error) {
+    if (error.code !== 'PGRST116') {
+      console.error('Erro ao buscar permissões:', error);
+    }
+    return null;
+  }
+  return data.permissions as RolePermissions;
+};
+
+/**
+ * Salva as permissões de papéis
+ */
+export const saveRolePermissions = async (permissions: RolePermissions) => {
+  const { error } = await supabase.from('role_permissions').upsert({
+    id: 1, // ID fixo para permissões globais
+    permissions,
+    updated_at: new Date().toISOString()
+  });
+
+  if (error) {
+    console.error('Erro ao salvar permissões:', error);
     return { success: false, error };
   }
   return { success: true };

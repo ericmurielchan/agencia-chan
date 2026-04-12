@@ -13,6 +13,8 @@ interface ServiceCatalogProps {
     setServices: React.Dispatch<React.SetStateAction<AgencyService[]>>;
     currentUser: User;
     openConfirm: (options: ConfirmOptions) => Promise<boolean>;
+    onSaveService?: (service: AgencyService) => Promise<void>;
+    onDeleteService?: (id: string) => Promise<void>;
 }
 
 type ServiceTab = 'GENERAL' | 'DELIVERIES' | 'TASKS' | 'OBSERVATIONS' | 'VALUE';
@@ -21,7 +23,9 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
     services, 
     setServices, 
     currentUser,
-    openConfirm 
+    openConfirm,
+    onSaveService,
+    onDeleteService
 }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<ServiceTab>('GENERAL');
@@ -67,7 +71,7 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
         setIsModalOpen(true);
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!editingService?.name) return;
 
         const serviceToSave = {
@@ -78,10 +82,14 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
             tags: editingService.tags || []
         } as AgencyService;
 
-        if (editingService.id) {
-            setServices(prev => prev.map(s => s.id === editingService.id ? serviceToSave : s));
+        if (onSaveService) {
+            await onSaveService(serviceToSave);
         } else {
-            setServices(prev => [...prev, serviceToSave]);
+            if (editingService.id) {
+                setServices(prev => prev.map(s => s.id === editingService.id ? serviceToSave : s));
+            } else {
+                setServices(prev => [...prev, serviceToSave]);
+            }
         }
         setIsModalOpen(false);
     };
@@ -95,16 +103,25 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
         });
 
         if (confirmed) {
-            setServices(prev => prev.filter(s => s.id !== id));
+            if (onDeleteService) {
+                await onDeleteService(id);
+            } else {
+                setServices(prev => prev.filter(s => s.id !== id));
+            }
         }
     };
 
-    const toggleStatus = (service: AgencyService) => {
-        setServices(prev => prev.map(s => 
-            s.id === service.id 
-                ? { ...s, status: s.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' } 
-                : s
-        ));
+    const toggleStatus = async (service: AgencyService) => {
+        const updatedService = { ...service, status: service.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' } as AgencyService;
+        if (onSaveService) {
+            await onSaveService(updatedService);
+        } else {
+            setServices(prev => prev.map(s => 
+                s.id === service.id 
+                    ? updatedService
+                    : s
+            ));
+        }
     };
 
     return (

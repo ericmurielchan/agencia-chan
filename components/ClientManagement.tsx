@@ -20,8 +20,8 @@ interface ClientManagementProps {
   tasks: Task[];
   requisitions: Requisition[];
   currentUser: User;
-  onSaveClient?: (client: Client) => void;
-  onDeleteClient?: (id: string) => void;
+  onSaveClient?: (client: Client) => Promise<void>;
+  onDeleteClient?: (id: string) => Promise<void>;
 }
 
 export const ClientManagement: React.FC<ClientManagementProps> = ({ 
@@ -54,34 +54,55 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
     );
   }, [clients, searchTerm, currentUser, squads]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
       if (!editingClient.name?.trim()) {
           alert("Nome/Empresa é obrigatório.");
           return;
       }
-      if (editingClient.id) {
-          const updatedClient = { ...clients.find(c => c.id === editingClient.id), ...editingClient } as Client;
-          setClients(prev => prev.map(c => c.id === editingClient.id ? updatedClient : c));
-          if (onSaveClient) onSaveClient(updatedClient);
+      
+      const clientToSave = editingClient.id ? { ...clients.find(c => c.id === editingClient.id), ...editingClient } as Client : {
+          ...editingClient,
+          id: Date.now().toString(),
+          status: editingClient.status || 'ACTIVE',
+          isRecurring: editingClient.isRecurring || false,
+          level: editingClient.level || 'BASIC',
+          contacts: [],
+          passwords: [],
+          passwordLogs: [],
+          documentationLinks: [],
+          tags: [],
+          systemAccesses: editingClient.systemAccesses || [],
+          entryDate: new Date().toISOString().split('T')[0]
+      } as Client;
+
+      if (onSaveClient) {
+          await onSaveClient(clientToSave);
       } else {
-          const newClient: Client = {
-              ...editingClient,
-              id: Date.now().toString(),
-              status: editingClient.status || 'ACTIVE',
-              isRecurring: editingClient.isRecurring || false,
-              level: editingClient.level || 'BASIC',
-              contacts: [],
-              passwords: [],
-              passwordLogs: [],
-              documentationLinks: [],
-              tags: [],
-              systemAccesses: editingClient.systemAccesses || [],
-              entryDate: new Date().toISOString().split('T')[0]
-          } as Client;
-          setClients(prev => [...prev, newClient]);
-          if (onSaveClient) onSaveClient(newClient);
+          if (editingClient.id) {
+              setClients(prev => prev.map(c => c.id === editingClient.id ? clientToSave : c));
+          } else {
+              setClients(prev => [...prev, clientToSave]);
+          }
       }
       setIsModalOpen(false);
+  };
+
+  const handleDelete = async (id: string) => {
+      const confirmed = await openConfirm({
+          title: 'Excluir Cliente',
+          description: 'Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita.',
+          confirmText: 'Excluir',
+          variant: 'danger'
+      });
+
+      if (confirmed) {
+          if (onDeleteClient) {
+              await onDeleteClient(id);
+          } else {
+              setClients(prev => prev.filter(c => c.id !== id));
+          }
+          setViewingClient(null);
+      }
   };
 
   const togglePassword = (passwordId: string, platform: string) => {
@@ -165,6 +186,12 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                                         className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
                                     >
                                         <Edit2 size={14}/>
+                                    </button>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }} 
+                                        className="p-2 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-all"
+                                    >
+                                        <Trash2 size={14}/>
                                     </button>
                                 </div>
                             </div>

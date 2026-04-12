@@ -11,6 +11,7 @@ interface PermissionsManagerProps {
   permissions: RolePermissions;
   setPermissions: React.Dispatch<React.SetStateAction<RolePermissions>>;
   openConfirm: (options: ConfirmOptions) => Promise<boolean>;
+  onSavePermissions?: (permissions: RolePermissions) => Promise<void>;
 }
 
 // 1. DEFINIÇÃO DOS PADRÕES DE FÁBRICA
@@ -92,11 +93,11 @@ const ROLE_CONFIG: Record<Role, { label: string, color: string }> = {
     'CLIENT': { label: 'Cliente', color: 'bg-pink-100 text-pink-700' }
 };
 
-export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissions, setPermissions, openConfirm }) => {
+export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissions, setPermissions, openConfirm, onSavePermissions }) => {
   const [viewMode, setViewMode] = useState<'MATRIX' | 'ROLES'>('MATRIX');
   const [lastChange, setLastChange] = useState<{msg: string, type: 'info' | 'success'} | null>(null);
 
-  const togglePermission = (role: Role, moduleId: string) => {
+  const togglePermission = async (role: Role, moduleId: string) => {
       const current = permissions[role] || [];
       const hasPermission = current.includes(moduleId);
       
@@ -107,10 +108,16 @@ export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissi
           newPermissions = [...current, moduleId];
       }
 
-      setPermissions({
+      const updatedPermissions = {
           ...permissions,
           [role]: newPermissions
-      });
+      };
+
+      if (onSavePermissions) {
+          await onSavePermissions(updatedPermissions);
+      } else {
+          setPermissions(updatedPermissions);
+      }
 
       // Log para UI
       const timestamp = new Date().toLocaleTimeString();
@@ -130,7 +137,11 @@ export const PermissionsManager: React.FC<PermissionsManagerProps> = ({ permissi
       if (ok) {
           try {
               const factorySettings = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS));
-              setPermissions(factorySettings);
+              if (onSavePermissions) {
+                  await onSavePermissions(factorySettings);
+              } else {
+                  setPermissions(factorySettings);
+              }
               setLastChange({ msg: 'Sistema restaurado para as definições originais.', type: 'success' });
               console.log("DELETE_SUCCESS");
           } catch (e) {

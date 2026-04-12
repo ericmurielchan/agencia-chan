@@ -57,7 +57,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { initialCategories } from '../utils/mockData';
 import { analyzeFinancialHealth } from '../services/aiService';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
-import { saveCreditCard, deleteCreditCard, saveBankAccount, deleteBankAccount, saveFinancialTransaction, deleteFinancialTransaction, saveNotification } from '../services/supabaseService';
+import { saveCreditCard, deleteCreditCard, saveBankAccount, deleteBankAccount } from '../services/supabaseService';
 
 interface FinancialsProps {
     bankAccounts: BankAccount[];
@@ -77,7 +77,6 @@ interface FinancialsProps {
     onClearSelectedTransaction?: () => void;
     selectedInvoiceId?: string | null;
     onClearSelectedInvoice?: () => void;
-    onSaveNotification?: (notif: Notification) => void;
     stock: StockItem[];
     setStock: React.Dispatch<React.SetStateAction<StockItem[]>>;
     assets: Asset[];
@@ -86,6 +85,14 @@ interface FinancialsProps {
     setCashSessions: React.Dispatch<React.SetStateAction<CashRegisterSession[]>>;
     cashMovements: CashMovement[];
     setCashMovements: React.Dispatch<React.SetStateAction<CashMovement[]>>;
+    onSaveTransaction?: (t: FinancialTransaction) => Promise<void>;
+    onDeleteTransaction?: (id: string) => Promise<void>;
+    onSaveStockItem?: (item: Partial<StockItem>) => Promise<void>;
+    onDeleteStockItem?: (id: string) => Promise<void>;
+    onSaveAsset?: (asset: Partial<Asset>) => Promise<void>;
+    onDeleteAsset?: (id: string) => Promise<void>;
+    onSaveCashSession?: (session: Partial<CashRegisterSession>) => Promise<void>;
+    onSaveCashMovement?: (movement: Partial<CashMovement>) => Promise<void>;
 }
 
 type TabType = 'DASHBOARD' | 'ACCOUNTS' | 'CARDS' | 'TRANSACTIONS' | 'INVOICES' | 'CASH_REGISTER' | 'STOCK' | 'ASSETS' | 'REPORTS';
@@ -116,7 +123,14 @@ export const Financials: React.FC<FinancialsProps> = ({
     onClearSelectedTransaction,
     selectedInvoiceId,
     onClearSelectedInvoice,
-    onSaveNotification
+    onSaveTransaction,
+    onDeleteTransaction,
+    onSaveStockItem,
+    onDeleteStockItem,
+    onSaveAsset,
+    onDeleteAsset,
+    onSaveCashSession,
+    onSaveCashMovement
 }) => {
     const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
     const [searchTerm, setSearchTerm] = useState('');
@@ -289,7 +303,7 @@ export const Financials: React.FC<FinancialsProps> = ({
         }
     };
 
-    const handleOpenCashRegister = () => {
+    const handleOpenCashRegister = async () => {
         const initialAmount = parseFloat(prompt('Informe o valor inicial do caixa:', '0') || '0');
         const newSession: CashRegisterSession = {
             id: `cs-${Date.now()}`,
@@ -298,7 +312,12 @@ export const Financials: React.FC<FinancialsProps> = ({
             initialAmount,
             status: 'OPEN'
         };
-        setCashSessions(prev => [newSession, ...prev]);
+        
+        if (onSaveCashSession) {
+            await onSaveCashSession(newSession);
+        } else {
+            setCashSessions(prev => [newSession, ...prev]);
+        }
     };
 
     const handleCloseCashRegister = async () => {
@@ -312,18 +331,24 @@ export const Financials: React.FC<FinancialsProps> = ({
 
         if (confirm) {
             const finalAmount = sessionMovements.reduce((acc, m) => m.type === 'IN' ? acc + m.amount : acc - m.amount, currentCashSession.initialAmount);
-            setCashSessions(prev => prev.map(s => s.id === currentCashSession.id ? {
-                ...s,
+            const updatedSession: CashRegisterSession = {
+                ...currentCashSession,
                 status: 'CLOSED',
                 closedAt: new Date().toISOString(),
                 closedBy: currentUser.id,
                 finalAmount,
                 expectedAmount: finalAmount
-            } : s));
+            };
+
+            if (onSaveCashSession) {
+                await onSaveCashSession(updatedSession);
+            } else {
+                setCashSessions(prev => prev.map(s => s.id === currentCashSession.id ? updatedSession : s));
+            }
         }
     };
 
-    const handleAddCashMovement = () => {
+    const handleAddCashMovement = async () => {
         if (!currentCashSession || !newCashMovement.amount || !newCashMovement.description) return;
 
         const movement: CashMovement = {
@@ -336,7 +361,11 @@ export const Financials: React.FC<FinancialsProps> = ({
             category: newCashMovement.category as any
         };
 
-        setCashMovements(prev => [...prev, movement]);
+        if (onSaveCashMovement) {
+            await onSaveCashMovement(movement);
+        } else {
+            setCashMovements(prev => [...prev, movement]);
+        }
 
         // Also create a financial transaction to reflect in the main ledger
         const transaction: FinancialTransaction = {
@@ -350,17 +379,27 @@ export const Financials: React.FC<FinancialsProps> = ({
             responsibleId: currentUser.id,
             createdAt: Date.now()
         };
-        setTransactions(prev => [transaction, ...prev]);
+
+        if (onSaveTransaction) {
+            await onSaveTransaction(transaction);
+        } else {
+            setTransactions(prev => [transaction, ...prev]);
+        }
 
         setIsCashMovementModalOpen(false);
         setNewCashMovement({ type: 'IN', amount: 0, category: 'SALE' });
     };
 
-    const handleAddStockItem = () => {
+    const handleAddStockItem = async () => {
         if (!newStockItem.name || !newStockItem.quantity) return;
 
         if (editingStockId) {
-            setStock(prev => prev.map(s => s.id === editingStockId ? { ...s, ...newStockItem } as StockItem : s));
+            const updatedItem = { ...newStockItem, id: editingStockId };
+            if (onSaveStockItem) {
+                await onSaveStockItem(updatedItem);
+            } else {
+                setStock(prev => prev.map(s => s.id === editingStockId ? updatedItem as StockItem : s));
+            }
         } else {
             const item: StockItem = {
                 id: `st-${Date.now()}`,
@@ -372,7 +411,11 @@ export const Financials: React.FC<FinancialsProps> = ({
                 price: newStockItem.price || 0,
                 location: newStockItem.location
             };
-            setStock(prev => [...prev, item]);
+            if (onSaveStockItem) {
+                await onSaveStockItem(item);
+            } else {
+                setStock(prev => [...prev, item]);
+            }
         }
 
         setIsStockModalOpen(false);
@@ -380,11 +423,16 @@ export const Financials: React.FC<FinancialsProps> = ({
         setNewStockItem({ quantity: 0, minQuantity: 0, price: 0 });
     };
 
-    const handleAddAsset = () => {
+    const handleAddAsset = async () => {
         if (!newAsset.name || !newAsset.purchaseValue) return;
 
         if (editingAssetId) {
-            setAssets(prev => prev.map(a => a.id === editingAssetId ? { ...a, ...newAsset } as Asset : a));
+            const updatedAsset = { ...newAsset, id: editingAssetId };
+            if (onSaveAsset) {
+                await onSaveAsset(updatedAsset);
+            } else {
+                setAssets(prev => prev.map(a => a.id === editingAssetId ? updatedAsset as Asset : a));
+            }
         } else {
             const asset: Asset = {
                 id: `as-${Date.now()}`,
@@ -398,7 +446,11 @@ export const Financials: React.FC<FinancialsProps> = ({
                 serialNumber: newAsset.serialNumber,
                 description: newAsset.description
             };
-            setAssets(prev => [...prev, asset]);
+            if (onSaveAsset) {
+                await onSaveAsset(asset);
+            } else {
+                setAssets(prev => [...prev, asset]);
+            }
         }
 
         setIsAssetModalOpen(false);
@@ -434,7 +486,7 @@ export const Financials: React.FC<FinancialsProps> = ({
         return data;
     }, [transactions]);
 
-    const handleAddTransaction = () => {
+    const handleAddTransaction = async () => {
         if (!newTransaction.description || !newTransaction.amount) return;
         
         const recurrenceId = newTransaction.isRecurring ? `rec-${Date.now()}` : undefined;
@@ -468,13 +520,16 @@ export const Financials: React.FC<FinancialsProps> = ({
                 recurrenceId,
                 createdAt: Date.now()
             };
+            
+            if (onSaveTransaction) {
+                await onSaveTransaction(transaction);
+            }
             newTransactions.push(transaction);
         }
 
-        setTransactions(prev => [...newTransactions, ...prev]);
-        
-        // Sync with Supabase
-        newTransactions.forEach(tx => saveFinancialTransaction(tx));
+        if (!onSaveTransaction) {
+            setTransactions(prev => [...newTransactions, ...prev]);
+        }
 
         // Update Account Balance/Card Limit ONLY for the first transaction if PAID
         const firstTx = newTransactions[0];
@@ -677,7 +732,11 @@ export const Financials: React.FC<FinancialsProps> = ({
             variant: 'danger'
         });
         if (confirm) {
-            setStock(prev => prev.filter(s => s.id !== id));
+            if (onDeleteStockItem) {
+                await onDeleteStockItem(id);
+            } else {
+                setStock(prev => prev.filter(s => s.id !== id));
+            }
         }
     };
 
@@ -688,12 +747,23 @@ export const Financials: React.FC<FinancialsProps> = ({
             variant: 'danger'
         });
         if (confirm) {
-            setAssets(prev => prev.filter(a => a.id !== id));
+            if (onDeleteAsset) {
+                await onDeleteAsset(id);
+            } else {
+                setAssets(prev => prev.filter(a => a.id !== id));
+            }
         }
     };
 
-    const toggleTransactionStatus = (tx: FinancialTransaction) => {
+    const toggleTransactionStatus = async (tx: FinancialTransaction) => {
         const newStatus = tx.status === 'PAID' ? 'PENDING' : 'PAID';
+        const updatedTx = { ...tx, status: newStatus };
+
+        if (onSaveTransaction) {
+            await onSaveTransaction(updatedTx);
+        } else {
+            setTransactions(prev => prev.map(t => t.id === tx.id ? updatedTx : t));
+        }
         
         if (tx.bankAccountId) {
             setBankAccounts(prev => prev.map(acc => {
@@ -730,11 +800,6 @@ export const Financials: React.FC<FinancialsProps> = ({
                 return prev;
             });
         }
-
-        setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: newStatus } : t));
-        
-        // Sync with Supabase
-        saveFinancialTransaction({ ...tx, status: newStatus });
     };
 
     const handleDeleteTransaction = async (tx: FinancialTransaction) => {
@@ -788,17 +853,22 @@ export const Financials: React.FC<FinancialsProps> = ({
                 // Delete all with same recurrenceId
                 const toDelete = transactions.filter(t => t.recurrenceId === tx.recurrenceId);
                 toDelete.forEach(revertBalance);
-                setTransactions(prev => prev.filter(t => t.recurrenceId !== tx.recurrenceId));
                 
-                // Sync with Supabase
-                toDelete.forEach(t => deleteFinancialTransaction(t.id));
+                if (onDeleteTransaction) {
+                    for (const t of toDelete) {
+                        await onDeleteTransaction(t.id);
+                    }
+                } else {
+                    setTransactions(prev => prev.filter(t => t.recurrenceId !== tx.recurrenceId));
+                }
             } else if (deleteType === false) {
                 // Delete only this one
                 revertBalance(tx);
-                setTransactions(prev => prev.filter(t => t.id !== tx.id));
-                
-                // Sync with Supabase
-                deleteFinancialTransaction(tx.id);
+                if (onDeleteTransaction) {
+                    await onDeleteTransaction(tx.id);
+                } else {
+                    setTransactions(prev => prev.filter(t => t.id !== tx.id));
+                }
             }
         } else {
             const confirm = await openConfirm({
@@ -808,10 +878,11 @@ export const Financials: React.FC<FinancialsProps> = ({
             });
             if (confirm) {
                 revertBalance(tx);
-                setTransactions(prev => prev.filter(t => t.id !== tx.id));
-                
-                // Sync with Supabase
-                deleteFinancialTransaction(tx.id);
+                if (onDeleteTransaction) {
+                    await onDeleteTransaction(tx.id);
+                } else {
+                    setTransactions(prev => prev.filter(t => t.id !== tx.id));
+                }
             }
         }
     };

@@ -11,6 +11,10 @@ interface TeamManagementProps {
   squads: Squad[];
   setSquads: React.Dispatch<React.SetStateAction<Squad[]>>;
   openConfirm: (options: ConfirmOptions) => Promise<boolean>;
+  onSaveUser?: (user: Partial<User>) => Promise<void>;
+  onDeleteUser?: (id: string) => Promise<void>;
+  onSaveSquad?: (squad: Partial<Squad>) => Promise<void>;
+  onDeleteSquad?: (id: string) => Promise<void>;
 }
 
 const ROLES: { value: Role; label: string }[] = [
@@ -21,7 +25,10 @@ const ROLES: { value: Role; label: string }[] = [
     { value: 'FREELANCER', label: 'Comercial' },
 ];
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers, squads, setSquads, openConfirm }) => {
+export const TeamManagement: React.FC<TeamManagementProps> = ({ 
+    users, setUsers, squads, setSquads, openConfirm,
+    onSaveUser, onDeleteUser, onSaveSquad, onDeleteSquad
+}) => {
   const INITIAL_USER_STATE: Partial<User> = { 
     name: '',
     email: '',
@@ -53,18 +60,22 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers,
               password: editingUser.password || ''
           };
 
-          const result = await saveUser(userToSave);
-          
-          if (result.success) {
-              if (editingUser.id) {
-                  setUsers(prev => prev.map(u => u.id === editingUser.id ? userToSave as User : u));
-              } else {
-                  setUsers(prev => [...prev, userToSave as User]);
-              }
-              setIsModalOpen(false);
+          if (onSaveUser) {
+              await onSaveUser(userToSave);
           } else {
-              alert('Erro ao salvar colaborador no banco de dados.');
+              const result = await saveUser(userToSave);
+              if (result.success) {
+                  if (editingUser.id) {
+                      setUsers(prev => prev.map(u => u.id === editingUser.id ? userToSave as User : u));
+                  } else {
+                      setUsers(prev => [...prev, userToSave as User]);
+                  }
+              } else {
+                  alert('Erro ao salvar colaborador no banco de dados.');
+                  return;
+              }
           }
+          setIsModalOpen(false);
       } catch (error) {
           console.error(error);
       } finally {
@@ -80,11 +91,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers,
       });
       
       if (ok) {
-          const result = await deleteUser(id);
-          if (result.success) {
-              setUsers(users.filter(u => u.id !== id));
+          if (onDeleteUser) {
+              await onDeleteUser(id);
           } else {
-              alert('Erro ao excluir colaborador do banco de dados.');
+              const result = await deleteUser(id);
+              if (result.success) {
+                  setUsers(users.filter(u => u.id !== id));
+              } else {
+                  alert('Erro ao excluir colaborador do banco de dados.');
+              }
           }
       }
   };
@@ -99,17 +114,22 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers,
               members: editingSquad.members || []
           };
           
-          const result = await saveSquad(squadToSave);
-          if (result.success) {
-              if (editingSquad.id) {
-                  setSquads(prev => prev.map(s => s.id === editingSquad.id ? squadToSave as Squad : s));
-              } else {
-                  setSquads(prev => [...prev, squadToSave as Squad]);
-              }
-              setIsSquadModalOpen(false);
+          if (onSaveSquad) {
+              await onSaveSquad(squadToSave);
           } else {
-              alert('Erro ao salvar squad no banco de dados.');
+              const result = await saveSquad(squadToSave);
+              if (result.success) {
+                  if (editingSquad.id) {
+                      setSquads(prev => prev.map(s => s.id === editingSquad.id ? squadToSave as Squad : s));
+                  } else {
+                      setSquads(prev => [...prev, squadToSave as Squad]);
+                  }
+              } else {
+                  alert('Erro ao salvar squad no banco de dados.');
+                  return;
+              }
           }
+          setIsSquadModalOpen(false);
       } catch (error) {
           console.error(error);
       }
@@ -124,13 +144,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ users, setUsers,
       
       if (ok) {
           try {
-              const result = await deleteSquad(id);
-              if (result.success) {
-                  setSquads(prev => prev.filter(s => s.id !== id));
-                  // Opcional: Limpar referências locais de usuários se necessário, 
-                  // mas o App recarregará os dados ou o usuário verá a mudança ao editar.
+              if (onDeleteSquad) {
+                  await onDeleteSquad(id);
               } else {
-                  alert('Erro ao excluir squad do banco de dados.');
+                  const result = await deleteSquad(id);
+                  if (result.success) {
+                      setSquads(prev => prev.filter(s => s.id !== id));
+                  } else {
+                      alert('Erro ao excluir squad do banco de dados.');
+                  }
               }
           } catch (error) {
               console.error(error);

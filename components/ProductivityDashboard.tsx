@@ -18,6 +18,7 @@ interface ProductivityDashboardProps {
   goals: ProductivityGoal[];
   setGoals: React.Dispatch<React.SetStateAction<ProductivityGoal[]>>;
   onNavigate?: (view: string, filter?: any) => void;
+  onSaveGoal?: (goal: ProductivityGoal) => Promise<void>;
 }
 
 export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({ 
@@ -30,7 +31,8 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
     setNotifications,
     goals,
     setGoals,
-    onNavigate
+    onNavigate,
+    onSaveGoal
 }) => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showGoalModal, setShowGoalModal] = useState(false);
@@ -225,7 +227,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
       if (selectedTask && selectedTask.id === updated.id) setSelectedTask(updated);
   };
 
-  const handleSaveGoal = () => {
+  const handleSaveGoal = async () => {
       if (!newGoal.targetValue || newGoal.targetValue <= 0) return;
       
       const goal: ProductivityGoal = {
@@ -240,9 +242,13 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
           createdAt: Date.now()
       };
 
-      setGoals(prev => [...prev.filter(g => 
-          !(g.month === goal.month && g.userId === goal.userId && g.squadId === goal.squadId)
-      ), goal]);
+      if (onSaveGoal) {
+          await onSaveGoal(goal);
+      } else {
+          setGoals(prev => [...prev.filter(g => 
+              !(g.month === goal.month && g.userId === goal.userId && g.squadId === goal.squadId)
+          ), goal]);
+      }
       setShowGoalModal(false);
   };
 

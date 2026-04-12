@@ -44,14 +44,32 @@ import {
   deleteClient,
   saveFinancialTransaction,
   deleteFinancialTransaction,
-  saveNotification,
+  saveStockItem,
+  deleteStockItem,
+  saveAsset,
+  deleteAsset,
+  saveCashSession,
+  saveCashMovement,
+  fetchCashSessions,
+  fetchCashMovements,
+  fetchStockItems,
+  fetchAssets,
+  fetchRequisitions,
+  saveRequisition,
+  fetchAgencyServices,
+  saveAgencyService,
   fetchNotifications,
-  saveApprovalBatch,
+  saveNotification,
   fetchApprovalBatches,
-  saveApprovalItem,
-  fetchApprovalItems,
-  saveApprovalComment,
-  fetchApprovalComments
+  saveApprovalBatch,
+  fetchGoals,
+  saveProductivityGoal,
+  deleteSquad,
+  saveSquad,
+  deleteAgencyService,
+  saveRolePermissions,
+  fetchRolePermissions,
+  deleteUser
 } from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from './types';
@@ -113,7 +131,12 @@ const App: React.FC = () => {
         const connection = await testSupabaseConnection();
         if (connection.success) {
           console.log('Carregando dados reais do Supabase...');
-          const [dbUsers, tasksData, clientsData, leadsData, financialData, bankData, settingsData, squadsData, cardsData, notifsData, approvalsData, approvalItemsData, approvalCommentsData] = await Promise.all([
+          const [
+            dbUsers, tasksData, clientsData, leadsData, financialData, 
+            bankData, settingsData, squadsData, cardsData, stockData, 
+            assetsData, cashSessionsData, cashMovementsData, requisitionsData,
+            servicesData, notificationsData, batchesData, goalsData
+          ] = await Promise.all([
             fetchUsers(),
             fetchTasks(),
             fetchClients(),
@@ -123,10 +146,15 @@ const App: React.FC = () => {
             fetchSystemSettings(),
             fetchSquads(),
             fetchCreditCards(),
+            fetchStockItems(),
+            fetchAssets(),
+            fetchCashSessions(),
+            fetchCashMovements(),
+            fetchRequisitions(),
+            fetchAgencyServices(),
             fetchNotifications(),
             fetchApprovalBatches(),
-            fetchApprovalItems(),
-            fetchApprovalComments()
+            fetchGoals()
           ]);
           
           setUsers(dbUsers as any);
@@ -138,19 +166,15 @@ const App: React.FC = () => {
           if (settingsData) setSystemSettings(settingsData);
           if (squadsData.length > 0) setSquads(squadsData as any);
           if (cardsData.length > 0) setCreditCards(cardsData as any);
-          if (notifsData.length > 0) setNotifications(notifsData as any);
-          
-          if (approvalsData.length > 0) {
-            // Reconstruct batches with items and comments
-            const reconstructedBatches = approvalsData.map(batch => {
-              const items = (approvalItemsData as any[]).filter(i => i.batchId === batch.id).map(item => {
-                const comments = (approvalCommentsData as any[]).filter(c => c.itemId === item.id);
-                return { ...item, comments };
-              });
-              return { ...batch, items };
-            });
-            setApprovalBatches(reconstructedBatches as any);
-          }
+          if (stockData.length > 0) setStock(stockData as any);
+          if (assetsData.length > 0) setAssets(assetsData as any);
+          if (cashSessionsData.length > 0) setCashSessions(cashSessionsData as any);
+          if (cashMovementsData.length > 0) setCashMovements(cashMovementsData as any);
+          if (requisitionsData.length > 0) setRequisitions(requisitionsData as any);
+          if (servicesData.length > 0) setServices(servicesData as any);
+          if (notificationsData.length > 0) setNotifications(notificationsData as any);
+          if (batchesData.length > 0) setApprovalBatches(batchesData as any);
+          if (goalsData.length > 0) setGoals(goalsData as any);
         } else {
           console.warn('Conexão com Supabase falhou, usando dados mock.');
         }
@@ -526,13 +550,45 @@ const App: React.FC = () => {
                   if (view === 'crm' && refId) setSelectedLeadId(refId);
                   if (view === 'finance' && refId) setSelectedTransactionId(refId);
                 }}
-                onSaveLead={saveLead}
-                onDeleteLead={deleteLead}
-                onSaveClient={saveClient}
-                onSaveNotification={saveNotification}
+                onSaveLead={async (lead) => {
+                    const result = await saveLead(lead);
+                    if (result.success) {
+                        setLeads(prev => {
+                            const exists = prev.some(l => l.id === lead.id);
+                            if (exists) return prev.map(l => l.id === lead.id ? lead : l);
+                            return [...prev, lead];
+                        });
+                    }
+                }}
+                onDeleteLead={async (id) => {
+                    const result = await deleteLead(id);
+                    if (result.success) {
+                        setLeads(prev => prev.filter(l => l.id !== id));
+                    }
+                }}
               />
             )}
-            {currentView === 'requisitions' && <Requisitions requisitions={requisitions} setRequisitions={setRequisitions} currentUser={currentUser} users={users} setNotifications={setNotifications} setTransactions={setFinancialTransactions} clients={clients} />}
+            {currentView === 'requisitions' && (
+              <Requisitions 
+                requisitions={requisitions} 
+                setRequisitions={setRequisitions} 
+                currentUser={currentUser} 
+                users={users} 
+                setNotifications={setNotifications} 
+                setTransactions={setFinancialTransactions} 
+                clients={clients} 
+                onSaveRequisition={async (req) => {
+                    const result = await saveRequisition(req);
+                    if (result.success) {
+                        setRequisitions(prev => {
+                            const exists = prev.some(r => r.id === req.id);
+                            if (exists) return prev.map(r => r.id === req.id ? req as Requisition : r);
+                            return [...prev, req as Requisition];
+                        });
+                    }
+                }}
+              />
+            )}
             {currentView === 'finance' && (
               <Financials 
                 bankAccounts={bankAccounts}
@@ -560,6 +616,70 @@ const App: React.FC = () => {
                 onClearSelectedTransaction={() => setSelectedTransactionId(null)}
                 selectedInvoiceId={selectedInvoiceId}
                 onClearSelectedInvoice={() => setSelectedInvoiceId(null)}
+                onSaveTransaction={async (t) => {
+                    const result = await saveFinancialTransaction(t);
+                    if (result.success) {
+                        setFinancialTransactions(prev => {
+                            const exists = prev.some(item => item.id === t.id);
+                            if (exists) return prev.map(item => item.id === t.id ? t : item);
+                            return [t, ...prev];
+                        });
+                    }
+                }}
+                onDeleteTransaction={async (id) => {
+                    const result = await deleteFinancialTransaction(id);
+                    if (result.success) {
+                        setFinancialTransactions(prev => prev.filter(t => t.id !== id));
+                    }
+                }}
+                onSaveStockItem={async (item) => {
+                    const result = await saveStockItem(item);
+                    if (result.success) {
+                        setStock(prev => {
+                            const exists = prev.some(s => s.id === item.id);
+                            if (exists) return prev.map(s => s.id === item.id ? item as StockItem : s);
+                            return [...prev, item as StockItem];
+                        });
+                    }
+                }}
+                onDeleteStockItem={async (id) => {
+                    const result = await deleteStockItem(id);
+                    if (result.success) {
+                        setStock(prev => prev.filter(s => s.id !== id));
+                    }
+                }}
+                onSaveAsset={async (asset) => {
+                    const result = await saveAsset(asset);
+                    if (result.success) {
+                        setAssets(prev => {
+                            const exists = prev.some(a => a.id === asset.id);
+                            if (exists) return prev.map(a => a.id === asset.id ? asset as Asset : a);
+                            return [...prev, asset as Asset];
+                        });
+                    }
+                }}
+                onDeleteAsset={async (id) => {
+                    const result = await deleteAsset(id);
+                    if (result.success) {
+                        setAssets(prev => prev.filter(a => a.id !== id));
+                    }
+                }}
+                onSaveCashSession={async (session) => {
+                    const result = await saveCashSession(session);
+                    if (result.success) {
+                        setCashSessions(prev => {
+                            const exists = prev.some(s => s.id === session.id);
+                            if (exists) return prev.map(s => s.id === session.id ? session as CashRegisterSession : s);
+                            return [session as CashRegisterSession, ...prev];
+                        });
+                    }
+                }}
+                onSaveCashMovement={async (movement) => {
+                    const result = await saveCashMovement(movement);
+                    if (result.success) {
+                        setCashMovements(prev => [...prev, movement as CashMovement]);
+                    }
+                }}
               />
             )}
             {currentView === 'client-portal' && (
@@ -581,7 +701,7 @@ const App: React.FC = () => {
                 tasks={tasks} 
                 setTasks={setTasks} 
                 users={users} 
-                squads={squads} 
+                squads={initialSquads} 
                 clients={clients} 
                 currentUser={currentUser} 
                 setNotifications={setNotifications} 
@@ -591,11 +711,96 @@ const App: React.FC = () => {
                   setCurrentView(view);
                   if (view === 'kanban' && filter) setKanbanFilter(filter);
                 }}
+                onSaveGoal={async (goal) => {
+                    const result = await saveProductivityGoal(goal);
+                    if (result.success) {
+                        setGoals(prev => {
+                            const exists = prev.some(g => g.id === goal.id);
+                            if (exists) return prev.map(g => g.id === goal.id ? goal : g);
+                            return [...prev, goal];
+                        });
+                    }
+                }}
               />
             )}
-            {currentView === 'catalog' && <ServiceCatalog services={services} setServices={setServices} currentUser={currentUser} openConfirm={openConfirm} />}
-            {currentView === 'teams' && <TeamManagement users={users} setUsers={setUsers} squads={squads} setSquads={setSquads} openConfirm={openConfirm} />}
-            {currentView === 'permissions' && <PermissionsManager permissions={rolePermissions} setPermissions={setRolePermissions} openConfirm={openConfirm} />}
+            {currentView === 'catalog' && (
+              <ServiceCatalog 
+                services={services} 
+                setServices={setServices} 
+                currentUser={currentUser} 
+                openConfirm={openConfirm} 
+                onSaveService={async (service) => {
+                    const result = await saveAgencyService(service);
+                    if (result.success) {
+                        setServices(prev => {
+                            const exists = prev.some(s => s.id === service.id);
+                            if (exists) return prev.map(s => s.id === service.id ? service : s);
+                            return [...prev, service];
+                        });
+                    }
+                }}
+                onDeleteService={async (id) => {
+                    const result = await deleteAgencyService(id);
+                    if (result.success) {
+                        setServices(prev => prev.filter(s => s.id !== id));
+                    }
+                }}
+              />
+            )}
+            {currentView === 'teams' && (
+              <TeamManagement 
+                users={users} 
+                setUsers={setUsers} 
+                squads={squads} 
+                setSquads={setSquads} 
+                openConfirm={openConfirm} 
+                onSaveUser={async (user) => {
+                    const result = await saveUser(user);
+                    if (result.success) {
+                        setUsers(prev => {
+                            const exists = prev.some(u => u.id === user.id);
+                            if (exists) return prev.map(u => u.id === user.id ? user as User : u);
+                            return [...prev, user as User];
+                        });
+                    }
+                }}
+                onDeleteUser={async (id) => {
+                    const result = await deleteUser(id);
+                    if (result.success) {
+                        setUsers(prev => prev.filter(u => u.id !== id));
+                    }
+                }}
+                onSaveSquad={async (squad) => {
+                    const result = await saveSquad(squad);
+                    if (result.success) {
+                        setSquads(prev => {
+                            const exists = prev.some(s => s.id === squad.id);
+                            if (exists) return prev.map(s => s.id === squad.id ? squad as Squad : s);
+                            return [...prev, squad as Squad];
+                        });
+                    }
+                }}
+                onDeleteSquad={async (id) => {
+                    const result = await deleteSquad(id);
+                    if (result.success) {
+                        setSquads(prev => prev.filter(s => s.id !== id));
+                    }
+                }}
+              />
+            )}
+            {currentView === 'permissions' && (
+              <PermissionsManager 
+                permissions={rolePermissions} 
+                setPermissions={setRolePermissions} 
+                openConfirm={openConfirm} 
+                onSavePermissions={async (perms) => {
+                    const result = await saveRolePermissions(perms);
+                    if (result.success) {
+                        setRolePermissions(perms);
+                    }
+                }}
+              />
+            )}
             {currentView === 'clients' && (
               <ClientManagement 
                 clients={clients} 
@@ -607,9 +812,23 @@ const App: React.FC = () => {
                 openConfirm={openConfirm} 
                 tasks={tasks} 
                 requisitions={requisitions} 
-                currentUser={currentUser}
-                onSaveClient={saveClient}
-                onDeleteClient={deleteClient}
+                currentUser={currentUser} 
+                onSaveClient={async (client) => {
+                    const result = await saveClient(client);
+                    if (result.success) {
+                        setClients(prev => {
+                            const exists = prev.some(c => c.id === client.id);
+                            if (exists) return prev.map(c => c.id === client.id ? client as Client : c);
+                            return [...prev, client as Client];
+                        });
+                    }
+                }}
+                onDeleteClient={async (id) => {
+                    const result = await deleteClient(id);
+                    if (result.success) {
+                        setClients(prev => prev.filter(c => c.id !== id));
+                    }
+                }}
               />
             )}
             {currentView === 'system-admin' && (
@@ -634,10 +853,16 @@ const App: React.FC = () => {
                 setSelectedBatchId={setSelectedApprovalBatchId}
                 selectedItemId={selectedApprovalItemId}
                 setSelectedItemId={setSelectedApprovalItemId}
-                onSaveBatch={saveApprovalBatch}
-                onSaveItem={saveApprovalItem}
-                onSaveComment={saveApprovalComment}
-                onSaveNotification={saveNotification}
+                onSaveBatch={async (batch) => {
+                    const result = await saveApprovalBatch(batch);
+                    if (result.success) {
+                        setApprovalBatches(prev => {
+                            const exists = prev.some(b => b.id === batch.id);
+                            if (exists) return prev.map(b => b.id === batch.id ? batch as ApprovalBatch : b);
+                            return [...prev, batch as ApprovalBatch];
+                        });
+                    }
+                }}
               />
             )}
             {currentView === 'help' && <HelpCenter currentUser={currentUser} />}

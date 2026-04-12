@@ -54,10 +54,7 @@ interface ApprovalsProps {
   setSelectedBatchId: (id: string | null) => void;
   selectedItemId: string | null;
   setSelectedItemId: (id: string | null) => void;
-  onSaveBatch?: (batch: Partial<ApprovalBatch>) => void;
-  onSaveItem?: (item: Partial<ApprovalItem>) => void;
-  onSaveComment?: (comment: Partial<ApprovalComment>) => void;
-  onSaveNotification?: (notif: Notification) => void;
+  onSaveBatch?: (batch: Partial<ApprovalBatch>) => Promise<void>;
 }
 
 export const Approvals: React.FC<ApprovalsProps> = ({ 
@@ -72,10 +69,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
   setSelectedBatchId,
   selectedItemId,
   setSelectedItemId,
-  onSaveBatch,
-  onSaveItem,
-  onSaveComment,
-  onSaveNotification
+  onSaveBatch
 }) => {
   const [commentText, setCommentText] = useState('');
   const commentsEndRef = React.useRef<HTMLDivElement>(null);
@@ -171,7 +165,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     return clients.find(c => c.id === clientId)?.name || 'Cliente Desconhecido';
   };
 
-  const handleCreateBatch = () => {
+  const handleCreateBatch = async () => {
     if (!newBatchTitle || !newBatchClientId) return;
 
     const newBatch: ApprovalBatch = {
@@ -184,8 +178,11 @@ export const Approvals: React.FC<ApprovalsProps> = ({
       items: []
     };
 
-    setBatches(prev => [newBatch, ...prev]);
-    if (onSaveBatch) onSaveBatch(newBatch);
+    if (onSaveBatch) {
+      await onSaveBatch(newBatch);
+    } else {
+      setBatches(prev => [newBatch, ...prev]);
+    }
     
     setIsNewBatchModalOpen(false);
     setNewBatchTitle('');
@@ -193,7 +190,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     setSelectedBatchId(newBatch.id); // Go to the new batch immediately
   };
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!selectedBatchId || !newItem.title) return;
 
     const approvalItem: ApprovalItem = {
@@ -208,16 +205,20 @@ export const Approvals: React.FC<ApprovalsProps> = ({
       updatedAt: Date.now()
     };
 
-    setBatches(prev => prev.map(b => {
-      if (b.id !== selectedBatchId) return b;
-      return {
-        ...b,
-        items: [...b.items, approvalItem],
+    const batch = batches.find(b => b.id === selectedBatchId);
+    if (batch) {
+      const updatedBatch = {
+        ...batch,
+        items: [...batch.items, approvalItem],
         updatedAt: Date.now()
       };
-    }));
-
-    if (onSaveItem) onSaveItem({ ...approvalItem, batchId: selectedBatchId });
+      
+      if (onSaveBatch) {
+        await onSaveBatch(updatedBatch);
+      } else {
+        setBatches(prev => prev.map(b => b.id === selectedBatchId ? updatedBatch : b));
+      }
+    }
 
     setIsAddItemModalOpen(false);
     setNewItem({
@@ -228,22 +229,28 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     });
   };
 
-  const handleSendBatch = (batchId: string) => {
-    setBatches(prev => prev.map(b => {
-      if (b.id !== batchId) return b;
-      const updated = { ...b, status: 'SENT' as ApprovalStatus, updatedAt: Date.now() };
-      if (onSaveBatch) onSaveBatch(updated);
-      return updated;
-    }));
+  const handleSendBatch = async (batchId: string) => {
+    const batch = batches.find(b => b.id === batchId);
+    if (batch) {
+      const updatedBatch = { ...batch, status: 'SENT' as ApprovalStatus, updatedAt: Date.now() };
+      if (onSaveBatch) {
+        await onSaveBatch(updatedBatch);
+      } else {
+        setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+      }
+    }
   };
 
-  const handleCompleteBatch = (batchId: string) => {
-    setBatches(prev => prev.map(b => {
-      if (b.id !== batchId) return b;
-      const updated = { ...b, status: 'COMPLETED' as ApprovalStatus, updatedAt: Date.now() };
-      if (onSaveBatch) onSaveBatch(updated);
-      return updated;
-    }));
+  const handleCompleteBatch = async (batchId: string) => {
+    const batch = batches.find(b => b.id === batchId);
+    if (batch) {
+      const updatedBatch = { ...batch, status: 'COMPLETED' as ApprovalStatus, updatedAt: Date.now() };
+      if (onSaveBatch) {
+        await onSaveBatch(updatedBatch);
+      } else {
+        setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+      }
+    }
     setSelectedBatchId(null);
   };
 
@@ -274,44 +281,26 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     }
   };
 
-  const handleUpdateItemStatus = (batchId: string, itemId: string, status: ApprovalStatus) => {
+  const handleUpdateItemStatus = async (batchId: string, itemId: string, status: ApprovalStatus) => {
     const batch = batches.find(b => b.id === batchId);
-    const item = batch?.items.find(i => i.id === itemId);
-    if (!batch || !item) return;
-
-    setBatches(prev => prev.map(b => {
-      if (b.id !== batchId) return b;
-      return {
-        ...b,
-        items: b.items.map(i => {
-          if (i.id !== itemId) return i;
-          const updated = { ...i, status, updatedAt: Date.now() };
-          if (onSaveItem) onSaveItem({ ...updated, batchId });
-          return updated;
+    if (batch) {
+      const updatedBatch = {
+        ...batch,
+        items: batch.items.map(item => {
+          if (item.id !== itemId) return item;
+          return { ...item, status, updatedAt: Date.now() };
         })
       };
-    }));
-
-    // Notify requester if status changed by someone else
-    if (batch.requesterId !== currentUser.id) {
-      const notif: Notification = {
-        id: `notif-${Date.now()}`,
-        title: `Item ${status === 'APPROVED' ? 'Aprovado' : status === 'REJECTED' ? 'Reprovado' : 'com Ajuste'}`,
-        message: `O item "${item.title}" do lote "${batch.title}" foi atualizado para ${status}.`,
-        type: status === 'APPROVED' ? 'SUCCESS' : status === 'REJECTED' ? 'REJECTED' : 'INFO',
-        priority: 'HIGH',
-        status: 'UNREAD',
-        originModule: 'APPROVALS',
-        timestamp: Date.now(),
-        targetUserId: batch.requesterId,
-        navToView: 'approvals'
-      };
-      setNotifications(prev => [notif, ...prev]);
-      if (onSaveNotification) onSaveNotification(notif);
+      
+      if (onSaveBatch) {
+        await onSaveBatch(updatedBatch);
+      } else {
+        setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+      }
     }
   };
 
-  const handleAddComment = (batchId: string, itemId: string, text: string, pageNumber?: number) => {
+  const handleAddComment = async (batchId: string, itemId: string, text: string, pageNumber?: number) => {
     const batch = batches.find(b => b.id === batchId);
     const item = batch?.items.find(i => i.id === itemId);
     if (!batch || !item) return;
@@ -324,22 +313,23 @@ export const Approvals: React.FC<ApprovalsProps> = ({
       pageNumber
     };
 
-    setBatches(prev => prev.map(b => {
-      if (b.id !== batchId) return b;
-      return {
-        ...b,
-        items: b.items.map(i => {
-          if (i.id !== itemId) return i;
-          return {
-            ...i,
-            comments: [...i.comments, newComment],
-            updatedAt: Date.now()
-          };
-        })
-      };
-    }));
+    const updatedBatch = {
+      ...batch,
+      items: batch.items.map(i => {
+        if (i.id !== itemId) return i;
+        return {
+          ...i,
+          comments: [...i.comments, newComment],
+          updatedAt: Date.now()
+        };
+      })
+    };
 
-    if (onSaveComment) onSaveComment({ ...newComment, itemId });
+    if (onSaveBatch) {
+      await onSaveBatch(updatedBatch);
+    } else {
+      setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+    }
 
     // Notification Logic
     const client = clients.find(c => c.id === batch.clientId);
@@ -388,9 +378,6 @@ export const Approvals: React.FC<ApprovalsProps> = ({
 
     if (newNotifications.length > 0) {
       setNotifications(prev => [...newNotifications, ...prev]);
-      if (onSaveNotification) {
-        newNotifications.forEach(n => onSaveNotification(n));
-      }
     }
   };
 

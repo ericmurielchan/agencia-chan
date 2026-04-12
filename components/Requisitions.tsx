@@ -12,6 +12,7 @@ interface RequisitionsProps {
   setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
   setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
   clients: Client[];
+  onSaveRequisition?: (req: Partial<Requisition>) => Promise<void>;
 }
 
 export const Requisitions: React.FC<RequisitionsProps> = ({ 
@@ -21,7 +22,8 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
     users, 
     setNotifications,
     setTransactions,
-    clients
+    clients,
+    onSaveRequisition
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -41,7 +43,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
       return matchesFilter && matchesSearch;
   }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const handleSaveReq = () => {
+  const handleSaveReq = async () => {
       if (!editingReq.title || !editingReq.estimatedCost) return;
       const newReq: Requisition = {
           id: Date.now().toString(),
@@ -54,50 +56,64 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
           date: new Date().toISOString().split('T')[0],
           category: editingReq.category || (isClient ? 'Reembolso' : 'Compra')
       };
-      setRequisitions(prev => [newReq, ...prev]);
+      
+      if (onSaveRequisition) {
+          await onSaveRequisition(newReq);
+      } else {
+          setRequisitions(prev => [newReq, ...prev]);
+      }
       setIsCreateModalOpen(false);
       setEditingReq({});
   };
 
-  const handleApproveReq = (req: Requisition) => {
+  const handleApproveReq = async (req: Requisition) => {
       if (!canApprove || req.status === 'APPROVED') return;
       setProcessingId(req.id);
-      setTimeout(() => {
-          const now = new Date().toISOString();
-          const updatedReq: Requisition = { ...req, status: 'APPROVED', approvedBy: currentUser.id, approvedAt: now };
+      
+      const now = new Date().toISOString();
+      const updatedReq: Requisition = { ...req, status: 'APPROVED', approvedBy: currentUser.id, approvedAt: now };
+      
+      if (onSaveRequisition) {
+          await onSaveRequisition(updatedReq);
+      } else {
           setRequisitions(prev => prev.map(r => r.id === req.id ? updatedReq : r));
-          
-          if (req.estimatedCost > 0) {
-              const newExpense: FinancialTransaction = {
-                  id: `exp-${req.id}`,
-                  description: `REQ Aprovada: ${req.title}`,
-                  amount: req.estimatedCost,
-                  type: 'EXPENSE',
-                  status: 'PENDING',
-                  date: new Date().toISOString().split('T')[0],
-                  categoryId: req.category,
-                  responsibleId: req.requesterId,
-                  clientId: req.clientId,
-                  createdAt: Date.now()
-              };
-              setTransactions(prev => [newExpense, ...prev]);
-          }
-          setProcessingId(null);
-      }, 600);
+      }
+      
+      if (req.estimatedCost > 0) {
+          const newExpense: FinancialTransaction = {
+              id: `exp-${req.id}`,
+              description: `REQ Aprovada: ${req.title}`,
+              amount: req.estimatedCost,
+              type: 'EXPENSE',
+              status: 'PENDING',
+              date: new Date().toISOString().split('T')[0],
+              categoryId: req.category,
+              responsibleId: req.requesterId,
+              clientId: req.clientId,
+              createdAt: Date.now()
+          };
+          setTransactions(prev => [newExpense, ...prev]);
+      }
+      setProcessingId(null);
   };
 
-  const handleRejectReq = () => {
+  const handleRejectReq = async () => {
       if (!selectedReqForReject || !rejectionReason) return;
       const reqToReject = selectedReqForReject;
       setIsRejectModalOpen(false);
       setProcessingId(reqToReject.id);
-      setTimeout(() => {
-          const updatedReq: Requisition = { ...reqToReject, status: 'REJECTED', rejectedBy: currentUser.id, rejectedAt: new Date().toISOString(), rejectedReason: rejectionReason };
+      
+      const updatedReq: Requisition = { ...reqToReject, status: 'REJECTED', rejectedBy: currentUser.id, rejectedAt: new Date().toISOString(), rejectedReason: rejectionReason };
+      
+      if (onSaveRequisition) {
+          await onSaveRequisition(updatedReq);
+      } else {
           setRequisitions(prev => prev.map(r => r.id === reqToReject.id ? updatedReq : r));
-          setProcessingId(null);
-          setSelectedReqForReject(null);
-          setRejectionReason('');
-      }, 600);
+      }
+      
+      setProcessingId(null);
+      setSelectedReqForReject(null);
+      setRejectionReason('');
   };
 
   return (
