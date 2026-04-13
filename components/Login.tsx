@@ -31,15 +31,51 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
     setLoading(true);
 
     try {
-      // 1. Tenta buscar o usuário no Supabase
+      // 1. Tenta buscar o usuário no Supabase (Tabela users)
       const { data: foundUser, error: supabaseError } = await supabase
         .from('users')
         .select('*')
         .eq('email', email.toLowerCase())
         .single();
 
-      if (supabaseError || !foundUser || !foundUser.password) {
-        // Fallback para mock data se o Supabase falhar, não encontrar ou o usuário estiver sem senha (migração incompleta)
+      if (supabaseError || !foundUser) {
+        // 1.1 Tenta buscar nos acessos de sistema dos clientes (Tabela clients)
+        const { data: clientsWithAccess } = await supabase
+          .from('clients')
+          .select('id, name, system_accesses')
+          .not('system_accesses', 'is', null);
+        
+        if (clientsWithAccess) {
+          for (const client of clientsWithAccess) {
+            const accesses = client.system_accesses as any[];
+            const access = accesses?.find(a => a.email?.toLowerCase() === email.toLowerCase());
+            
+            if (access) {
+              if (password !== access.password) {
+                setError('Senha incorreta.');
+                setLoading(false);
+                return;
+              }
+              
+              const clientUser: User = {
+                id: access.id || `client-${client.id}`,
+                name: access.label || client.name,
+                email: access.email,
+                role: 'CLIENT',
+                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(access.label || client.name)}&backgroundColor=db2777`,
+                clientId: client.id,
+                hasSystemAccess: true,
+                password: access.password,
+                preferences: { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false }
+              };
+              
+              onLogin(clientUser);
+              return;
+            }
+          }
+        }
+
+        // Fallback para mock data
         const mockUser = initialUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
         if (mockUser) {
           if (password !== mockUser.password) {
@@ -85,28 +121,79 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
     }
   };
 
-  const handleResetSubmit = (e: React.FormEvent) => {
+  const handleResetSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if(!resetEmail) return;
+      setLoading(true);
+      setError('');
 
-      const user = users.find(u => u.email.toLowerCase() === resetEmail.toLowerCase());
-      
-      // Simulando delay de rede do serviço de email
-      setTimeout(() => {
+      try {
+          // 1. Tenta encontrar na tabela 'users'
+          const { data: user } = await supabase
+              .from('users')
+              .select('*')
+              .eq('email', resetEmail.toLowerCase())
+              .single();
+
+          const newPass = Math.random().toString(36).slice(-8);
+
           if (user) {
-              // GERA UMA SENHA TEMPORÁRIA E ATUALIZA O OBJETO NA MEMÓRIA
-              // Nota: Em um backend real (Node/PHP), isso enviaria um email via SMTP.
-              // Como estamos rodando client-side na Hostinger sem backend, atualizamos o objeto localmente
-              // e mostramos a senha na tela como se fosse o "email recebido".
-              const newPass = Math.random().toString(36).slice(-8);
-              user.password = newPass; // Atualiza a senha do usuário em memória para login
+              const { error: updateError } = await supabase
+                  .from('users')
+                  .update({ password: newPass })
+                  .eq('id', user.id);
+              
+              if (updateError) throw updateError;
+              
               setTempPassword(newPass);
               setResetSuccess(true);
           } else {
-              setError('Email não encontrado na base de dados.');
+              // 2. Tenta encontrar nos acessos de clientes
+              const { data: clients } = await supabase
+                  .from('clients')
+                  .select('id, system_accesses')
+                  .not('system_accesses', 'is', null);
+              
+              let found = false;
+              if (clients) {
+                  for (const client of clients) {
+                      const accesses = [...(client.system_accesses as any[] || [])];
+                      const accessIdx = accesses.findIndex(a => a.email?.toLowerCase() === resetEmail.toLowerCase());
+                      
+                      if (accessIdx !== -1) {
+                          accesses[accessIdx].password = newPass;
+                          const { error: updateError } = await supabase
+                              .from('clients')
+                              .update({ system_accesses: accesses })
+                              .eq('id', client.id);
+                          
+                          if (updateError) throw updateError;
+                          
+                          setTempPassword(newPass);
+                          setResetSuccess(true);
+                          found = true;
+                          break;
+                      }
+                  }
+              }
+
+              if (!found) {
+                  setError('Email não encontrado na base de dados.');
+              }
           }
-      }, 800);
+      } catch (err) {
+          console.error('Erro ao resetar senha:', err);
+          setError('Ocorreu um erro ao processar sua solicitação.');
+      } finally {
+          setLoading(false);
+      }
   };
+
+  const testUsers = [
+      { email: 'eric.muriel@gmail.com', pass: '123', label: 'Admin' },
+      { email: 'financeiro@chandigital.com.br', pass: '123', label: 'Financeiro' },
+      { email: 'joao@techstart.io', pass: '123', label: 'Cliente' }
+  ];
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
@@ -114,7 +201,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
       {/* Background Decoration */}
       <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-slate-200 to-transparent -z-10"></div>
       
-      <div className="bg-white p-8 md:p-10 rounded-3xl shadow-2xl w-full max-w-md border border-white/50 backdrop-blur-xl animate-pop relative z-10">
+      <div className="bg-white p-8 md:p-10 rounded-[40px] shadow-2xl w-full max-w-md border border-white/50 backdrop-blur-xl animate-pop relative z-10">
         
         {/* Logo Section */}
         <div className="flex justify-center mb-8">
@@ -122,7 +209,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
                <img src={systemSettings.logo} alt="Logo" className="h-20 object-contain drop-shadow-sm" />
            ) : (
                <div 
-                    className="w-20 h-20 rounded-2xl flex items-center justify-center text-white text-4xl font-bold shadow-lg transform rotate-3"
+                    className="w-20 h-20 rounded-3xl flex items-center justify-center text-white text-4xl font-black shadow-lg transform rotate-3"
                     style={{ backgroundColor: systemSettings.primaryColor }}
                >
                    {systemSettings.agencyName.charAt(0)}
@@ -134,38 +221,36 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
         {!isResetting ? (
             <>
                 <div className="text-center mb-8">
-                    <h2 className="text-3xl font-extrabold text-slate-800">{systemSettings.agencyName}</h2>
-                    <p className="text-slate-500 mt-2 text-sm">Bem-vindo de volta! Acesse sua conta.</p>
+                    <h2 className="text-3xl font-black text-slate-800 tracking-tighter">{systemSettings.agencyName}</h2>
+                    <p className="text-slate-400 mt-2 text-sm font-medium uppercase tracking-widest text-[10px]">Acesso ao Sistema</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Email Corporativo</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1 tracking-widest">Email Corporativo</label>
                     <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
                         <input 
                           type="email" 
                           required
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 outline-none transition-all focus:ring-2 focus:ring-opacity-50 focus:border-transparent bg-slate-50 focus:bg-white"
-                          style={{ '--tw-ring-color': systemSettings.primaryColor } as React.CSSProperties}
+                          className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-50 outline-none transition-all focus:border-pink-200 bg-slate-50 focus:bg-white text-sm font-bold"
                           placeholder="seu@email.com"
                         />
                     </div>
                   </div>
                   
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1 tracking-widest">Senha</label>
                     <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
                         <input 
                           type="password" 
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 outline-none transition-all focus:ring-2 focus:ring-opacity-50 focus:border-transparent bg-slate-50 focus:bg-white"
-                          style={{ '--tw-ring-color': systemSettings.primaryColor } as React.CSSProperties}
+                          className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-50 outline-none transition-all focus:border-pink-200 bg-slate-50 focus:bg-white text-sm font-bold"
                           placeholder="••••••••"
                         />
                     </div>
@@ -173,7 +258,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
                         <button 
                             type="button"
                             onClick={() => { setIsResetting(true); setError(''); }}
-                            className="text-xs font-medium text-slate-400 hover:text-slate-600 transition-colors"
+                            className="text-[10px] font-black text-slate-400 hover:text-pink-600 uppercase tracking-widest transition-colors"
                         >
                             Esqueceu a senha?
                         </button>
@@ -181,102 +266,118 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
                   </div>
 
                   {error && (
-                    <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2 animate-pop">
-                      <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                    <div className="p-4 bg-red-50 text-red-600 text-xs font-bold rounded-2xl border border-red-100 flex items-center gap-3 animate-pop">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                       {error}
                     </div>
                   )}
 
-                  {/* FIX: Remove invalid CSS property 'shadowColor' */}
                   <button 
                     type="submit"
                     disabled={loading}
-                    className="w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 text-sm tracking-wide flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="w-full text-white font-black py-4 rounded-2xl transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 active:scale-95 text-xs tracking-[0.2em] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed uppercase"
                     style={{ backgroundColor: systemSettings.primaryColor }}
                   >
                     {loading ? (
                       <>
                         <Loader2 className="animate-spin" size={18} />
-                        AUTENTICANDO...
+                        Autenticando...
                       </>
                     ) : (
-                      'ENTRAR NO SISTEMA'
+                      'Entrar no Sistema'
                     )}
                   </button>
                 </form>
+
+                <div className="mt-8 pt-8 border-t border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-4">Contas de Teste</p>
+                    <div className="grid grid-cols-3 gap-2">
+                        {testUsers.map(u => (
+                            <button 
+                                key={u.email}
+                                onClick={() => { setEmail(u.email); setPassword(u.pass); }}
+                                className="px-2 py-2 bg-slate-50 hover:bg-pink-50 text-slate-500 hover:text-pink-600 rounded-xl text-[9px] font-black uppercase tracking-tighter transition-all border border-transparent hover:border-pink-100"
+                            >
+                                {u.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </>
         ) : (
             /* --- RESET PASSWORD FORM --- */
             <div className="animate-pop">
+                <button 
+                    onClick={() => { setIsResetting(false); setError(''); setResetSuccess(false); }}
+                    className="flex items-center gap-2 text-slate-400 hover:text-slate-600 text-[10px] font-black uppercase tracking-widest mb-8 transition-colors"
+                >
+                    <ArrowLeft size={16}/> Voltar para Login
+                </button>
+                
                 {!resetSuccess ? (
                     <>
-                        <button 
-                            onClick={() => { setIsResetting(false); setError(''); }}
-                            className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm mb-6 transition-colors"
-                        >
-                            <ArrowLeft size={16}/> Voltar para Login
-                        </button>
-                        
-                        <div className="text-center mb-6">
-                            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Lock size={24}/>
+                        <div className="text-center mb-8">
+                            <div className="w-16 h-16 bg-pink-50 text-pink-600 rounded-[24px] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-pink-100">
+                                <Lock size={28}/>
                             </div>
-                            <h2 className="text-2xl font-bold text-slate-800">Recuperar Senha</h2>
-                            <p className="text-slate-500 mt-2 text-sm px-4">Informe seu email para gerar uma nova senha de acesso.</p>
+                            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Recuperar Senha</h2>
+                            <p className="text-slate-400 mt-2 text-sm font-medium">Informe seu email para gerar uma nova senha.</p>
                         </div>
 
                         <form onSubmit={handleResetSubmit} className="space-y-5">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Email Cadastrado</label>
-                                <input 
-                                  type="email" 
-                                  required
-                                  value={resetEmail}
-                                  onChange={(e) => setResetEmail(e.target.value)}
-                                  className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none transition-all focus:ring-2 focus:ring-opacity-50 focus:border-transparent bg-slate-50 focus:bg-white"
-                                  style={{ '--tw-ring-color': systemSettings.primaryColor } as React.CSSProperties}
-                                  placeholder="seu@email.com"
-                                />
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1 tracking-widest">Email Cadastrado</label>
+                                <div className="relative">
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+                                    <input 
+                                      type="email" 
+                                      required
+                                      value={resetEmail}
+                                      onChange={(e) => setResetEmail(e.target.value)}
+                                      className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-50 outline-none transition-all focus:border-pink-200 bg-slate-50 focus:bg-white text-sm font-bold"
+                                      placeholder="seu@email.com"
+                                    />
+                                </div>
                             </div>
 
                             {error && (
-                                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                                <div className="p-4 bg-red-50 text-red-600 text-xs font-bold rounded-2xl border border-red-100 flex items-center gap-3">
+                                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                                   {error}
                                 </div>
                             )}
 
                             <button 
                                 type="submit"
-                                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg text-sm tracking-wide"
+                                disabled={loading}
+                                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl transition-all shadow-xl text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2"
                             >
-                                GERAR NOVA SENHA
+                                {loading ? <Loader2 className="animate-spin" size={18}/> : 'Gerar Nova Senha'}
                             </button>
                         </form>
                     </>
                 ) : (
                     /* --- RESET SUCCESS (SIMULAÇÃO DE EMAIL) --- */
-                    <div className="text-center py-8 animate-pop">
-                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <CheckCircle2 size={32}/>
+                    <div className="text-center py-4 animate-pop">
+                        <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-100">
+                            <CheckCircle2 size={40}/>
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">Sucesso!</h3>
-                        <p className="text-slate-500 text-sm mb-4">
-                            Sua senha foi redefinida com sucesso.
+                        <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Sucesso!</h3>
+                        <p className="text-slate-400 text-sm font-medium mb-8">
+                            Sua senha foi redefinida no banco de dados.
                         </p>
                         
-                        {/* Simulação Visual do Email para funcionar sem Backend */}
-                        <div className="bg-slate-100 border border-slate-200 p-4 rounded-lg text-left mb-6 mx-auto max-w-xs relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
-                            <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Cópia do Email (Sistema Demo)</p>
-                            <p className="text-sm text-slate-600">Olá! Sua nova senha temporária é:</p>
-                            <p className="text-xl font-mono font-bold text-slate-800 my-2 tracking-wider bg-white p-2 text-center rounded border border-slate-200 select-all">{tempPassword}</p>
-                            <p className="text-[10px] text-slate-400 mt-2">* Em produção, isso chegaria na sua caixa de entrada.</p>
+                        <div className="bg-slate-50 border-2 border-slate-100 p-6 rounded-[32px] text-left mb-8 mx-auto max-w-xs relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-500"></div>
+                            <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest mb-3">Nova Senha Gerada</p>
+                            <p className="text-xs text-slate-600 font-bold mb-4">Use a senha abaixo para acessar sua conta agora:</p>
+                            <p className="text-2xl font-mono font-black text-slate-800 tracking-widest bg-white p-4 text-center rounded-2xl border-2 border-slate-100 select-all shadow-sm">{tempPassword}</p>
+                            <p className="text-[9px] text-slate-400 mt-4 font-bold uppercase text-center">* Senha já atualizada no sistema.</p>
                         </div>
 
                         <button 
                             onClick={() => { setIsResetting(false); setResetSuccess(false); setResetEmail(''); setPassword(''); }}
-                            className="text-emerald-600 font-bold hover:underline text-sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-lg text-xs tracking-[0.2em] uppercase"
                         >
                             Ir para Login
                         </button>
@@ -287,18 +388,18 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
       </div>
 
       {/* Footer Links */}
-      <div className="mt-8 flex gap-6 text-xs font-medium text-slate-400 relative z-10">
-          <button onClick={() => onNavigate && onNavigate('privacy')} className="hover:text-slate-600 transition-colors flex items-center gap-1.5">
-              <Shield size={12}/> Políticas de Privacidade
+      <div className="mt-10 flex gap-8 text-[10px] font-black uppercase tracking-widest text-slate-400 relative z-10">
+          <button onClick={() => onNavigate && onNavigate('privacy')} className="hover:text-pink-600 transition-colors flex items-center gap-2">
+              <Shield size={14}/> Privacidade
           </button>
-          <div className="w-px h-3 bg-slate-300 my-auto"></div>
-          <button onClick={() => onNavigate && onNavigate('help')} className="hover:text-slate-600 transition-colors flex items-center gap-1.5">
-              <HelpCircle size={12}/> Central de Ajuda
+          <div className="w-1 h-1 bg-slate-300 rounded-full my-auto"></div>
+          <button onClick={() => onNavigate && onNavigate('help')} className="hover:text-pink-600 transition-colors flex items-center gap-2">
+              <HelpCircle size={14}/> Ajuda
           </button>
       </div>
 
-      <p className="mt-4 text-[10px] text-slate-300 relative z-10">
-          &copy; {new Date().getFullYear()} {systemSettings.agencyName} OS. v1.0.0
+      <p className="mt-6 text-[9px] font-black text-slate-300 relative z-10 uppercase tracking-[0.3em]">
+          &copy; {new Date().getFullYear()} {systemSettings.agencyName} OS &bull; v1.2.0
       </p>
     </div>
   );
