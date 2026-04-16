@@ -15,7 +15,9 @@ interface KanbanBoardProps {
   columns: ColumnConfig[];
   setColumns: React.Dispatch<React.SetStateAction<ColumnConfig[]>>;
   notifications: Notification[];
-  setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+  addNotification: (data: any) => Promise<void>;
+  onNotificationClick: (notif: Notification) => Promise<void>;
+  onMarkAllAsRead: () => Promise<void>;
   openConfirm: (options: ConfirmOptions) => Promise<boolean>;
   sidebarOpen: boolean;
   sidebarCompact: boolean;
@@ -31,7 +33,7 @@ interface KanbanBoardProps {
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
-  tasks, setTasks, users, currentUser, columns, setColumns, notifications, setNotifications, openConfirm,
+  tasks, setTasks, users, currentUser, columns, setColumns, notifications, addNotification, onNotificationClick, onMarkAllAsRead, openConfirm,
   sidebarOpen, sidebarCompact, isMobile, clients, selectedTaskId, onClearSelectedTask, initialFilter, onClearFilter, onNavigate,
   onSaveTask, onDeleteTask
 }) => {
@@ -183,7 +185,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 <div className="p-4 md:p-5 border-b bg-slate-50/50 flex justify-between items-center">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Notificações</h3>
                   <button 
-                    onClick={() => setNotifications(prev => prev.map(n => ({...n, status: 'READ'})))}
+                    onClick={onMarkAllAsRead}
                     className="text-[9px] font-black uppercase tracking-widest text-pink-600 hover:text-pink-700"
                   >
                     Limpar
@@ -196,13 +198,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         <button 
                           key={notif.id} 
                           onClick={() => {
-                            setNotifications(prev => prev.map(n => n.id === notif.id ? {...n, status: 'READ'} : n));
-                            if (notif.navToView === 'kanban' && notif.metadata?.referenceId) {
-                              const task = tasks.find(t => t.id === notif.metadata?.referenceId);
-                              if (task) setSelectedTask(task);
-                            } else if (notif.navToView && onNavigate) {
-                              onNavigate(notif.navToView, notif.metadata?.referenceId);
-                            }
+                            onNotificationClick(notif);
                             setShowNotifDropdown(false);
                           }}
                           className={`w-full p-4 text-left hover:bg-slate-50 transition-colors flex gap-3 items-start ${notif.status === 'UNREAD' ? 'bg-pink-50/30' : ''}`}

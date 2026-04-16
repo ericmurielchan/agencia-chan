@@ -24,7 +24,7 @@ interface CRMModuleProps {
     clients: Client[];
     setClients: React.Dispatch<React.SetStateAction<Client[]>>;
     notifications: Notification[];
-    setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+    addNotification: (data: any) => Promise<void>;
     openConfirm: (options: ConfirmOptions) => Promise<boolean>;
     selectedLeadId?: string | null;
     onClearSelectedLead?: () => void;
@@ -34,7 +34,7 @@ interface CRMModuleProps {
 
 export const CRMModule: React.FC<CRMModuleProps> = ({ 
     leads, setLeads, stages, setStages, lossReasons, setLossReasons, 
-    users, currentUser, clients, setClients, notifications, setNotifications, openConfirm,
+    users, currentUser, clients, setClients, notifications, addNotification, openConfirm,
     selectedLeadId, onClearSelectedLead, onSaveLead, onDeleteLead
 }) => {
     const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PIPELINE' | 'LIST' | 'REPORTS'>('PIPELINE');
@@ -72,35 +72,29 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
 
                             // Task Overdue
                             if (diff < 0 && !notifications.find(n => n.id === `overdue_${task.id}`)) {
-                                const overdueNotif: Notification = {
+                                addNotification({
                                     id: `overdue_${task.id}`,
                                     title: 'Tarefa Atrasada',
                                     message: `Tarefa atrasada: ${task.text} (Lead: ${lead.company})`,
                                     type: 'ALERT',
                                     priority: 'HIGH',
-                                    status: 'UNREAD',
                                     originModule: 'CRM',
-                                    timestamp: Date.now(),
                                     targetUserId: currentUser.id,
                                     navToView: 'crm'
-                                };
-                                setNotifications(prev => [overdueNotif, ...prev]);
+                                });
                             }
                             // Task in 1 hour
                             else if (diff > 0 && diff < oneHour && !notifications.find(n => n.id === `soon_${task.id}`)) {
-                                const soonNotif: Notification = {
+                                addNotification({
                                     id: `soon_${task.id}`,
                                     title: 'Tarefa em Breve',
                                     message: `Tarefa em 1h: ${task.text} (Lead: ${lead.company})`,
                                     type: 'INFO',
                                     priority: 'MEDIUM',
-                                    status: 'UNREAD',
                                     originModule: 'CRM',
-                                    timestamp: Date.now(),
                                     targetUserId: currentUser.id,
                                     navToView: 'crm'
-                                };
-                                setNotifications(prev => [soonNotif, ...prev]);
+                                });
                             }
                         }
                     });
@@ -108,19 +102,16 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     // Lead without contact for 3 days
                     const lastContact = lead.lastContact ? new Date(lead.lastContact).getTime() : lead.createdAt;
                     if (now - lastContact > oneDay * 3 && lead.status === 'OPEN' && !notifications.find(n => n.id === `nocontact_${lead.id}`)) {
-                        const noContactNotif: Notification = {
+                        addNotification({
                             id: `nocontact_${lead.id}`,
                             title: 'Lead sem Contato',
                             message: `Lead sem contato há mais de 3 dias: ${lead.company}`,
                             type: 'WARNING',
                             priority: 'MEDIUM',
-                            status: 'UNREAD',
                             originModule: 'CRM',
-                            timestamp: Date.now(),
                             targetUserId: currentUser.id,
                             navToView: 'crm'
-                        };
-                        setNotifications(prev => [noContactNotif, ...prev]);
+                        });
                     }
                 }
             });
@@ -129,7 +120,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
         checkTasks();
         const interval = setInterval(checkTasks, 60000); // Check every minute
         return () => clearInterval(interval);
-    }, [leads, currentUser, notifications, setNotifications]);
+    }, [leads, currentUser, notifications, addNotification]);
 
     // Access Control Logic
     const visibleLeads = useMemo(() => {
@@ -167,7 +158,15 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     targetUserId: lead.responsibleId,
                     navToView: 'crm'
                 };
-                setNotifications(prev => [newNotification, ...prev]);
+                addNotification({
+                    title: 'Novo Lead',
+                    message: `Um novo lead foi cadastrado: ${lead.company}`,
+                    type: 'INFO',
+                    priority: 'MEDIUM',
+                    originModule: 'CRM',
+                    targetUserId: lead.responsibleId,
+                    navToView: 'crm'
+                });
             }
         } else {
             setLeads(prev => prev.map(l => l.id === lead.id ? lead : l));
@@ -212,7 +211,15 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     targetRole: 'ADMIN',
                     navToView: 'clients'
                 };
-                setNotifications(prev => [winNotification, ...prev]);
+                addNotification({
+                    title: 'Lead Ganho! 🎉',
+                    message: `Parabéns! O lead ${lead.company} foi convertido em cliente.`,
+                    type: 'SUCCESS',
+                    priority: 'HIGH',
+                    originModule: 'CRM',
+                    targetUserId: lead.responsibleId,
+                    navToView: 'crm'
+                });
             }
         }
 

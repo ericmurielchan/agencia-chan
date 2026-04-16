@@ -12,6 +12,7 @@ interface Tutorial {
     title: string;
     content: React.ReactNode;
     category: 'GERAL' | Role;
+    keywords?: string;
 }
 
 export const HelpCenter: React.FC<HelpCenterProps> = ({ currentUser }) => {
@@ -29,78 +30,288 @@ export const HelpCenter: React.FC<HelpCenterProps> = ({ currentUser }) => {
             id: 'g1',
             category: 'GERAL',
             title: 'Como alterar minha senha ou foto?',
-            content: 'Vá até o menu superior direito, clique no seu nome e selecione "Configurações". Na aba "Segurança" você pode alterar a senha e na aba "Perfil Geral" atualizar sua foto.'
+            keywords: 'senha password foto avatar perfil segurança',
+            content: (
+                <div className="space-y-3">
+                    <p>Para manter seu perfil atualizado e seguro:</p>
+                    <ol className="list-decimal ml-5 space-y-1">
+                        <li>Clique no seu nome/foto no canto superior direito da tela.</li>
+                        <li>Selecione a opção <strong>"Configurações"</strong>.</li>
+                        <li>Na aba <strong>"Perfil Geral"</strong>, você pode carregar uma nova foto clicando no ícone de câmera.</li>
+                        <li>Na aba <strong>"Segurança"</strong>, insira sua senha atual e a nova senha desejada para atualizar seu acesso.</li>
+                    </ol>
+                </div>
+            )
         },
         {
             id: 'g2',
             category: 'GERAL',
-            title: 'Notificações do Sistema',
-            content: 'O ícone de sino no topo mostra alertas importantes. Você pode configurar para receber alertas por e-mail nas suas Configurações de Perfil.'
+            title: 'Notificações e Alertas',
+            keywords: 'notificação sino alerta email aviso',
+            content: (
+                <div className="space-y-3">
+                    <p>O sistema mantém você informado sobre eventos importantes através do ícone de sino no topo:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li><strong>Novas Tarefas:</strong> Quando alguém atribui uma tarefa a você.</li>
+                        <li><strong>Prazos:</strong> Alertas de tarefas que estão próximas do vencimento.</li>
+                        <li><strong>Aprovações:</strong> Notificações quando um lote de aprovação é concluído ou requer sua atenção.</li>
+                        <li><strong>Financeiro:</strong> Alertas de faturas vencidas ou novos lançamentos.</li>
+                    </ul>
+                    <p className="text-sm italic">Dica: Você pode marcar todas como lidas clicando no botão "Limpar" dentro do menu de notificações.</p>
+                </div>
+            )
+        },
+        {
+            id: 'g3',
+            category: 'GERAL',
+            title: 'Navegação e Atalhos',
+            keywords: 'menu lateral dashboard navegação atalho',
+            content: (
+                <div className="space-y-3">
+                    <p>A barra lateral esquerda é o seu centro de comando. Você pode recolhê-la para ganhar mais espaço de trabalho clicando no ícone de menu (hambúrguer) no topo.</p>
+                    <p>O Dashboard principal oferece uma visão rápida de:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li>Suas tarefas pendentes.</li>
+                        <li>Próximas reuniões ou eventos.</li>
+                        <li>Resumo de atividades recentes.</li>
+                    </ul>
+                </div>
+            )
         },
         // ADMIN
         {
             id: 'a1',
             category: 'ADMIN',
-            title: 'Gerenciando Permissões (RBAC)',
-            content: 'No menu "Acessos (Admin)", você pode definir exatamente quais telas e quais ações (como Excluir ou Aprovar) cada cargo pode realizar. As alterações são aplicadas em tempo real.'
+            title: 'Controle de Acessos e Permissões (RBAC)',
+            keywords: 'permissão acesso rbac cargo admin diretor',
+            content: (
+                <div className="space-y-3">
+                    <p>O módulo de <strong>"Acessos"</strong> permite configurar a hierarquia e visibilidade do sistema:</p>
+                    <ol className="list-decimal ml-5 space-y-1">
+                        <li>Selecione o cargo (Admin, Gerente, etc.) que deseja configurar.</li>
+                        <li>Ative ou desative módulos inteiros (ex: esconder Financeiro para Operacional).</li>
+                        <li>Defina permissões granulares: <strong>Visualizar, Criar, Editar, Excluir e Aprovar</strong>.</li>
+                        <li>Clique em "Salvar Configurações" para aplicar as mudanças instantaneamente a todos os usuários daquele cargo.</li>
+                    </ol>
+                </div>
+            )
         },
         {
             id: 'a2',
             category: 'ADMIN',
-            title: 'Configurações de Cores e Branding',
-            content: 'Acesse "Config. Sistema" para alterar o logotipo da agência, a cor primária dos botões e a cor de fundo da barra lateral.'
+            title: 'Personalização de Marca (Branding)',
+            keywords: 'logo cor branding marca agência personalização',
+            content: (
+                <div className="space-y-3">
+                    <p>Acesse <strong>"Config. Sistema"</strong> para deixar o sistema com a cara da sua agência:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li><strong>Logotipo:</strong> Envie o logo para a barra lateral e para os relatórios PDF.</li>
+                        <li><strong>Cores:</strong> Defina a cor primária (botões e destaques) e a cor da barra lateral.</li>
+                        <li><strong>Nome da Agência:</strong> Atualize o nome que aparece nas comunicações e títulos de página.</li>
+                    </ul>
+                </div>
+            )
+        },
+        {
+            id: 'a3',
+            category: 'ADMIN',
+            title: 'Gestão de Clientes e Acessos Externos',
+            keywords: 'cliente acesso login externo portal',
+            content: (
+                <div className="space-y-3">
+                    <p>No módulo <strong>"Gestão de Clientes"</strong>, você pode criar contas de acesso para seus clientes:</p>
+                    <ol className="list-decimal ml-5 space-y-1">
+                        <li>Edite um cliente existente ou crie um novo.</li>
+                        <li>Na seção "Acessos ao Sistema", clique em "Adicionar Acesso".</li>
+                        <li>Defina o e-mail e uma senha inicial para o cliente.</li>
+                        <li>O cliente poderá logar na mesma URL do sistema e verá apenas o <strong>Portal do Cliente</strong>.</li>
+                    </ol>
+                </div>
+            )
         },
         // MANAGER
         {
             id: 'm1',
             category: 'MANAGER',
-            title: 'Aprovando Solicitações de Clientes',
-            content: 'Quando um cliente cria uma demanda, ela aparece no topo do Kanban como "Solicitação Pendente". Você deve revisar o briefing e clicar em "Aprovar" (move para o Backlog) ou "Rejeitar" (arquiva a tarefa).'
+            title: 'Gestão de Leads e CRM',
+            keywords: 'crm lead venda funil negociação histórico',
+            content: (
+                <div className="space-y-3">
+                    <p>O CRM é dividido em funis de vendas. Para gerenciar leads:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li>Arraste os cards entre as colunas para mudar o estágio da negociação.</li>
+                        <li>Clique em um lead para ver o <strong>Histórico de Interações</strong>.</li>
+                        <li>Agende tarefas (ligações, reuniões) com data e hora. O sistema notificará o responsável no horário marcado.</li>
+                        <li>Converta leads ganhos em Clientes Ativos com um clique.</li>
+                    </ul>
+                </div>
+            )
         },
         {
             id: 'm2',
             category: 'MANAGER',
-            title: 'Gestão de Squads',
-            content: 'Use o módulo "Equipes" para criar novas Squads e alocar membros. Isso define quem vê quais tarefas no Kanban.'
+            title: 'Aprovação de Lotes e Demandas',
+            keywords: 'aprovação lote demanda cliente validação',
+            content: (
+                <div className="space-y-3">
+                    <p>O módulo de <strong>"Aprovações"</strong> centraliza o que precisa de validação:</p>
+                    <ol className="list-decimal ml-5 space-y-1">
+                        <li>Crie um "Lote de Aprovação" selecionando os itens (artes, textos, vídeos).</li>
+                        <li>Envie para o cliente ou para um diretor interno.</li>
+                        <li>Acompanhe o status: Pendente, Aprovado ou Ajustes Solicitados.</li>
+                        <li>Itens aprovados podem ser movidos automaticamente para a próxima etapa do Kanban.</li>
+                    </ol>
+                </div>
+            )
+        },
+        {
+            id: 'm3',
+            category: 'MANAGER',
+            title: 'Organização de Equipes (Squads)',
+            keywords: 'equipe squad time membro organização',
+            content: (
+                <div className="space-y-3">
+                    <p>Em <strong>"Equipes"</strong>, você organiza quem trabalha em quê:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li>Crie Squads por especialidade (ex: Squad Social Media, Squad Performance).</li>
+                        <li>Adicione membros às Squads.</li>
+                        <li>Ao criar uma tarefa no Kanban, você pode atribuí-la a uma Squad inteira ou a um membro específico.</li>
+                    </ul>
+                </div>
+            )
         },
         // EMPLOYEE
         {
             id: 'e1',
             category: 'EMPLOYEE',
-            title: 'Usando o Kanban e Timer',
-            content: 'Mova os cards entre as colunas para atualizar o status. Use o botão de "Play" no card da tarefa para iniciar o rastreamento de tempo (Time Tracking).'
+            title: 'Operação no Kanban e Time Tracking',
+            keywords: 'kanban tarefa timer tempo tracking checklist',
+            content: (
+                <div className="space-y-3">
+                    <p>Sua rotina diária acontece no Kanban:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li><strong>Play/Pause:</strong> Use o timer no card para registrar exatamente quanto tempo gasta em cada tarefa.</li>
+                        <li><strong>Checklist:</strong> Dentro do card, siga as sub-tarefas para garantir a qualidade da entrega.</li>
+                        <li><strong>Comentários:</strong> Use o chat interno da tarefa para tirar dúvidas com o gerente ou colegas.</li>
+                        <li><strong>Anexos:</strong> Suba os arquivos finais diretamente na tarefa para aprovação.</li>
+                    </ul>
+                </div>
+            )
         },
         {
             id: 'e2',
             category: 'EMPLOYEE',
-            title: 'Solicitando Compras ou Reembolso',
-            content: 'Acesse o menu "Solicitações" para pedir novos equipamentos ou reembolso de despesas. O status será atualizado pelo financeiro/admin.'
-        },
-        // CLIENT
-        {
-            id: 'c1',
-            category: 'CLIENT',
-            title: 'Como abrir um novo chamado?',
-            content: 'No seu painel "Meus Pedidos", clique em "Nova Solicitação". Siga o passo a passo escolhendo o tipo (Social, Vídeo, etc) e preenchendo o briefing.'
-        },
-        {
-            id: 'c2',
-            category: 'CLIENT',
-            title: 'Solicitar Reunião com Gerente',
-            content: 'Na barra lateral direita do seu portal, há um card "Meu Gerente de Conta". Clique em "Solicitar Reunião" para enviar um pedido de agendamento.'
+            title: 'Produtos e Serviços',
+            keywords: 'produto serviço catálogo escopo contrato',
+            content: (
+                <div className="space-y-3">
+                    <p>Consulte o catálogo de <strong>"Produtos e Serviços"</strong> para entender o que foi vendido ao cliente:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li>Veja a descrição detalhada de cada serviço.</li>
+                        <li>Confira os entregáveis padrão de cada item.</li>
+                        <li>Isso ajuda a manter o escopo do projeto alinhado com o contrato.</li>
+                    </ul>
+                </div>
+            )
         },
         // FINANCE
         {
             id: 'f1',
             category: 'FINANCE',
-            title: 'Lançamento de Contas a Pagar/Receber',
-            content: 'No módulo Financeiro, use o botão "Lançamento". Você pode criar lançamentos únicos ou parcelados (recorrentes).'
+            title: 'Gestão Financeira e Fluxo de Caixa',
+            keywords: 'financeiro caixa transação receita despesa fatura',
+            content: (
+                <div className="space-y-3">
+                    <p>Controle total das entradas e saídas:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li><strong>Transações:</strong> Registre receitas e despesas. Use categorias para organizar os custos.</li>
+                        <li><strong>Recorrência:</strong> Configure faturas mensais para clientes de fee mensal (Retainer).</li>
+                        <li><strong>Conciliação:</strong> Marque como "Pago" assim que o valor cair na conta para atualizar o saldo real.</li>
+                    </ul>
+                </div>
+            )
         },
         {
             id: 'f2',
             category: 'FINANCE',
-            title: 'Aprovando Requisições de Compra',
-            content: 'Acesse "Solicitações". Itens marcados como "Compra" ou "Reembolso" pendentes devem ser analisados. Ao aprovar, o sistema sugere criar o lançamento de despesa automaticamente.'
+            title: 'Relatórios e Dashboards Financeiros',
+            keywords: 'relatório dashboard financeiro lucro venda churn',
+            content: (
+                <div className="space-y-3">
+                    <p>Gere inteligência sobre os números da agência:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li><strong>Períodos:</strong> Filtre por Hoje, 7 dias, 30 dias, 6 meses ou Personalizado.</li>
+                        <li><strong>Tipos de Relatório:</strong> Receitas vs Despesas, Novas Vendas, Faturas por Período.</li>
+                        <li><strong>Ativos:</strong> Acompanhe o saldo de ativos e ativos cancelados (Churn).</li>
+                        <li><strong>Exportação:</strong> Use o botão de download para baixar os dados filtrados em CSV/Excel.</li>
+                    </ul>
+                </div>
+            )
+        },
+        {
+            id: 'f3',
+            category: 'FINANCE',
+            title: 'Gestão de Ativos e Estoque',
+            keywords: 'ativo estoque equipamento inventário patrimônio',
+            content: (
+                <div className="space-y-3">
+                    <p>Controle o patrimônio da agência:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li>Cadastre equipamentos (Macbooks, Câmeras) como Ativos.</li>
+                        <li>Gerencie o estoque de insumos (Papelaria, Brindes).</li>
+                        <li>O sistema calcula a depreciação e valor total do inventário.</li>
+                    </ul>
+                </div>
+            )
+        },
+        // CLIENT
+        {
+            id: 'c1',
+            category: 'CLIENT',
+            title: 'Portal do Cliente: Pedidos e Briefing',
+            keywords: 'pedido briefing solicitação chamado cliente',
+            content: (
+                <div className="space-y-3">
+                    <p>Como cliente, você tem autonomia para solicitar e acompanhar:</p>
+                    <ol className="list-decimal ml-5 space-y-1">
+                        <li>Clique em <strong>"Nova Solicitação"</strong> para abrir um pedido.</li>
+                        <li>Preencha o briefing detalhadamente para evitar retrabalho.</li>
+                        <li>Acompanhe o status em tempo real: "Em Produção", "Aguardando sua Aprovação", etc.</li>
+                    </ol>
+                </div>
+            )
+        },
+        {
+            id: 'c2',
+            category: 'CLIENT',
+            title: 'Aprovação de Materiais',
+            keywords: 'aprovação material arte ajuste validação',
+            content: (
+                <div className="space-y-3">
+                    <p>Quando a agência finaliza um material, você receberá uma notificação:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li>Acesse a aba <strong>"Aprovações"</strong>.</li>
+                        <li>Visualize o arquivo (imagem, vídeo ou documento).</li>
+                        <li>Clique em <strong>"Aprovar"</strong> ou <strong>"Solicitar Ajuste"</strong> (escrevendo o que precisa mudar).</li>
+                    </ul>
+                </div>
+            )
+        },
+        {
+            id: 'c3',
+            category: 'CLIENT',
+            title: 'Financeiro e Faturas',
+            keywords: 'fatura boleto pagamento pix financeiro cliente',
+            content: (
+                <div className="space-y-3">
+                    <p>Mantenha seus pagamentos em dia:</p>
+                    <ul className="list-disc ml-5 space-y-1">
+                        <li>Veja todas as faturas emitidas para sua empresa.</li>
+                        <li>Baixe boletos ou visualize dados para PIX/Transferência.</li>
+                        <li>Confira o histórico de pagamentos realizados.</li>
+                    </ul>
+                </div>
+            )
         }
     ];
 
@@ -111,6 +322,7 @@ export const HelpCenter: React.FC<HelpCenterProps> = ({ currentUser }) => {
 
     const filteredTutorials = tutorials.filter(t => {
         const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                              (t.keywords && t.keywords.toLowerCase().includes(searchTerm.toLowerCase())) ||
                               (typeof t.content === 'string' && t.content.toLowerCase().includes(searchTerm.toLowerCase()));
         
         const matchesTab = activeTab === 'ALL' ? true : (t.category === activeTab || (activeTab === currentUser.role && t.category === 'GERAL'));

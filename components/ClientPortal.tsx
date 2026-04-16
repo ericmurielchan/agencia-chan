@@ -46,7 +46,7 @@ interface ClientPortalProps {
   clients: Client[];
   squads: Squad[];
   batches: ApprovalBatch[];
-  setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+  addNotification: (data: any) => Promise<void>;
   onNavigate: (view: string) => void;
   setSelectedBatchId: (id: string | null) => void;
 }
@@ -61,7 +61,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
   clients, 
   squads,
   batches,
-  setNotifications,
+  addNotification,
   onNavigate,
   setSelectedBatchId
 }) => {
@@ -144,20 +144,14 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
     setTasks(prev => [newTask, ...prev]);
     
     // Notify Managers/Admins
-    setNotifications(prev => [
-      {
-        id: `n-${Date.now()}`,
+    addNotification({
         title: 'Nova Solicitação de Cliente',
         message: `${currentUser.name} criou uma nova solicitação: ${newRequest.title}`,
         type: 'INFO',
         priority: 'HIGH',
-        status: 'UNREAD',
         originModule: 'CLIENTS',
-        timestamp: Date.now(),
         navToView: 'kanban'
-      },
-      ...prev
-    ]);
+    });
 
     setIsWizardOpen(false);
     resetWizard();

@@ -62,6 +62,9 @@ import {
   saveNotification,
   fetchApprovalBatches,
   saveApprovalBatch,
+  updateApprovalBatchStatus,
+  addApprovalItemToBatch,
+  deleteApprovalBatch,
   fetchGoals,
   saveProductivityGoal,
   deleteSquad,
@@ -131,41 +134,33 @@ const App: React.FC = () => {
         const connection = await testSupabaseConnection();
         if (connection.success) {
           console.log('Carregando dados reais do Supabase...');
-          const [
-            dbUsers, tasksData, clientsData, leadsData, financialData, 
-            bankData, settingsData, squadsData, cardsData, stockData, 
-            assetsData, cashSessionsData, cashMovementsData, requisitionsData,
-            servicesData, notificationsData, batchesData, goalsData
-          ] = await Promise.all([
-            fetchUsers(),
-            fetchTasks(),
-            fetchClients(),
-            fetchLeads(),
-            fetchFinancialTransactions(),
-            fetchBankAccounts(),
-            fetchSystemSettings(),
-            fetchSquads(),
-            fetchCreditCards(),
-            fetchStockItems(),
-            fetchAssets(),
-            fetchCashSessions(),
-            fetchCashMovements(),
-            fetchRequisitions(),
-            fetchAgencyServices(),
-            fetchNotifications(),
-            fetchApprovalBatches(),
-            fetchGoals()
+          
+          // Lote 1: Essenciais
+          const [dbUsers, settingsData, clientsData, squadsData] = await Promise.all([
+            fetchUsers(), fetchSystemSettings(), fetchClients(), fetchSquads()
           ]);
           
           setUsers(dbUsers as any);
-          setTasks(tasksData as any);
+          if (settingsData) setSystemSettings(settingsData);
           setClients(clientsData as any);
+          if (squadsData.length > 0) setSquads(squadsData as any);
+
+          // Lote 2: Operacional
+          const [tasksData, leadsData, financialData, bankData, cardsData] = await Promise.all([
+            fetchTasks(), fetchLeads(), fetchFinancialTransactions(), fetchBankAccounts(), fetchCreditCards()
+          ]);
+
+          setTasks(tasksData as any);
           setLeads(leadsData as any);
           setFinancialTransactions(financialData as any);
           setBankAccounts(bankData as any);
-          if (settingsData) setSystemSettings(settingsData);
-          if (squadsData.length > 0) setSquads(squadsData as any);
           if (cardsData.length > 0) setCreditCards(cardsData as any);
+
+          // Lote 3: Restante
+          const [stockData, assetsData, cashSessionsData, cashMovementsData, requisitionsData, servicesData, notificationsData, batchesData, goalsData] = await Promise.all([
+            fetchStockItems(), fetchAssets(), fetchCashSessions(), fetchCashMovements(), fetchRequisitions(), fetchAgencyServices(), fetchNotifications(), fetchApprovalBatches(), fetchGoals()
+          ]);
+          
           if (stockData.length > 0) setStock(stockData as any);
           if (assetsData.length > 0) setAssets(assetsData as any);
           if (cashSessionsData.length > 0) setCashSessions(cashSessionsData as any);
@@ -207,7 +202,11 @@ const App: React.FC = () => {
   };
 
   const handleConfirmAction = (result: boolean) => {
+      const options = confirmOptions;
       setConfirmOptions(null);
+      if (result && options?.onConfirm) {
+          options.onConfirm();
+      }
       if (confirmResolveRef.current) confirmResolveRef.current(result);
   };
 
@@ -287,9 +286,11 @@ const App: React.FC = () => {
     setCurrentView('dashboard');
   };
 
-  const handleNotificationClick = (notif: Notification) => {
+  const handleNotificationClick = async (notif: Notification) => {
     // Mark as read
-    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, status: 'READ' } : n));
+    const updatedNotif = { ...notif, status: 'READ' as const };
+    setNotifications(prev => prev.map(n => n.id === notif.id ? updatedNotif : n));
+    await saveNotification(updatedNotif);
 
     if (notif.navToView) {
         setCurrentView(notif.navToView);
@@ -315,8 +316,28 @@ const App: React.FC = () => {
     setShowNotifications(false);
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+      const unread = notifications.filter(n => n.status === 'UNREAD');
       setNotifications(prev => prev.map(n => n.status === 'UNREAD' ? { ...n, status: 'READ' } : n));
+      
+      // Persistir no Supabase
+      await Promise.all(unread.map(n => saveNotification({ ...n, status: 'READ' })));
+  };
+
+  const addNotification = async (data: Omit<Notification, 'id' | 'timestamp' | 'status'> & { id?: string }) => {
+    const now = Date.now();
+    const newNotif: Notification = {
+        ...data,
+        id: data.id || `notif-${now}-${Math.random().toString(36).substr(2, 5)}`,
+        timestamp: now,
+        status: 'UNREAD'
+    };
+    
+    setNotifications(prev => {
+        if (prev.some(n => n.id === newNotif.id)) return prev;
+        return [newNotif, ...prev];
+    });
+    await saveNotification(newNotif);
   };
 
   if (!currentUser) {
@@ -494,7 +515,9 @@ const App: React.FC = () => {
                 setColumns={setTaskColumns} 
                 openConfirm={openConfirm} 
                 notifications={notifications} 
-                setNotifications={setNotifications}
+                addNotification={addNotification}
+                onNotificationClick={handleNotificationClick}
+                onMarkAllAsRead={markAllAsRead}
                 sidebarOpen={sidebarOpen}
                 sidebarCompact={sidebarCompact}
                 isMobile={isMobile}
@@ -540,7 +563,7 @@ const App: React.FC = () => {
                 clients={clients}
                 setClients={setClients}
                 notifications={notifications}
-                setNotifications={setNotifications}
+                addNotification={addNotification}
                 openConfirm={openConfirm}
                 selectedLeadId={selectedLeadId}
                 onClearSelectedLead={() => setSelectedLeadId(null)}
@@ -574,7 +597,7 @@ const App: React.FC = () => {
                 setRequisitions={setRequisitions} 
                 currentUser={currentUser} 
                 users={users} 
-                setNotifications={setNotifications} 
+                addNotification={addNotification} 
                 setTransactions={setFinancialTransactions} 
                 clients={clients} 
                 onSaveRequisition={async (req) => {
@@ -692,7 +715,7 @@ const App: React.FC = () => {
                 clients={clients} 
                 squads={squads} 
                 batches={approvalBatches}
-                setNotifications={setNotifications} 
+                addNotification={addNotification} 
                 onNavigate={setCurrentView} 
                 setSelectedBatchId={setSelectedApprovalBatchId}
               />
@@ -705,7 +728,7 @@ const App: React.FC = () => {
                 squads={initialSquads} 
                 clients={clients} 
                 currentUser={currentUser} 
-                setNotifications={setNotifications} 
+                addNotification={addNotification} 
                 goals={goals} 
                 setGoals={setGoals} 
                 onNavigate={(view, filter) => {
@@ -848,20 +871,41 @@ const App: React.FC = () => {
                 clients={clients} 
                 batches={approvalBatches}
                 setBatches={setApprovalBatches}
-                setNotifications={setNotifications}
+                addNotification={addNotification}
                 squads={squads}
                 selectedBatchId={selectedApprovalBatchId}
                 setSelectedBatchId={setSelectedApprovalBatchId}
                 selectedItemId={selectedApprovalItemId}
                 setSelectedItemId={setSelectedApprovalItemId}
+                openConfirm={openConfirm}
                 onSaveBatch={async (batch) => {
                     const result = await saveApprovalBatch(batch);
                     if (result.success) {
                         setApprovalBatches(prev => {
-                            const exists = prev.some(b => b.id === batch.id);
-                            if (exists) return prev.map(b => b.id === batch.id ? batch as ApprovalBatch : b);
+                            const existingBatch = prev.find(b => b.id === batch.id);
+                            if (existingBatch) {
+                                return prev.map(b => b.id === batch.id ? { ...b, ...batch } as ApprovalBatch : b);
+                            }
                             return [...prev, batch as ApprovalBatch];
                         });
+                    }
+                }}
+                onDeleteBatch={async (id) => {
+                    const result = await deleteApprovalBatch(id);
+                    if (result.success) {
+                        setApprovalBatches(prev => prev.filter(b => b.id !== id));
+                    }
+                }}
+                onUpdateStatus={async (id, status) => {
+                    const result = await updateApprovalBatchStatus(id, status);
+                    if (result.success) {
+                        setApprovalBatches(prev => prev.map(b => b.id === id ? { ...b, status, updatedAt: Date.now() } : b));
+                    }
+                }}
+                onAddItem={async (batchId, items) => {
+                    const result = await addApprovalItemToBatch(batchId, items);
+                    if (result.success) {
+                        setApprovalBatches(prev => prev.map(b => b.id === batchId ? { ...b, items, updatedAt: Date.now() } : b));
                     }
                 }}
               />

@@ -7,6 +7,7 @@ export interface ConfirmOptions {
     confirmText?: string;
     cancelText?: string;
     variant?: 'danger' | 'info';
+    onConfirm?: () => void;
 }
 
 export interface SystemSettings {
@@ -352,6 +353,8 @@ export interface Requisition {
     rejectedBy?: string;
     rejectedAt?: string;
     rejectedReason?: string;
+    archived?: boolean;
+    attachments?: string[];
 }
 
 export interface Squad {
@@ -451,6 +454,8 @@ export interface ApprovalItem {
     taskId?: string;
     createdAt: number;
     updatedAt: number;
+    archived?: boolean;
+    expired?: boolean;
 }
 
 export interface ApprovalBatch {
@@ -461,6 +466,7 @@ export interface ApprovalBatch {
     items: ApprovalItem[];
     createdAt: number;
     updatedAt: number;
+    archived?: boolean;
 }
 
 export interface Notification {

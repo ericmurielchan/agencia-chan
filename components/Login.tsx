@@ -288,21 +288,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
                     )}
                   </button>
                 </form>
-
-                <div className="mt-8 pt-8 border-t border-slate-100">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-4">Contas de Teste</p>
-                    <div className="grid grid-cols-3 gap-2">
-                        {testUsers.map(u => (
-                            <button 
-                                key={u.email}
-                                onClick={() => { setEmail(u.email); setPassword(u.pass); }}
-                                className="px-2 py-2 bg-slate-50 hover:bg-pink-50 text-slate-500 hover:text-pink-600 rounded-xl text-[9px] font-black uppercase tracking-tighter transition-all border border-transparent hover:border-pink-100"
-                            >
-                                {u.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
             </>
         ) : (
             /* --- RESET PASSWORD FORM --- */

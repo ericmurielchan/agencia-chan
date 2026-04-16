@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   CheckCircle2, 
   Clock, 
@@ -27,7 +27,10 @@ import {
   Camera,
   MoreHorizontal,
   X,
-  Upload
+  Upload,
+  Trash2,
+  Archive,
+  Loader2
 } from 'lucide-react';
 import { 
   ApprovalBatch, 
@@ -40,7 +43,9 @@ import {
   Notification,
   Squad
 } from '../types';
-import { convertDriveLink, fileToBase64 } from '../utils/fileUtils';
+import { convertDriveLink } from '../utils/fileUtils';
+import { cleanupExpiredApprovalItems } from '../services/supabaseService';
+import { uploadFile } from '../services/uploadService';
 
 interface ApprovalsProps {
   currentUser: User;
@@ -48,14 +53,29 @@ interface ApprovalsProps {
   clients: Client[];
   batches: ApprovalBatch[];
   setBatches: React.Dispatch<React.SetStateAction<ApprovalBatch[]>>;
-  setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+  addNotification: (data: any) => Promise<void>;
   squads: Squad[];
   selectedBatchId: string | null;
   setSelectedBatchId: (id: string | null) => void;
   selectedItemId: string | null;
   setSelectedItemId: (id: string | null) => void;
   onSaveBatch?: (batch: Partial<ApprovalBatch>) => Promise<void>;
+  onUpdateStatus?: (id: string, status: ApprovalStatus) => Promise<void>;
+  onAddItem?: (batchId: string, items: ApprovalItem[]) => Promise<void>;
+  onDeleteBatch?: (id: string) => Promise<void>;
+  openConfirm?: (options: any) => void;
 }
+
+const isVideo = (url: string) => {
+  if (!url) return false;
+  const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov'];
+  return videoExtensions.some(ext => url.toLowerCase().includes(ext)) || url.startsWith('data:video/');
+};
+
+const isPdf = (url: string) => {
+  if (!url) return false;
+  return url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf');
+};
 
 export const Approvals: React.FC<ApprovalsProps> = ({ 
   currentUser, 
@@ -63,13 +83,17 @@ export const Approvals: React.FC<ApprovalsProps> = ({
   clients, 
   batches, 
   setBatches,
-  setNotifications,
+  addNotification,
   squads,
   selectedBatchId,
   setSelectedBatchId,
   selectedItemId,
   setSelectedItemId,
-  onSaveBatch
+  onSaveBatch,
+  onUpdateStatus,
+  onAddItem,
+  onDeleteBatch,
+  openConfirm
 }) => {
   const [commentText, setCommentText] = useState('');
   const commentsEndRef = React.useRef<HTMLDivElement>(null);
@@ -78,6 +102,8 @@ export const Approvals: React.FC<ApprovalsProps> = ({
   const [newBatchClientId, setNewBatchClientId] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [newItem, setNewItem] = useState({
     title: '',
@@ -85,6 +111,13 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     files: [''],
     caption: ''
   });
+
+  useEffect(() => {
+    // Run cleanup for expired items on mount
+    if (currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE') {
+      cleanupExpiredApprovalItems();
+    }
+  }, [currentUser.role]);
 
   React.useEffect(() => {
     if (selectedItemId && commentsEndRef.current) {
@@ -112,32 +145,34 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const newFiles = [...newItem.files];
+    setIsUploading(true);
+    setUploadProgress(0);
+    const newFiles = [...newItem.files.filter(f => f)];
     
     for (let i = 0; i < files.length; i++) {
       try {
-        const base64 = await fileToBase64(files[i]);
-        // If the last field is empty, fill it. Otherwise, add a new field.
-        const emptyIndex = newFiles.findIndex(f => !f);
-        if (emptyIndex !== -1) {
-          newFiles[emptyIndex] = base64;
-        } else {
-          newFiles.push(base64);
-        }
+        const url = await uploadFile(files[i], (progress) => {
+          // If multiple files, show average or just the current one's progress
+          setUploadProgress(progress);
+        });
+        newFiles.push(url);
       } catch (error) {
         console.error("Error uploading file:", error);
+        alert(`Erro ao subir arquivo ${files[i].name}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       }
     }
 
     setNewItem(prev => ({ ...prev, files: newFiles }));
+    setIsUploading(false);
+    setUploadProgress(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const displayBatches = useMemo(() => {
-    let filtered = batches;
+    let filtered = batches.filter(b => !b.archived);
     
     if (currentUser.role === 'CLIENT') {
-      filtered = batches.filter(b => b.clientId === currentUser.clientId);
+      filtered = filtered.filter(b => b.clientId === currentUser.clientId);
       if (showHistory) {
         return filtered.filter(b => b.status === 'COMPLETED');
       } else {
@@ -145,7 +180,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
       }
     } else if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
       // Visibility restricted to clients in the same squad
-      filtered = batches.filter(b => {
+      filtered = filtered.filter(b => {
         const client = clients.find(c => c.id === b.clientId);
         return client?.squadId === currentUser.squad;
       });
@@ -207,15 +242,23 @@ export const Approvals: React.FC<ApprovalsProps> = ({
 
     const batch = batches.find(b => b.id === selectedBatchId);
     if (batch) {
-      const updatedBatch = {
-        ...batch,
-        items: [...batch.items, approvalItem],
-        updatedAt: Date.now()
-      };
+      const updatedItems = [...batch.items, approvalItem];
       
-      if (onSaveBatch) {
+      if (onAddItem) {
+        await onAddItem(selectedBatchId, updatedItems);
+      } else if (onSaveBatch) {
+        const updatedBatch = {
+          ...batch,
+          items: updatedItems,
+          updatedAt: Date.now()
+        };
         await onSaveBatch(updatedBatch);
       } else {
+        const updatedBatch = {
+          ...batch,
+          items: updatedItems,
+          updatedAt: Date.now()
+        };
         setBatches(prev => prev.map(b => b.id === selectedBatchId ? updatedBatch : b));
       }
     }
@@ -232,10 +275,13 @@ export const Approvals: React.FC<ApprovalsProps> = ({
   const handleSendBatch = async (batchId: string) => {
     const batch = batches.find(b => b.id === batchId);
     if (batch) {
-      const updatedBatch = { ...batch, status: 'SENT' as ApprovalStatus, updatedAt: Date.now() };
-      if (onSaveBatch) {
+      if (onUpdateStatus) {
+        await onUpdateStatus(batchId, 'SENT');
+      } else if (onSaveBatch) {
+        const updatedBatch = { ...batch, status: 'SENT' as ApprovalStatus, updatedAt: Date.now() };
         await onSaveBatch(updatedBatch);
       } else {
+        const updatedBatch = { ...batch, status: 'SENT' as ApprovalStatus, updatedAt: Date.now() };
         setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
       }
     }
@@ -244,10 +290,13 @@ export const Approvals: React.FC<ApprovalsProps> = ({
   const handleCompleteBatch = async (batchId: string) => {
     const batch = batches.find(b => b.id === batchId);
     if (batch) {
-      const updatedBatch = { ...batch, status: 'COMPLETED' as ApprovalStatus, updatedAt: Date.now() };
-      if (onSaveBatch) {
+      if (onUpdateStatus) {
+        await onUpdateStatus(batchId, 'COMPLETED');
+      } else if (onSaveBatch) {
+        const updatedBatch = { ...batch, status: 'COMPLETED' as ApprovalStatus, updatedAt: Date.now() };
         await onSaveBatch(updatedBatch);
       } else {
+        const updatedBatch = { ...batch, status: 'COMPLETED' as ApprovalStatus, updatedAt: Date.now() };
         setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
       }
     }
@@ -297,6 +346,128 @@ export const Approvals: React.FC<ApprovalsProps> = ({
       } else {
         setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
       }
+    }
+  };
+
+  const handleDeleteItem = async (batchId: string, itemId: string) => {
+    const performDelete = async () => {
+      const batch = batches.find(b => b.id === batchId);
+      if (batch) {
+        const updatedBatch = {
+          ...batch,
+          items: batch.items.filter(item => item.id !== itemId),
+          updatedAt: Date.now()
+        };
+        
+        if (onSaveBatch) {
+          await onSaveBatch(updatedBatch);
+        } else {
+          setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+        }
+        if (selectedItemId === itemId) setSelectedItemId(null);
+      }
+    };
+
+    if (openConfirm) {
+      openConfirm({
+        title: 'Excluir Item',
+        description: 'Tem certeza que deseja excluir este item permanentemente?',
+        confirmText: 'Excluir',
+        variant: 'danger',
+        onConfirm: performDelete
+      });
+    } else {
+      if (confirm('Tem certeza que deseja excluir este item?')) {
+        await performDelete();
+      }
+    }
+  };
+
+  const handleArchiveItem = async (batchId: string, itemId: string) => {
+    const performArchive = async () => {
+      const batch = batches.find(b => b.id === batchId);
+      if (batch) {
+        const updatedBatch = {
+          ...batch,
+          items: batch.items.map(item => {
+            if (item.id !== itemId) return item;
+            return { ...item, archived: true, updatedAt: Date.now() };
+          }),
+          updatedAt: Date.now()
+        };
+        
+        if (onSaveBatch) {
+          await onSaveBatch(updatedBatch);
+        } else {
+          setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+        }
+        if (selectedItemId === itemId) setSelectedItemId(null);
+      }
+    };
+
+    if (openConfirm) {
+      openConfirm({
+        title: 'Arquivar Item',
+        description: 'Deseja arquivar este item? Ele não aparecerá mais na lista ativa.',
+        confirmText: 'Arquivar',
+        onConfirm: performArchive
+      });
+    } else {
+      await performArchive();
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: string) => {
+    const performDelete = async () => {
+      if (onDeleteBatch) {
+        await onDeleteBatch(batchId);
+      } else if (onSaveBatch) {
+        // Fallback to archive if no delete prop
+        await onSaveBatch({ id: batchId, archived: true });
+      } else {
+        setBatches(prev => prev.filter(b => b.id !== batchId));
+      }
+      if (selectedBatchId === batchId) setSelectedBatchId(null);
+    };
+
+    if (openConfirm) {
+      openConfirm({
+        title: 'Excluir Lote',
+        description: 'Tem certeza que deseja excluir este lote permanentemente?',
+        confirmText: 'Excluir',
+        variant: 'danger',
+        onConfirm: performDelete
+      });
+    } else {
+      if (confirm('Tem certeza que deseja excluir este lote?')) {
+        await performDelete();
+      }
+    }
+  };
+
+  const handleArchiveBatch = async (batchId: string) => {
+    const performArchive = async () => {
+      const batch = batches.find(b => b.id === batchId);
+      if (batch) {
+        const updatedBatch = { ...batch, archived: true, updatedAt: Date.now() };
+        if (onSaveBatch) {
+          await onSaveBatch(updatedBatch);
+        } else {
+          setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+        }
+        if (selectedBatchId === batchId) setSelectedBatchId(null);
+      }
+    };
+
+    if (openConfirm) {
+      openConfirm({
+        title: 'Arquivar Lote',
+        description: 'Deseja arquivar este lote? Ele será movido para o histórico.',
+        confirmText: 'Arquivar',
+        onConfirm: performArchive
+      });
+    } else {
+      await performArchive();
     }
   };
 
@@ -377,7 +548,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     }));
 
     if (newNotifications.length > 0) {
-      setNotifications(prev => [...newNotifications, ...prev]);
+      newNotifications.forEach(n => addNotification(n));
     }
   };
 
@@ -399,6 +570,27 @@ export const Approvals: React.FC<ApprovalsProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE') && (
+              <>
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleArchiveItem(selectedBatch.id, selectedItem.id); }}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-all"
+                  title="Arquivar Item"
+                >
+                  <Archive size={18} />
+                </button>
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteItem(selectedBatch.id, selectedItem.id); }}
+                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  title="Excluir Item"
+                >
+                  <Trash2 size={18} />
+                </button>
+                <div className="w-px h-4 bg-slate-200 mx-1" />
+              </>
+            )}
             {getStatusBadge(selectedItem.status)}
           </div>
         </div>
@@ -414,7 +606,10 @@ export const Approvals: React.FC<ApprovalsProps> = ({
               <DesignPreview item={selectedItem} />
             )}
             {selectedItem.category === 'PDF' && (
-              <PdfPreview item={selectedItem} onUpdateStatus={(status) => handleUpdateItemStatus(selectedBatch.id, selectedItem.id, status)} />
+              <PdfPreview 
+                item={selectedItem} 
+                onUpdateStatus={(status) => handleUpdateItemStatus(selectedBatch.id, selectedItem.id, status)}
+              />
             )}
           </div>
 
@@ -560,9 +755,24 @@ export const Approvals: React.FC<ApprovalsProps> = ({
               </button>
             )}
             {getStatusBadge(selectedBatch.status)}
-            <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400">
-              <MoreVertical size={20} />
-            </button>
+            {(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE') && (
+              <div className="flex items-center gap-1 ml-2">
+                <button 
+                  onClick={() => handleArchiveBatch(selectedBatch.id)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                  title="Arquivar Lote"
+                >
+                  <Archive size={18} />
+                </button>
+                <button 
+                  onClick={() => handleDeleteBatch(selectedBatch.id)}
+                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  title="Excluir Lote"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -586,19 +796,14 @@ export const Approvals: React.FC<ApprovalsProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {selectedBatch.items.map(item => (
+            {selectedBatch.items.filter(i => !i.archived).map(item => (
               <div 
                 key={item.id}
                 onClick={() => setSelectedItemId(item.id)}
                 className="group bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-pink-100 transition-all cursor-pointer overflow-hidden flex flex-col"
               >
                 <div className="aspect-square bg-slate-100 relative overflow-hidden">
-                  <img 
-                    src={item.files[0]} 
-                    alt={item.title}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                    referrerPolicy="no-referrer"
-                  />
+                  <FilePreviewThumbnail url={item.files[0]} />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                     <span className="text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                       <Eye size={14} /> Visualizar Detalhes
@@ -684,19 +889,38 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Arquivos da Peça (Imagens/Vídeos)</label>
                       <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                        disabled={isUploading}
+                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 disabled:opacity-50"
                       >
-                        <Upload size={14} /> Selecionar Arquivos
+                        {isUploading ? <Loader2 className="animate-spin" size={14} /> : <Upload size={14} />} 
+                        {isUploading ? `Subindo ${uploadProgress}%` : 'Selecionar Arquivos'}
                       </button>
-                      <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        multiple 
-                        accept="image/*,video/*,application/pdf"
-                        onChange={handleFileUpload}
-                      />
                     </div>
+
+                    {isUploading && (
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-black text-pink-600 uppercase tracking-widest">Progresso do Upload</span>
+                          <span className="text-[10px] font-black text-pink-600">{uploadProgress}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-pink-500 transition-all duration-300 ease-out"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      multiple 
+                      accept="image/*,video/*,application/pdf"
+                      onChange={handleFileUpload}
+                    />
+                  </div>
                     
                     {newItem.files.length > 0 && newItem.files.some(f => f) ? (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -771,9 +995,8 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                 </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
     );
   }
 
@@ -806,7 +1029,16 @@ export const Approvals: React.FC<ApprovalsProps> = ({
         {currentUser.role === 'CLIENT' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayBatches.map(batch => (
-              <BatchCard key={batch.id} batch={batch} onClick={() => setSelectedBatchId(batch.id)} getStatusBadge={getStatusBadge} getClientName={getClientName} />
+              <BatchCard 
+                key={batch.id} 
+                batch={batch} 
+                onClick={() => setSelectedBatchId(batch.id)} 
+                getStatusBadge={getStatusBadge} 
+                getClientName={getClientName}
+                onArchive={handleArchiveBatch}
+                onDelete={handleDeleteBatch}
+                isAdmin={currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE'}
+              />
             ))}
           </div>
         ) : (
@@ -823,7 +1055,16 @@ export const Approvals: React.FC<ApprovalsProps> = ({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {clientBatches.map(batch => (
-                  <BatchCard key={batch.id} batch={batch} onClick={() => setSelectedBatchId(batch.id)} getStatusBadge={getStatusBadge} getClientName={getClientName} />
+                  <BatchCard 
+                    key={batch.id} 
+                    batch={batch} 
+                    onClick={() => setSelectedBatchId(batch.id)} 
+                    getStatusBadge={getStatusBadge} 
+                    getClientName={getClientName}
+                    onArchive={handleArchiveBatch}
+                    onDelete={handleDeleteBatch}
+                    isAdmin={currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE'}
+                  />
                 ))}
               </div>
             </div>
@@ -893,14 +1134,35 @@ const BatchCard: React.FC<{
   batch: ApprovalBatch, 
   onClick: () => void, 
   getStatusBadge: (status: string) => React.ReactNode,
-  getClientName: (clientId: string) => string
-}> = ({ batch, onClick, getStatusBadge, getClientName }) => {
+  getClientName: (clientId: string) => string,
+  onArchive?: (id: string) => void,
+  onDelete?: (id: string) => void,
+  isAdmin?: boolean
+}> = ({ batch, onClick, getStatusBadge, getClientName, onArchive, onDelete, isAdmin }) => {
   return (
     <div 
       onClick={onClick}
       className="group bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-2xl hover:border-pink-100 transition-all cursor-pointer relative overflow-hidden"
     >
-      <div className="absolute top-0 right-0 p-6">
+      <div className="absolute top-0 right-0 p-6 flex items-center gap-2">
+        {isAdmin && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onArchive?.(batch.id); }}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+              title="Arquivar"
+            >
+              <Archive size={16} />
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onDelete?.(batch.id); }}
+              className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+              title="Excluir"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
         <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-pink-50 group-hover:text-pink-500 transition-colors">
           <ChevronRight size={20} />
         </div>
@@ -922,12 +1184,12 @@ const BatchCard: React.FC<{
 
       <div className="flex items-center justify-between pt-6 border-t border-slate-50">
         <div className="flex -space-x-3">
-          {batch.items.slice(0, 4).map((item, idx) => (
+          {batch.items.filter(i => !i.archived).slice(0, 4).map((item, idx) => (
             <div key={item.id} className="w-10 h-10 rounded-2xl border-4 border-white overflow-hidden bg-slate-100 shadow-sm">
-              <img src={item.files[0]} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+              <FilePreviewThumbnail url={item.files[0]} />
             </div>
           ))}
-          {batch.items.length > 4 && (
+          {batch.items.filter(i => !i.archived).length > 4 && (
             <div className="w-10 h-10 rounded-2xl border-4 border-white bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 shadow-sm">
               +{batch.items.length - 4}
             </div>
@@ -944,8 +1206,50 @@ const BatchCard: React.FC<{
 
 // --- Sub-components for Previews ---
 
+const FilePreviewThumbnail: React.FC<{ url: string }> = ({ url }) => {
+  if (isVideo(url)) {
+    return (
+      <div className="w-full h-full bg-slate-900 flex items-center justify-center relative">
+        <video 
+          src={url} 
+          className="w-full h-full object-cover opacity-60"
+          muted
+          playsInline
+          autoPlay
+          loop
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white">
+            <Video size={16} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPdf(url)) {
+    return (
+      <div className="w-full h-full bg-slate-50 flex flex-col items-center justify-center gap-1">
+        <FileText size={20} className="text-red-400" />
+        <span className="text-[6px] font-black text-slate-400 uppercase tracking-widest">PDF</span>
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={url} 
+      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
+      alt="" 
+      referrerPolicy="no-referrer" 
+    />
+  );
+};
+
 const SocialMediaPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const currentFile = item.files[currentSlide];
+  const isCurrentVideo = isVideo(currentFile);
 
   return (
     <div className="max-w-md w-full bg-white rounded-[32px] shadow-2xl overflow-hidden border border-slate-100">
@@ -962,14 +1266,25 @@ const SocialMediaPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
         <MoreVertical size={16} className="text-slate-400" />
       </div>
 
-      {/* Image / Carousel */}
-      <div className="aspect-square bg-slate-100 relative group">
-        <img 
-          src={item.files[currentSlide]} 
-          className="w-full h-full object-cover" 
-          alt="" 
-          referrerPolicy="no-referrer"
-        />
+      {/* Image / Video / Carousel */}
+      <div className="aspect-[9/16] max-h-[70vh] bg-black relative group flex items-center justify-center">
+        {isCurrentVideo ? (
+          <video 
+            src={currentFile} 
+            controls 
+            className="w-full h-full object-contain"
+            autoPlay
+            loop
+            muted
+          />
+        ) : (
+          <img 
+            src={currentFile} 
+            className="w-full h-full object-contain" 
+            alt="" 
+            referrerPolicy="no-referrer"
+          />
+        )}
         
         {item.files.length > 1 && (
           <>
@@ -1020,15 +1335,26 @@ const SocialMediaPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
 };
 
 const DesignPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
+  const currentFile = item.files[0];
+  const isCurrentVideo = isVideo(currentFile);
+
   return (
     <div className="max-w-4xl w-full space-y-4">
-      <div className="bg-white p-2 rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden">
-        <img 
-          src={item.files[0]} 
-          className="w-full h-auto rounded-[24px]" 
-          alt={item.title} 
-          referrerPolicy="no-referrer"
-        />
+      <div className="bg-white p-2 rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden flex items-center justify-center bg-slate-50">
+        {isCurrentVideo ? (
+          <video 
+            src={currentFile} 
+            controls 
+            className="w-full max-h-[80vh] rounded-[24px] object-contain"
+          />
+        ) : (
+          <img 
+            src={currentFile} 
+            className="w-full max-h-[80vh] rounded-[24px] object-contain" 
+            alt={item.title} 
+            referrerPolicy="no-referrer"
+          />
+        )}
       </div>
       <div className="flex justify-center gap-4">
         <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
@@ -1045,75 +1371,112 @@ const DesignPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
 const PdfPreview: React.FC<{ item: ApprovalItem, onUpdateStatus: (status: ApprovalStatus) => void }> = ({ item, onUpdateStatus }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const totalPages = item.pages?.length || 1;
+  const currentFile = item.files[0];
+  const isRealPdf = isPdf(currentFile);
 
   return (
     <div className="max-w-5xl w-full flex flex-col gap-6 h-full">
       {/* PDF Controls */}
       <div className="bg-white/80 backdrop-blur p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1">
-            <button 
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              className="p-2 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <span className="text-xs font-black text-slate-700 w-16 text-center">
-              {currentPage} / {totalPages}
-            </span>
-            <button 
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              className="p-2 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
+          {isRealPdf ? (
+             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Visualização de PDF Direta</span>
+          ) : (
+            <div className="flex items-center gap-1">
+              <button 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="p-2 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-xs font-black text-slate-700 w-16 text-center">
+                {currentPage} / {totalPages}
+              </span>
+              <button 
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="p-2 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
           <div className="h-6 w-px bg-slate-200" />
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            Página {currentPage}: {item.pages?.[currentPage-1]?.status || 'PENDENTE'}
+            {isRealPdf ? 'Documento PDF' : `Página ${currentPage}: ${item.pages?.[currentPage-1]?.status || 'PENDENTE'}`}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-600">
+          <a href={currentFile} download target="_blank" rel="noreferrer" className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-600">
             <Download size={18} />
-          </button>
-          <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-600">
+          </a>
+          <a href={currentFile} target="_blank" rel="noreferrer" className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-600">
             <ExternalLink size={18} />
-          </button>
+          </a>
         </div>
       </div>
 
       {/* PDF Page View */}
       <div className="flex-1 bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden relative flex items-center justify-center">
-        {/* Mock PDF Page Content */}
-        <div className="w-full h-full flex flex-col items-center justify-center p-12 text-center">
-          <div className="w-full max-w-2xl aspect-[1/1.414] bg-slate-50 border border-slate-200 rounded-lg shadow-inner flex flex-col items-center justify-center p-8">
-            <FileText size={64} className="text-slate-200 mb-4" />
-            <h3 className="text-lg font-black text-slate-400 uppercase tracking-tight mb-2">Preview da Página {currentPage}</h3>
-            <p className="text-xs text-slate-300 font-medium max-w-xs">O arquivo PDF real seria renderizado aqui usando uma biblioteca como react-pdf.</p>
-            
-            {/* Mock content for visualization */}
-            <div className="mt-8 w-full space-y-3">
-              <div className="h-4 bg-slate-100 rounded-full w-3/4 mx-auto" />
-              <div className="h-4 bg-slate-100 rounded-full w-1/2 mx-auto" />
-              <div className="h-4 bg-slate-100 rounded-full w-2/3 mx-auto" />
-              <div className="h-32 bg-slate-100 rounded-2xl w-full mt-4" />
+        {isRealPdf ? (
+          <div className="w-full h-full flex flex-col">
+            <iframe 
+              src={currentFile} 
+              className="w-full h-full border-none"
+              title="PDF Preview"
+              onError={(e) => console.error("Iframe error:", e)}
+            />
+            {/* Fallback for blocked iframes */}
+            <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex flex-col items-center justify-center text-center z-10 opacity-0 hover:opacity-100 transition-opacity">
+                <div className="bg-white p-8 rounded-[32px] shadow-2xl border border-slate-100 max-w-sm">
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    <AlertCircle size={32} className="text-amber-500" />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-2">Visualização Bloqueada?</h3>
+                  <p className="text-xs text-slate-500 font-medium mb-6">Alguns navegadores bloqueiam a exibição de PDFs em iframes por segurança.</p>
+                  <a 
+                    href={currentFile} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="inline-block px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl"
+                  >
+                    Abrir em Nova Aba
+                  </a>
+                </div>
             </div>
           </div>
-        </div>
+        ) : (
+          /* Mock PDF Page Content */
+          <div className="w-full h-full flex flex-col items-center justify-center p-12 text-center">
+            <div className="w-full max-w-2xl aspect-[1/1.414] bg-slate-50 border border-slate-200 rounded-lg shadow-inner flex flex-col items-center justify-center p-8">
+              <FileText size={64} className="text-slate-200 mb-4" />
+              <h3 className="text-lg font-black text-slate-400 uppercase tracking-tight mb-2">Preview da Página {currentPage}</h3>
+              <p className="text-xs text-slate-300 font-medium max-w-xs">O arquivo PDF real seria renderizado aqui usando uma biblioteca como react-pdf.</p>
+              
+              {/* Mock content for visualization */}
+              <div className="mt-8 w-full space-y-3">
+                <div className="h-4 bg-slate-100 rounded-full w-3/4 mx-auto" />
+                <div className="h-4 bg-slate-100 rounded-full w-1/2 mx-auto" />
+                <div className="h-4 bg-slate-100 rounded-full w-2/3 mx-auto" />
+                <div className="h-32 bg-slate-100 rounded-2xl w-full mt-4" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Page Status Overlay */}
-        <div className="absolute top-6 right-6">
-          <div className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg ${
-            item.pages?.[currentPage-1]?.status === 'APPROVED' ? 'bg-emerald-500 text-white' :
-            item.pages?.[currentPage-1]?.status === 'REJECTED' ? 'bg-red-500 text-white' :
-            'bg-white text-slate-600'
-          }`}>
-            Status: {item.pages?.[currentPage-1]?.status || 'PENDENTE'}
+        {!isRealPdf && (
+          <div className="absolute top-6 right-6">
+            <div className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg ${
+              item.pages?.[currentPage-1]?.status === 'APPROVED' ? 'bg-emerald-500 text-white' :
+              item.pages?.[currentPage-1]?.status === 'REJECTED' ? 'bg-red-500 text-white' :
+              'bg-white text-slate-600'
+            }`}>
+              Status: {item.pages?.[currentPage-1]?.status || 'PENDENTE'}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Page Actions */}
@@ -1122,13 +1485,13 @@ const PdfPreview: React.FC<{ item: ApprovalItem, onUpdateStatus: (status: Approv
           onClick={() => onUpdateStatus('APPROVED')}
           className="flex items-center gap-2 px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-200"
         >
-          <ThumbsUp size={16} /> Aprovar Página {currentPage}
+          <ThumbsUp size={16} /> {isRealPdf ? 'Aprovar Documento' : `Aprovar Página ${currentPage}`}
         </button>
         <button 
           onClick={() => onUpdateStatus('REJECTED')}
           className="flex items-center gap-2 px-8 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-200"
         >
-          <ThumbsDown size={16} /> Rejeitar Página {currentPage}
+          <ThumbsDown size={16} /> {isRealPdf ? 'Rejeitar Documento' : `Rejeitar Página ${currentPage}`}
         </button>
       </div>
     </div>

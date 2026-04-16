@@ -1,15 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from './Modal';
 import { Requisition, User, Notification, FinancialTransaction, Client } from '../types';
-import { Plus, Check, X, ShoppingBag, DollarSign, Clock, Calendar, AlertTriangle, User as UserIcon, Filter, Search, ChevronRight, ReceiptText, Building2 } from 'lucide-react';
+import { Plus, Check, X, ShoppingBag, DollarSign, Clock, Calendar, AlertTriangle, User as UserIcon, Filter, Search, ChevronRight, ReceiptText, Building2, Trash2, Archive, Upload, FileText, XCircle, Loader2 } from 'lucide-react';
+import { deleteRequisition, archiveRequisition } from '../services/supabaseService';
+import { uploadFile } from '../services/uploadService';
 
 interface RequisitionsProps {
   requisitions: Requisition[];
   setRequisitions: React.Dispatch<React.SetStateAction<Requisition[]>>;
   currentUser: User;
   users: User[];
-  setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+  addNotification: (data: any) => Promise<void>;
   setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
   clients: Client[];
   onSaveRequisition?: (req: Partial<Requisition>) => Promise<void>;
@@ -20,12 +22,14 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
     setRequisitions, 
     currentUser, 
     users, 
-    setNotifications,
+    addNotification,
     setTransactions,
     clients,
     onSaveRequisition
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [selectedReqForReject, setSelectedReqForReject] = useState<Requisition | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -33,6 +37,11 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
   const [filter, setFilter] = useState<'ALL' | 'MY'>('ALL');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>('ALL');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
 
   const canApprove = currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE';
   const isClient = currentUser.role === 'CLIENT';
@@ -40,8 +49,59 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
   const displayedRequisitions = requisitions.filter(req => {
       const matchesFilter = filter === 'ALL' ? (canApprove || req.requesterId === currentUser.id) : req.requesterId === currentUser.id;
       const matchesSearch = req.title.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesFilter && matchesSearch;
+      
+      // Date filtering
+      let matchesDate = true;
+      const reqDate = new Date(req.date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (dateFilter === 'TODAY') {
+        matchesDate = reqDate.getTime() === today.getTime();
+      } else if (dateFilter === 'WEEK') {
+        const lastWeek = new Date(today);
+        lastWeek.setDate(today.getDate() - 7);
+        matchesDate = reqDate >= lastWeek;
+      } else if (dateFilter === 'MONTH') {
+        const lastMonth = new Date(today);
+        lastMonth.setMonth(today.getMonth() - 1);
+        matchesDate = reqDate >= lastMonth;
+      } else if (dateFilter === 'CUSTOM' && customStartDate && customEndDate) {
+        const start = new Date(customStartDate);
+        const end = new Date(customEndDate);
+        matchesDate = reqDate >= start && reqDate <= end;
+      }
+
+      return matchesFilter && matchesSearch && matchesDate && !req.archived;
   }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    setIsUploading(true);
+    setUploadProgress(0);
+    const newAttachments = [...attachments];
+    for (let i = 0; i < files.length; i++) {
+        try {
+            const url = await uploadFile(files[i], (progress) => {
+                setUploadProgress(progress);
+            });
+            newAttachments.push(url);
+        } catch (error) {
+            console.error("Error uploading file:", error);
+            alert(`Erro ao subir arquivo ${files[i].name}`);
+        }
+    }
+    setAttachments(newAttachments);
+    setIsUploading(false);
+    setUploadProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSaveReq = async () => {
       if (!editingReq.title || !editingReq.estimatedCost) return;
@@ -54,7 +114,8 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
           clientId: editingReq.clientId,
           status: 'PENDING',
           date: new Date().toISOString().split('T')[0],
-          category: editingReq.category || (isClient ? 'Reembolso' : 'Compra')
+          category: editingReq.category || (isClient ? 'Reembolso' : 'Compra'),
+          attachments: attachments
       };
       
       if (onSaveRequisition) {
@@ -64,6 +125,25 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
       }
       setIsCreateModalOpen(false);
       setEditingReq({});
+      setAttachments([]);
+  };
+
+  const handleDeleteReq = async (id: string) => {
+    if (!canApprove) return;
+    if (!confirm('Tem certeza que deseja excluir permanentemente esta solicitação?')) return;
+    
+    const res = await deleteRequisition(id);
+    if (res.success) {
+        setRequisitions(prev => prev.filter(r => r.id !== id));
+    }
+  };
+
+  const handleArchiveReq = async (id: string) => {
+    if (!canApprove) return;
+    const res = await archiveRequisition(id);
+    if (res.success) {
+        setRequisitions(prev => prev.map(r => r.id === id ? { ...r, archived: true } : r));
+    }
   };
 
   const handleApproveReq = async (req: Requisition) => {
@@ -134,6 +214,22 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                <button onClick={() => setFilter('ALL')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'ALL' ? 'bg-white shadow-md text-pink-600' : 'text-slate-400 hover:text-slate-600'}`}>Geral</button>
                <button onClick={() => setFilter('MY')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'MY' ? 'bg-white shadow-md text-pink-600' : 'text-slate-400 hover:text-slate-600'}`}>Minhas</button>
             </div>
+
+            <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+               <button onClick={() => setDateFilter('ALL')} className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${dateFilter === 'ALL' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>Tudo</button>
+               <button onClick={() => setDateFilter('TODAY')} className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${dateFilter === 'TODAY' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>Hoje</button>
+               <button onClick={() => setDateFilter('WEEK')} className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${dateFilter === 'WEEK' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>7 Dias</button>
+               <button onClick={() => setDateFilter('MONTH')} className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${dateFilter === 'MONTH' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>Mês</button>
+               <button onClick={() => setDateFilter('CUSTOM')} className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${dateFilter === 'CUSTOM' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}>Personalizado</button>
+            </div>
+
+            {dateFilter === 'CUSTOM' && (
+              <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
+                <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-pink-300" />
+                <span className="text-slate-300 text-[10px] font-black">ATÉ</span>
+                <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-pink-300" />
+              </div>
+            )}
             
             <div className="h-10 w-px bg-slate-200 mx-1 hidden sm:block"></div>
 
@@ -188,9 +284,17 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                         <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 uppercase tracking-tight"><Calendar size={12} className="text-slate-300"/> {req.date.split('-').reverse().join('/')}</span>
                       </div>
                       <h4 className="font-black text-slate-800 text-base truncate group-hover:text-pink-600 transition-colors tracking-tight">{req.title}</h4>
-                      <div className="flex items-center gap-2 mt-1">
-                        <img src={requester?.avatar} className="w-5 h-5 rounded-full object-cover border border-slate-200" />
-                        <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{requester?.name}</span>
+                      <div className="flex items-center gap-4 mt-1">
+                        <div className="flex items-center gap-2">
+                          <img src={requester?.avatar} className="w-5 h-5 rounded-full object-cover border border-slate-200" />
+                          <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{requester?.name}</span>
+                        </div>
+                        {req.attachments && req.attachments.length > 0 && (
+                          <div className="flex items-center gap-1 text-emerald-600">
+                            <FileText size={12} />
+                            <span className="text-[9px] font-black uppercase tracking-widest">{req.attachments.length} Anexo(s)</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -209,14 +313,21 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                          {req.status === 'PENDING' ? 'Aguardando' : req.status === 'APPROVED' ? 'Aprovado' : 'Recusado'}
                        </span>
 
-                      {canApprove && req.status === 'PENDING' ? (
-                        <div className="flex gap-2">
-                          <button onClick={() => handleApproveReq(req)} title="Aprovar" className="p-2.5 bg-white hover:bg-emerald-600 hover:text-white text-emerald-600 rounded-xl transition-all border border-emerald-200 hover:border-emerald-600 shadow-sm"><Check size={18} strokeWidth={3}/></button>
-                          <button onClick={() => { setSelectedReqForReject(req); setIsRejectModalOpen(true); }} title="Recusar" className="p-2.5 bg-white hover:bg-red-600 hover:text-white text-red-600 rounded-xl transition-all border border-red-200 hover:border-red-600 shadow-sm"><X size={18} strokeWidth={3}/></button>
-                        </div>
-                      ) : (
-                        <button className="p-2.5 bg-slate-50 text-slate-300 rounded-xl border border-slate-100 cursor-default"><ChevronRight size={18}/></button>
-                      )}
+                      <div className="flex gap-2">
+                        {canApprove && req.status === 'PENDING' && (
+                          <>
+                            <button onClick={() => handleApproveReq(req)} title="Aprovar" className="p-2.5 bg-white hover:bg-emerald-600 hover:text-white text-emerald-600 rounded-xl transition-all border border-emerald-200 hover:border-emerald-600 shadow-sm"><Check size={18} strokeWidth={3}/></button>
+                            <button onClick={() => { setSelectedReqForReject(req); setIsRejectModalOpen(true); }} title="Recusar" className="p-2.5 bg-white hover:bg-red-600 hover:text-white text-red-600 rounded-xl transition-all border border-red-200 hover:border-red-600 shadow-sm"><X size={18} strokeWidth={3}/></button>
+                          </>
+                        )}
+                        {canApprove && (
+                          <>
+                            <button onClick={() => handleArchiveReq(req.id)} title="Arquivar" className="p-2.5 bg-white hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl transition-all border border-slate-200 hover:border-slate-900 shadow-sm"><Archive size={18}/></button>
+                            <button onClick={() => handleDeleteReq(req.id)} title="Excluir Permanentemente" className="p-2.5 bg-white hover:bg-red-600 hover:text-white text-red-400 rounded-xl transition-all border border-red-200 hover:border-red-600 shadow-sm"><Trash2 size={18}/></button>
+                          </>
+                        )}
+                        {!canApprove && <button className="p-2.5 bg-slate-50 text-slate-300 rounded-xl border border-slate-100 cursor-default"><ChevronRight size={18}/></button>}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -316,6 +427,55 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                               value={editingReq.estimatedCost || ''} 
                               onChange={e => setEditingReq({...editingReq, estimatedCost: parseFloat(e.target.value)})} 
                             />
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-[0.2em] ml-1">Anexar Comprovante / Orçamento</label>
+                          
+                          {isUploading && (
+                            <div className="mb-4 px-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[9px] font-black text-pink-600 uppercase tracking-widest">Subindo arquivo...</span>
+                                <span className="text-[9px] font-black text-pink-600">{uploadProgress}%</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-pink-500 transition-all duration-300 ease-out"
+                                  style={{ width: `${uploadProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap gap-3">
+                              {attachments.map((file, idx) => (
+                                  <div key={idx} className="relative w-20 h-20 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 group animate-in zoom-in">
+                                      <img src={file} className="w-full h-full object-cover" alt="" />
+                                      <button 
+                                          onClick={() => removeAttachment(idx)}
+                                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                          <X size={12} />
+                                      </button>
+                                  </div>
+                              ))}
+                              <button 
+                                  onClick={() => fileInputRef.current?.click()}
+                                  disabled={isUploading}
+                                  className="w-20 h-20 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 hover:bg-white hover:border-pink-300 hover:text-pink-500 transition-all disabled:opacity-50"
+                              >
+                                  {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
+                                  <span className="text-[8px] font-black uppercase mt-1">{isUploading ? 'Subindo' : 'Anexar'}</span>
+                              </button>
+                              <input 
+                                  type="file" 
+                                  ref={fileInputRef} 
+                                  className="hidden" 
+                                  multiple 
+                                  accept="image/*" 
+                                  onChange={handleFileUpload} 
+                              />
                           </div>
                       </div>
                   </div>

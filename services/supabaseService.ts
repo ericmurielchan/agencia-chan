@@ -1,10 +1,10 @@
 import { supabase } from '../lib/supabaseClient';
-import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads, initialCreditCards } from '../utils/mockData';
+import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads, initialCreditCards, initialNotifications, initialApprovalBatches } from '../utils/mockData';
 import { 
   User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount,
   FinancialTransaction, StockItem, Asset, CashRegisterSession, CashMovement,
   Requisition, AgencyService, Notification, ApprovalBatch, ProductivityGoal,
-  RolePermissions
+  RolePermissions, ApprovalStatus, ApprovalItem
 } from '../types';
 
 /**
@@ -143,7 +143,7 @@ export const testSupabaseConnection = async () => {
  * Busca todos os usuários do banco de dados
  */
 export const fetchUsers = async () => {
-  const { data, error } = await supabase.from('users').select('*');
+  const { data, error } = await supabase.from('users').select('id, name, email, role, avatar, squad_id, client_id, hourly_rate, salary, has_system_access, password, preferences');
   if (error) {
     console.error('Erro ao buscar usuários:', error);
     return [];
@@ -155,7 +155,7 @@ export const fetchUsers = async () => {
  * Busca todas as tarefas do banco de dados
  */
 export const fetchTasks = async () => {
-  const { data, error } = await supabase.from('tasks').select('*');
+  const { data, error } = await supabase.from('tasks').select('id, client_id, title, description, status, priority, due_date, estimated_time, assignee_ids, squad_id, is_tracking, approval_status, archived, created_at, cover, time_logs, checklists, comments, history');
   if (error) {
     console.error('Erro ao buscar tarefas:', error);
     return [];
@@ -214,7 +214,7 @@ export const deleteTask = async (id: string) => {
  * Busca todos os clientes do banco de dados
  */
 export const fetchClients = async () => {
-  const { data, error } = await supabase.from('clients').select('*');
+  const { data, error } = await supabase.from('clients').select('id, name, legal_name, document, status, responsible_id, squad_id, monthly_value, is_recurring, level, summary, contract_url, assets_folder_url, contact_info, financial_contact, tags, internal_notes, classification, documentation_links, service_ids, entry_date, contacts, passwords, password_logs, system_accesses');
   if (error) {
     console.error('Erro ao buscar clientes:', error);
     return [];
@@ -278,7 +278,7 @@ export const deleteClient = async (id: string) => {
  * Busca todos os leads do banco de dados
  */
 export const fetchLeads = async () => {
-  const { data, error } = await supabase.from('leads').select('*');
+  const { data, error } = await supabase.from('leads').select('id, name, company, value, stage_id, status, email, phone, priority, temperature, responsible_id, notes, tags, created_at, updated_at, last_contact, history, tasks');
   if (error) {
     console.error('Erro ao buscar leads:', error);
     return [];
@@ -337,7 +337,7 @@ export const deleteLead = async (id: string) => {
  * Busca todas as transações financeiras
  */
 export const fetchFinancialTransactions = async () => {
-  const { data, error } = await supabase.from('financial_transactions').select('*');
+  const { data, error } = await supabase.from('financial_transactions').select('id, description, amount, type, date, status, category_id, bank_account_id, client_id, responsible_id, installments, created_at');
   if (error) {
     console.error('Erro ao buscar transações:', error);
     return [];
@@ -351,12 +351,9 @@ export const fetchFinancialTransactions = async () => {
     status: t.status,
     categoryId: t.category_id,
     bankAccountId: t.bank_account_id,
-    creditCardId: t.credit_card_id,
     clientId: t.client_id,
-    squadId: t.squad_id,
     responsibleId: t.responsible_id,
     installments: t.installments,
-    recurrenceId: t.recurrence_id,
     createdAt: t.created_at || Date.now()
   }));
 };
@@ -374,12 +371,9 @@ export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>)
     status: t.status,
     category_id: t.categoryId,
     bank_account_id: t.bankAccountId,
-    credit_card_id: t.creditCardId,
     client_id: t.clientId,
-    squad_id: t.squadId,
     responsible_id: t.responsibleId,
     installments: t.installments,
-    recurrence_id: t.recurrenceId,
     created_at: t.createdAt || Date.now()
   });
 
@@ -814,7 +808,7 @@ export const saveCashMovement = async (movement: Partial<CashMovement>) => {
  * Busca todas as requisições
  */
 export const fetchRequisitions = async () => {
-  const { data, error } = await supabase.from('requisitions').select('*');
+  const { data, error } = await supabase.from('requisitions').select('id, client_id, requester_id, title, description, estimated_cost, status, date, category, approved_by, approved_at, rejected_by, rejected_at, rejected_reason');
   if (error) {
     console.error('Erro ao buscar requisições:', error);
     return [];
@@ -855,7 +849,9 @@ export const saveRequisition = async (req: Partial<Requisition>) => {
     approved_at: req.approvedAt,
     rejected_by: req.rejectedBy,
     rejected_at: req.rejectedAt,
-    rejected_reason: req.rejectedReason
+    rejected_reason: req.rejectedReason,
+    archived: req.archived || false,
+    attachments: req.attachments || []
   });
 
   if (error) {
@@ -863,6 +859,61 @@ export const saveRequisition = async (req: Partial<Requisition>) => {
     return { success: false, error };
   }
   return { success: true };
+};
+
+/**
+ * Exclui uma requisição
+ */
+export const deleteRequisition = async (id: string) => {
+  const { error } = await supabase.from('requisitions').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir requisição:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Arquiva uma requisição
+ */
+export const archiveRequisition = async (id: string) => {
+  const { error } = await supabase.from('requisitions').update({ archived: true }).eq('id', id);
+  if (error) {
+    console.error('Erro ao arquivar requisição:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Limpa itens de aprovação finalizados há mais de 7 dias
+ */
+export const cleanupExpiredApprovalItems = async () => {
+  const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+  
+  const { data: batches, error: batchError } = await supabase
+    .from('approval_batches')
+    .select('id, items')
+    .eq('status', 'COMPLETED')
+    .lt('updated_at', sevenDaysAgo);
+
+  if (batchError) {
+    console.error('Erro ao buscar lotes expirados:', batchError);
+    return;
+  }
+
+  for (const batch of (batches || [])) {
+    const updatedItems = batch.items.map((item: any) => ({
+      ...item,
+      files: [], 
+      expired: true
+    }));
+
+    await supabase
+      .from('approval_batches')
+      .update({ items: updatedItems })
+      .eq('id', batch.id);
+  }
 };
 
 /**
@@ -924,7 +975,7 @@ export const saveAgencyService = async (service: Partial<AgencyService>) => {
  * Busca todas as notificações
  */
 export const fetchNotifications = async () => {
-  const { data, error } = await supabase.from('notifications').select('*');
+  const { data, error } = await supabase.from('notifications').select('id, title, message, type, priority, status, origin_module, timestamp, target_user_id, target_role, nav_to_view, action_label, metadata');
   if (error) {
     console.error('Erro ao buscar notificações:', error);
     return [];
@@ -977,7 +1028,7 @@ export const saveNotification = async (notif: Notification) => {
  * Busca todos os lotes de aprovação
  */
 export const fetchApprovalBatches = async () => {
-  const { data, error } = await supabase.from('approval_batches').select('*');
+  const { data, error } = await supabase.from('approval_batches').select('id, title, client_id, status, items, created_at, updated_at, archived');
   if (error) {
     console.error('Erro ao buscar lotes de aprovação:', error);
     return [];
@@ -989,7 +1040,8 @@ export const fetchApprovalBatches = async () => {
     status: b.status,
     items: b.items,
     createdAt: b.created_at,
-    updatedAt: b.updated_at
+    updatedAt: b.updated_at,
+    archived: b.archived || false
   }));
 };
 
@@ -997,15 +1049,24 @@ export const fetchApprovalBatches = async () => {
  * Salva ou atualiza um lote de aprovação
  */
 export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
-  const { error } = await supabase.from('approval_batches').upsert({
-    id: batch.id || undefined,
-    title: batch.title,
-    client_id: batch.clientId,
-    status: batch.status,
-    items: batch.items,
-    created_at: batch.createdAt || Date.now(),
+  if (!batch.id) {
+    console.error('Tentativa de salvar lote sem ID');
+    return { success: false, error: 'ID is required' };
+  }
+
+  const dataToSave: any = {
+    id: batch.id,
     updated_at: Date.now()
-  });
+  };
+
+  if (batch.title !== undefined) dataToSave.title = batch.title;
+  if (batch.clientId !== undefined) dataToSave.client_id = batch.clientId;
+  if (batch.status !== undefined) dataToSave.status = batch.status;
+  if (batch.items !== undefined) dataToSave.items = batch.items;
+  if (batch.archived !== undefined) dataToSave.archived = batch.archived;
+  if (batch.createdAt) dataToSave.created_at = batch.createdAt;
+
+  const { error } = await supabase.from('approval_batches').upsert(dataToSave);
 
   if (error) {
     console.error('Erro ao salvar lote de aprovação:', error);
@@ -1015,10 +1076,58 @@ export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
 };
 
 /**
+ * Atualiza apenas o status de um lote de aprovação (evita timeout com JSON grande)
+ */
+export const updateApprovalBatchStatus = async (id: string, status: ApprovalStatus) => {
+  const { error } = await supabase
+    .from('approval_batches')
+    .update({ status, updated_at: Date.now() })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Erro ao atualizar status do lote:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Adiciona um item a um lote existente (tenta otimizar se possível, mas por enquanto apenas encapsula)
+ */
+export const addApprovalItemToBatch = async (batchId: string, items: ApprovalItem[]) => {
+  const { error } = await supabase
+    .from('approval_batches')
+    .update({ items, updated_at: Date.now() })
+    .eq('id', batchId);
+
+  if (error) {
+    console.error('Erro ao adicionar item ao lote:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui permanentemente um lote de aprovação
+ */
+export const deleteApprovalBatch = async (id: string) => {
+  const { error } = await supabase
+    .from('approval_batches')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Erro ao excluir lote de aprovação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
  * Busca todas as metas de produtividade
  */
 export const fetchGoals = async () => {
-  const { data, error } = await supabase.from('productivity_goals').select('*');
+  const { data, error } = await supabase.from('productivity_goals').select('id, title, type, period, target_value, squad_id, user_id, month, created_at');
   if (error) {
     console.error('Erro ao buscar metas:', error);
     return [];
@@ -1129,6 +1238,9 @@ export const clearDatabase = async () => {
     await supabase.from('bank_accounts').delete().neq('id', '0');
     await supabase.from('credit_cards').delete().neq('id', '0');
     await supabase.from('squads').delete().neq('id', '0');
+    await supabase.from('notifications').delete().neq('id', '0');
+    await supabase.from('approval_batches').delete().neq('id', '0');
+    await supabase.from('productivity_goals').delete().neq('id', '0');
     
     // Para usuários, mantemos apenas o seu admin
     await supabase.from('users').delete().neq('email', 'eric.muriel@gmail.com');
@@ -1257,6 +1369,41 @@ export const seedDatabase = async () => {
       }))
     );
     if (cardError) console.error('Erro ao migrar Cartões:', cardError);
+
+    // 7. Migrar Notificações
+    const { error: notifError } = await supabase.from('notifications').upsert(
+      initialNotifications.map(n => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        priority: n.priority,
+        status: n.status,
+        origin_module: n.originModule,
+        timestamp: n.timestamp,
+        target_user_id: n.targetUserId,
+        target_role: n.targetRole,
+        nav_to_view: n.navToView,
+        action_label: n.actionLabel,
+        metadata: n.metadata
+      }))
+    );
+    if (notifError) console.error('Erro ao migrar Notificações:', notifError);
+
+    // 8. Migrar Lotes de Aprovação
+    const { error: batchError } = await supabase.from('approval_batches').upsert(
+      initialApprovalBatches.map(b => ({
+        id: b.id,
+        title: b.title,
+        client_id: b.clientId,
+        status: b.status,
+        items: b.items,
+        created_at: b.createdAt,
+        updated_at: b.updatedAt,
+        archived: b.archived || false
+      }))
+    );
+    if (batchError) console.error('Erro ao migrar Lotes de Aprovação:', batchError);
 
     console.log('Migração concluída com sucesso!');
     return { success: true };

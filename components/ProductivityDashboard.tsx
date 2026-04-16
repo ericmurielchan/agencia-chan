@@ -14,7 +14,7 @@ interface ProductivityDashboardProps {
   squads: Squad[];
   clients: Client[];
   currentUser: User;
-  setNotifications?: React.Dispatch<React.SetStateAction<Notification[]>>;
+  addNotification?: (data: any) => Promise<void>;
   goals: ProductivityGoal[];
   setGoals: React.Dispatch<React.SetStateAction<ProductivityGoal[]>>;
   onNavigate?: (view: string, filter?: any) => void;
@@ -28,7 +28,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
     squads, 
     clients, 
     currentUser, 
-    setNotifications,
+    addNotification,
     goals,
     setGoals,
     onNavigate,
