@@ -87,7 +87,7 @@ const ROLE_LABELS: Record<Role, string> = {
     'MANAGER': 'Gerente',
     'FINANCE': 'Financeiro',
     'EMPLOYEE': 'Colaborador',
-    'FREELANCER': 'Comercial',
+    'COMMERCIAL': 'Comercial',
     'CLIENT': 'Cliente'
 };
 
@@ -844,6 +844,7 @@ const App: React.FC = () => {
                 squads={squads} 
                 setSquads={setSquads} 
                 openConfirm={openConfirm} 
+                currentUserRole={currentUser?.role}
                 onSaveUser={async (user) => {
                     const result = await saveUser(user);
                     if (result.success) {
@@ -928,6 +929,7 @@ const App: React.FC = () => {
             {currentView === 'system-admin' && (
               <SystemAdmin 
                 settings={systemSettings} 
+                currentUserRole={currentUser?.role}
                 onUpdateSettings={async (newSettings) => {
                   setSystemSettings(newSettings);
                   await updateSystemSettings(newSettings);

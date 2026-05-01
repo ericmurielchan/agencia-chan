@@ -11,6 +11,7 @@ interface TeamManagementProps {
   squads: Squad[];
   setSquads: React.Dispatch<React.SetStateAction<Squad[]>>;
   openConfirm: (options: ConfirmOptions) => Promise<boolean>;
+  currentUserRole?: Role;
   onSaveUser?: (user: Partial<User>) => Promise<void>;
   onDeleteUser?: (id: string) => Promise<void>;
   onSaveSquad?: (squad: Partial<Squad>) => Promise<void>;
@@ -22,19 +23,27 @@ const ROLES: { value: Role; label: string }[] = [
     { value: 'MANAGER', label: 'Gerente / Gestor' },
     { value: 'FINANCE', label: 'Financeiro' },
     { value: 'EMPLOYEE', label: 'Colaborador' },
-    { value: 'FREELANCER', label: 'Comercial' },
+    { value: 'COMMERCIAL', label: 'Comercial' },
+    { value: 'CLIENT', label: 'Cliente' },
 ];
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ 
-    users, setUsers, squads, setSquads, openConfirm,
+    users, setUsers, squads, setSquads, openConfirm, currentUserRole = 'ADMIN' as Role,
     onSaveUser, onDeleteUser, onSaveSquad, onDeleteSquad
 }) => {
+  const isCommercial = currentUserRole === 'COMMERCIAL';
+  
+  // Filtrar usuários para Comercial: Ver apenas CLIENTS
+  const displayedUsers = isCommercial 
+    ? users.filter(u => u.role === 'CLIENT')
+    : users;
+
   const INITIAL_USER_STATE: Partial<User> = { 
     name: '',
     email: '',
-    role: 'EMPLOYEE', 
+    role: isCommercial ? 'CLIENT' : 'EMPLOYEE', 
     avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=NewUser', 
-    hasSystemAccess: false,
+    hasSystemAccess: isCommercial, // Clientes geralmente precisam de acesso se criados aqui
     password: ''
   };
 
@@ -42,6 +51,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const [editingUser, setEditingUser] = useState<Partial<User>>(INITIAL_USER_STATE);
   const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Filtrar cargos disponíveis
+  const availableRoles = isCommercial 
+    ? ROLES.filter(r => r.value === 'CLIENT')
+    : ROLES;
 
   const [isSquadModalOpen, setIsSquadModalOpen] = useState(false);
   const [editingSquad, setEditingSquad] = useState<Partial<Squad>>({ name: '', members: [] });
@@ -175,9 +189,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white rounded-xl border shadow-sm">
-              <div className="p-4 border-b bg-slate-50 font-bold">Colaboradores</div>
+              <div className="p-4 border-b bg-slate-50 font-bold flex items-center justify-between">
+                <span>{isCommercial ? 'Acessos de Clientes' : 'Colaboradores'}</span>
+                {isCommercial && <span className="text-[10px] text-slate-400 font-normal">Apenas perfis de clientes</span>}
+              </div>
               <div className="divide-y max-h-[500px] overflow-y-auto custom-scrollbar">
-                  {users.map(user => (
+                  {displayedUsers.map(user => (
                       <div key={user.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors group">
                           <div className="flex items-center gap-3">
                               <div className="relative">
@@ -219,7 +236,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
               </div>
           </div>
 
-          <div className="bg-white rounded-xl border shadow-sm p-4">
+          {!isCommercial && (
+            <div className="bg-white rounded-xl border shadow-sm p-4">
               <div className="flex justify-between mb-6 items-center"><h3 className="font-bold">Squads</h3><button onClick={()=>{setEditingSquad({name:'',members:[]});setIsSquadModalOpen(true)}} className="text-xs text-pink-600 font-bold">+ Criar Squad</button></div>
               <div className="space-y-4">
                   {squads.map(s => (
@@ -244,7 +262,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                       </div>
                   ))}
               </div>
-          </div>
+            </div>
+          )}
       </div>
 
       {isModalOpen && (
@@ -281,8 +300,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                 className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all appearance-none bg-white"
                                 value={editingUser.role || 'EMPLOYEE'}
                                 onChange={e => setEditingUser({...editingUser, role: e.target.value as Role})}
+                                disabled={isCommercial}
                               >
-                                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                  {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                               </select>
                           </div>
                       </div>

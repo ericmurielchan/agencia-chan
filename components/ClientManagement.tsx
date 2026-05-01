@@ -45,7 +45,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   // Filter clients based on role
   const filteredClients = useMemo(() => {
     let base = clients;
-    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
+    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL') {
         base = clients.filter(c => c.responsibleId === currentUser.id || squads.find(s => s.id === c.squadId)?.members.includes(currentUser.id));
     }
     return base.filter(c => 
@@ -106,7 +106,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   };
 
   const togglePassword = (passwordId: string, platform: string) => {
-      if (currentUser.role === 'FREELANCER') return;
+      if (currentUser.role === 'COMMERCIAL') return;
 
       setVisiblePasswords(prev => ({ ...prev, [passwordId]: !prev[passwordId] }));
       
@@ -931,7 +931,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 
                         {activeViewTab === 'PASSWORDS' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {currentUser.role === 'FREELANCER' ? (
+                                {currentUser.role === 'COMMERCIAL' ? (
                                     <div className="col-span-2 p-20 text-center bg-red-50 rounded-[32px] border border-red-100">
                                         <Lock size={48} className="mx-auto text-red-200 mb-4"/>
                                         <p className="text-red-600 font-black uppercase text-xs tracking-widest">Acesso Restrito</p>

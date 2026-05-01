@@ -1,5 +1,5 @@
 
-export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'FREELANCER' | 'CLIENT' | 'FINANCE';
+export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'COMMERCIAL' | 'CLIENT' | 'FINANCE';
 
 export interface ConfirmOptions {
     title: string;

@@ -1,12 +1,13 @@
 
 import React, { useState, useRef } from 'react';
-import { SystemSettings } from '../types';
+import { SystemSettings, Role } from '../types';
 import { Settings, Upload, Check, RefreshCcw, Palette, LayoutTemplate, Sidebar as SidebarIcon, Database } from 'lucide-react';
 import { seedDatabase, clearDatabase } from '../services/supabaseService';
 
 interface SystemAdminProps {
     settings: SystemSettings;
     onUpdateSettings: (newSettings: SystemSettings) => void;
+    currentUserRole?: Role;
 }
 
 const PRIMARY_PRESETS = [
@@ -27,7 +28,8 @@ const SIDEBAR_PRESETS = [
     { color: '#2e1065', label: 'Violet 950' },
 ];
 
-export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSettings }) => {
+export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSettings, currentUserRole = 'ADMIN' as Role }) => {
+    const isCommercial = currentUserRole === 'COMMERCIAL';
     const [localSettings, setLocalSettings] = useState<SystemSettings>(settings);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const faviconInputRef = useRef<HTMLInputElement>(null);
@@ -123,7 +125,8 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
                             <Check size={16}/> {successMsg}
                         </div>
                     )}
-                    <div className="flex gap-2">
+                    {!isCommercial && (
+                      <div className="flex gap-2">
                         <button 
                             onClick={handleClear}
                             disabled={isSeeding}
@@ -138,7 +141,8 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
                         >
                             <Database size={16} className={isSeeding ? 'animate-spin' : ''}/> Migrar Dados Mock
                         </button>
-                    </div>
+                      </div>
+                    )}
                 </div>
             </div>
 

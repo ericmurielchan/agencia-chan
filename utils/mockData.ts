@@ -76,7 +76,7 @@ export const initialUsers: User[] = [
       id: 'u6', 
       name: 'Scarlet', 
       email: 'scarletfreitas16@gmail.com', 
-      role: 'FREELANCER', 
+      role: 'COMMERCIAL', 
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Scarlet&backgroundColor=e2e8f0', 
       squad: 'squad-1', 
       hourlyRate: 50, 
@@ -374,8 +374,8 @@ export const initialRolePermissions: RolePermissions = {
     'EMPLOYEE': [
         'kanban', 'productivity', 'requisitions', 'help', 'approvals'
     ],
-    'FREELANCER': [
-        'dashboard', 'kanban', 'crm', 'requisitions', 'help'
+    'COMMERCIAL': [
+        'dashboard', 'kanban', 'crm', 'clients', 'catalog', 'requisitions', 'help', 'productivity', 'teams', 'system-admin', 'finance', 'action:export'
     ],
     'FINANCE': [
         'dashboard', 'finance', 'clients', 'requisitions', 'help', 'approvals', 'stock', 'assets',

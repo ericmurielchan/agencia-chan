@@ -30,8 +30,8 @@ const DEFAULT_PERMISSIONS: RolePermissions = {
     'EMPLOYEE': [
         'kanban', 'productivity', 'requisitions', 'help', 'approvals'
     ],
-    'FREELANCER': [
-        'dashboard', 'kanban', 'crm', 'requisitions', 'help'
+    'COMMERCIAL': [
+        'dashboard', 'kanban', 'crm', 'clients', 'catalog', 'requisitions', 'help', 'productivity', 'action:export'
     ],
     'FINANCE': [
         'dashboard', 'finance', 'clients', 'requisitions', 'help', 'approvals', 'stock', 'assets',
@@ -86,13 +86,13 @@ const SPECIAL_ACTIONS = [
     { id: 'action:delete', label: 'Exclusão Definitiva', desc: 'Deletar registros do sistema', icon: <Trash2 size={16} className="text-red-600"/>, risk: 'CRITICAL' },
 ];
 
-const ROLES: Role[] = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'FREELANCER', 'FINANCE', 'CLIENT'];
+const ROLES: Role[] = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'COMMERCIAL', 'FINANCE', 'CLIENT'];
 
 const ROLE_CONFIG: Record<Role, { label: string, color: string }> = {
     'ADMIN': { label: 'CEO / Admin', color: 'bg-slate-800 text-white' },
     'MANAGER': { label: 'Gerente', color: 'bg-purple-100 text-purple-700' },
     'EMPLOYEE': { label: 'Colaborador', color: 'bg-blue-100 text-blue-700' },
-    'FREELANCER': { label: 'Comercial', color: 'bg-orange-100 text-orange-700' },
+    'COMMERCIAL': { label: 'Comercial', color: 'bg-orange-100 text-orange-700' },
     'FINANCE': { label: 'Financeiro', color: 'bg-emerald-100 text-emerald-700' },
     'CLIENT': { label: 'Cliente', color: 'bg-pink-100 text-pink-700' }
 };

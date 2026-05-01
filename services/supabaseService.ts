@@ -359,32 +359,71 @@ export const deleteLead = async (id: string) => {
  * Busca todas as transações financeiras
  */
 export const fetchFinancialTransactions = async () => {
-  const { data, error } = await supabase.from('financial_transactions').select('id, description, amount, type, date, status, category_id, bank_account_id, client_id, responsible_id, installments, created_at');
-  if (error) {
-    console.error('Erro ao buscar transações:', error);
+  try {
+    // Tenta buscar com credit_card_id primeiro
+    const { data, error } = await supabase
+      .from('financial_transactions')
+      .select('id, description, amount, type, date, status, category_id, bank_account_id, credit_card_id, client_id, responsible_id, installments, created_at');
+    
+    if (error) {
+      // Se o erro for coluna inexistente (42703), tenta sem ela
+      if (error.code === '42703') {
+        const { data: dataNoCard, error: errorNoCard } = await supabase
+          .from('financial_transactions')
+          .select('id, description, amount, type, date, status, category_id, bank_account_id, client_id, responsible_id, installments, created_at');
+        
+        if (errorNoCard) {
+          console.error('Erro ao buscar transações (sem credit_card_id):', errorNoCard);
+          return [];
+        }
+
+        return (dataNoCard || []).map(t => ({
+          id: t.id,
+          description: t.description,
+          amount: t.amount,
+          type: t.type,
+          date: t.date,
+          status: t.status,
+          categoryId: t.category_id,
+          bankAccountId: t.bank_account_id,
+          creditCardId: undefined,
+          clientId: t.client_id,
+          responsibleId: t.responsible_id,
+          installments: t.installments,
+          createdAt: t.created_at || Date.now()
+        }));
+      }
+
+      console.error('Erro ao buscar transações:', error);
+      return [];
+    }
+
+    return (data || []).map(t => ({
+      id: t.id,
+      description: t.description,
+      amount: t.amount,
+      type: t.type,
+      date: t.date,
+      status: t.status,
+      categoryId: t.category_id,
+      bankAccountId: t.bank_account_id,
+      creditCardId: t.credit_card_id,
+      clientId: t.client_id,
+      responsibleId: t.responsible_id,
+      installments: t.installments,
+      createdAt: t.created_at || Date.now()
+    }));
+  } catch (err) {
+    console.error('Erro inesperado ao buscar transações:', err);
     return [];
   }
-  return (data || []).map(t => ({
-    id: t.id,
-    description: t.description,
-    amount: t.amount,
-    type: t.type,
-    date: t.date,
-    status: t.status,
-    categoryId: t.category_id,
-    bankAccountId: t.bank_account_id,
-    clientId: t.client_id,
-    responsibleId: t.responsible_id,
-    installments: t.installments,
-    createdAt: t.created_at || Date.now()
-  }));
 };
 
 /**
  * Salva ou atualiza uma transação financeira
  */
 export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>) => {
-  const { error } = await supabase.from('financial_transactions').upsert({
+  const transactionData: any = {
     id: t.id || undefined,
     description: t.description,
     amount: t.amount,
@@ -397,13 +436,36 @@ export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>)
     responsible_id: t.responsibleId || null,
     installments: t.installments,
     created_at: t.createdAt || Date.now()
-  });
+  };
 
-  if (error) {
-    console.error('Erro ao salvar transação:', error);
-    return { success: false, error };
+  // Só adiciona credit_card_id se fornecido
+  if (t.creditCardId) {
+    transactionData.credit_card_id = t.creditCardId;
   }
-  return { success: true };
+
+  try {
+    const { error } = await supabase.from('financial_transactions').upsert(transactionData);
+    
+    if (error) {
+      // Se falhar por causa do credit_card_id, tenta sem ele
+      if (error.code === '42703' && transactionData.credit_card_id) {
+        delete transactionData.credit_card_id;
+        const { error: retryError } = await supabase.from('financial_transactions').upsert(transactionData);
+        if (retryError) {
+          console.error('Erro ao salvar transação (retry sem credit_card_id):', retryError);
+          return { success: false, error: retryError };
+        }
+        return { success: true };
+      }
+      
+      console.error('Erro ao salvar transação:', error);
+      return { success: false, error };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('Erro inesperado ao salvar transação:', err);
+    return { success: false, error: err };
+  }
 };
 
 /**
@@ -1558,6 +1620,68 @@ export const seedDatabase = async () => {
       }))
     );
     if (batchError) console.error('Erro ao migrar Lotes de Aprovação:', batchError);
+    
+    // 9. Migrar Categorias Financeiras
+    try {
+      const { error: catError } = await supabase.from('financial_categories').upsert(
+        initialCategories.map(c => ({
+          id: c.id,
+          name: c.name,
+          type: c.type,
+          color: c.color
+        }))
+      );
+      if (catError) console.error('Erro ao migrar Categorias:', catError);
+    } catch (e) {
+      console.warn('Tabela financial_categories não existe para migração');
+    }
+
+    // 10. Migrar Contas Bancárias
+    const { error: bankError } = await supabase.from('bank_accounts').upsert(
+      initialBankAccounts.map(b => ({
+        id: b.id,
+        name: b.name,
+        type: b.type,
+        bank_name: b.bankName,
+        balance: b.balance,
+        color: b.color,
+        status: b.status
+      }))
+    );
+    if (bankError) console.error('Erro ao migrar Contas:', bankError);
+    
+    // 11. Migrar Transações Financeiras
+    const transactionsToMigrate = initialFinancialTransactions.map(t => {
+      const tx: any = {
+        id: t.id,
+        description: t.description,
+        amount: t.amount,
+        type: t.type,
+        date: t.date,
+        status: t.status,
+        category_id: t.categoryId,
+        bank_account_id: t.bankAccountId,
+        client_id: t.clientId,
+        responsible_id: t.responsibleId,
+        installments: t.installments,
+        created_at: t.createdAt
+      };
+      if (t.creditCardId) tx.credit_card_id = t.creditCardId;
+      return tx;
+    });
+
+    const { error: txError } = await supabase.from('financial_transactions').upsert(transactionsToMigrate);
+    
+    if (txError) {
+      if (txError.code === '42703') {
+        console.warn('credit_card_id não existe na tabela financial_transactions. Tentando sem ele...');
+        const txNoCard = transactionsToMigrate.map(({ credit_card_id, ...tx }) => tx);
+        const { error: txRetryError } = await supabase.from('financial_transactions').upsert(txNoCard);
+        if (txRetryError) console.error('Erro ao migrar Transações (retry):', txRetryError);
+      } else {
+        console.error('Erro ao migrar Transações:', txError);
+      }
+    }
 
     console.log('Migração concluída com sucesso!');
     return { success: true };

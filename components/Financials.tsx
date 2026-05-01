@@ -269,11 +269,12 @@ export const Financials: React.FC<FinancialsProps> = ({
     const filteredTransactions = useMemo(() => {
         let base = transactions;
         
-        if (currentUser.role === 'MANAGER') {
+        if (currentUser.role === 'MANAGER' || currentUser.role === 'COMMERCIAL') {
             const userSquad = squads.find(s => s.members.includes(currentUser.id));
             base = transactions.filter(t => 
                 t.responsibleId === currentUser.id || 
-                (userSquad && t.squadId === userSquad.id)
+                (userSquad && t.squadId === userSquad.id) ||
+                (currentUser.role === 'COMMERCIAL') // Commercial sees all for analysis as per request
             );
         } else if (currentUser.role === 'EMPLOYEE') {
             return []; // Should not have access anyway
@@ -1006,12 +1007,16 @@ export const Financials: React.FC<FinancialsProps> = ({
                                 <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
                                     {[
                                         { id: 'DASHBOARD', label: 'Resumo', icon: PieChart },
-                                        { id: 'ACCOUNTS', label: 'Contas', icon: Wallet },
-                                        { id: 'CARDS', label: 'Cartões', icon: CardIcon },
+                                        ...(currentUser.role !== 'COMMERCIAL' ? [
+                                          { id: 'ACCOUNTS', label: 'Contas', icon: Wallet },
+                                          { id: 'CARDS', label: 'Cartões', icon: CardIcon },
+                                        ] : []),
                                         { id: 'TRANSACTIONS', label: 'Transações', icon: History },
                                         { id: 'INVOICES', label: 'Faturas', icon: FileText },
-                                        { id: 'STOCK', label: 'Estoque', icon: Package },
-                                        { id: 'ASSETS', label: 'Ativos', icon: Box },
+                                        ...(currentUser.role !== 'COMMERCIAL' ? [
+                                          { id: 'STOCK', label: 'Estoque', icon: Package },
+                                          { id: 'ASSETS', label: 'Ativos', icon: Box },
+                                        ] : []),
                                         { id: 'REPORTS', label: 'Relatórios', icon: BarChart3 },
                                     ].map(tab => (
                                         <button

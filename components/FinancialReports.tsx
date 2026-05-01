@@ -56,10 +56,17 @@ export const FinancialReports: React.FC<FinancialReportsProps> = ({
         const start = new Date(startDate + 'T00:00:00').getTime();
         const end = new Date(endDate + 'T23:59:59').getTime();
 
-        const filterEntity = (item: any) => {
-            const date = item.date ? new Date(item.date + 'T00:00:00').getTime() : (item.timestamp || item.createdAt);
-            const inDateRange = date >= start && date <= end;
+        const filterEntity = (item: any, type: 'SALES' | 'TRANS' | 'INVOICE') => {
+            let dateVal: number;
+            if (type === 'SALES') {
+                dateVal = item.updatedAt || item.createdAt || Date.now();
+            } else if (type === 'INVOICE') {
+                dateVal = new Date(item.year, item.month - 1, 1).getTime();
+            } else {
+                dateVal = item.date ? new Date(item.date + 'T00:00:00').getTime() : (item.updatedAt || item.createdAt || Date.now());
+            }
             
+            const inDateRange = dateVal >= start && dateVal <= end;
             if (!inDateRange) return false;
 
             const squadMatch = selectedSquadId === 'all' || item.squadId === selectedSquadId;
@@ -72,14 +79,10 @@ export const FinancialReports: React.FC<FinancialReportsProps> = ({
         };
 
         return {
-            sales: leads.filter(l => l.status === 'WON' && filterEntity(l)),
-            revenue: transactions.filter(t => t.type === 'INCOME' && filterEntity(t)),
-            expense: transactions.filter(t => t.type === 'EXPENSE' && filterEntity(t)),
-            invoices: cardInvoices.filter(i => {
-                // Invoices are usually monthly, but let's assume month/year matches period
-                const invDate = new Date(i.year, i.month - 1, 1).getTime();
-                return invDate >= start && invDate <= end && (selectedClientId === 'all' || i.clientId === selectedClientId);
-            })
+            sales: leads.filter(l => l.status === 'WON' && filterEntity(l, 'SALES')),
+            revenue: transactions.filter(t => t.type === 'INCOME' && filterEntity(t, 'TRANS')),
+            expense: transactions.filter(t => t.type === 'EXPENSE' && filterEntity(t, 'TRANS')),
+            invoices: cardInvoices.filter(i => filterEntity(i, 'INVOICE'))
         };
     }, [leads, transactions, cardInvoices, startDate, endDate, selectedSquadId, selectedUserId, selectedClientId]);
 
@@ -171,7 +174,7 @@ export const FinancialReports: React.FC<FinancialReportsProps> = ({
             {/* Header com Filtros */}
             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
                 <div className="flex flex-col md:flex-row md:items-end gap-6">
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         <div>
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block flex items-center gap-2">
                                 <Calendar size={12} /> Período Inicial
@@ -218,6 +221,19 @@ export const FinancialReports: React.FC<FinancialReportsProps> = ({
                             >
                                 <option value="all">Todos os Clientes</option>
                                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block flex items-center gap-2">
+                                <UserIcon size={12} /> Responsável
+                            </label>
+                            <select 
+                                value={selectedUserId}
+                                onChange={e => setSelectedUserId(e.target.value)}
+                                className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-3 text-xs font-bold outline-none transition-all"
+                            >
+                                <option value="all">Todos os Usuários</option>
+                                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                             </select>
                         </div>
                     </div>

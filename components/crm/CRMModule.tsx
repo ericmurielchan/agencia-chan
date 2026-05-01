@@ -129,7 +129,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
     const visibleLeads = useMemo(() => {
         if (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') return leads;
         if (currentUser.role === 'EMPLOYEE') return leads.filter(l => l.responsibleId === currentUser.id);
-        if (currentUser.role === 'FREELANCER') return leads.filter(l => l.responsibleId === currentUser.id);
+        if (currentUser.role === 'COMMERCIAL') return leads.filter(l => l.responsibleId === currentUser.id);
         return [];
     }, [leads, currentUser]);
 

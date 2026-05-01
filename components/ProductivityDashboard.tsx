@@ -48,7 +48,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
   const [selectedSquadId, setSelectedSquadId] = useState<string>('ALL');
   const [selectedUserId, setSelectedUserId] = useState<string>('ALL');
 
-  const isManagement = ['ADMIN', 'MANAGER', 'FINANCE'].includes(currentUser.role);
+  const isManagement = ['ADMIN', 'MANAGER', 'FINANCE', 'COMMERCIAL'].includes(currentUser.role);
   const isAdmin = currentUser.role === 'ADMIN';
   
   React.useEffect(() => {

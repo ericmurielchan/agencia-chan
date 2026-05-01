@@ -68,9 +68,9 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
   const isAdmin = currentUser.role === 'ADMIN';
   const isManager = currentUser.role === 'MANAGER';
   const isEmployee = currentUser.role === 'EMPLOYEE';
-  const isFreelancer = currentUser.role === 'FREELANCER';
+  const isCommercial = currentUser.role === 'COMMERCIAL';
 
-  const [selectedUserId, setSelectedUserId] = useState<string | 'ALL'>(isEmployee || isFreelancer ? currentUser.id : 'ALL');
+  const [selectedUserId, setSelectedUserId] = useState<string | 'ALL'>(isEmployee || isCommercial ? currentUser.id : 'ALL');
   const [selectedSquadId, setSelectedSquadId] = useState<string | 'ALL'>(isManager ? currentUser.squad || 'ALL' : 'ALL');
 
   const applyPreset = (days: number | 'month', presetName: '7days' | '30days' | 'quarter' | 'month') => {
@@ -106,10 +106,15 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     let baseFinance = finance;
     let baseClients = clients;
 
-    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
+    if (currentUser.role === 'EMPLOYEE') {
         baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
         baseLeads = leads.filter(l => l.responsibleId === currentUser.id);
         baseClients = clients.filter(c => c.responsibleId === currentUser.id);
+    } else if (currentUser.role === 'COMMERCIAL') {
+        // Commercial sees their own tasks but ALL leads and clients to manage them
+        baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
+        baseLeads = leads; 
+        baseClients = clients;
     } else if (currentUser.role === 'MANAGER') {
         if (currentUser.squad) {
             baseTasks = tasks.filter(t => t.squadId === currentUser.squad);
@@ -328,7 +333,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         )}
 
         {/* Commercial Context */}
-        {(isAdmin || isManager || isEmployee || isFreelancer) && (
+        {(isAdmin || isManager || isEmployee || isCommercial) && (
             <>
                 <div onClick={() => setCurrentView('crm')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-pink-200 transition-all">
                     <p className="text-pink-500 text-[9px] font-black uppercase tracking-widest mb-1">Novos Leads</p>
@@ -346,7 +351,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         )}
 
         {/* Clients Context */}
-        {(isAdmin || isManager) && (
+        {(isAdmin || isManager || isCommercial) && (
             <div onClick={() => setCurrentView('clients')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-blue-200 transition-all">
                 <p className="text-blue-500 text-[9px] font-black uppercase tracking-widest mb-1">Clientes Ativos</p>
                 <h3 className="text-xl font-black text-slate-800 tracking-tighter">{stats.activeClients}</h3>
@@ -357,7 +362,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
       {/* Main Blocks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* COMERCIAL (AÇÃO) */}
-          {(isAdmin || isManager || isEmployee || isFreelancer) && (
+          {(isAdmin || isManager || isEmployee || isCommercial) && (
               <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium flex flex-col">
                   <div className="flex items-center justify-between mb-8">
                       <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
@@ -428,7 +433,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
           )}
 
           {/* OPERACIONAL (PERFORMANCE) */}
-          {(isAdmin || isManager || isEmployee || isFreelancer) && (
+          {(isAdmin || isManager || isEmployee || isCommercial) && (
               <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium flex flex-col">
                   <div className="flex items-center justify-between mb-8">
                       <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
