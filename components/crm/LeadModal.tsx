@@ -54,6 +54,35 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             setActiveTab('DETAILS');
             return;
         }
+
+        // Compare with original lead to log changes
+        const changes: string[] = [];
+        if (lead.id) {
+            if (formData.company !== lead.company) changes.push(`Empresa: de "${lead.company}" para "${formData.company}"`);
+            if (formData.name !== lead.name) changes.push(`Contato: de "${lead.name}" para "${formData.name}"`);
+            if (formData.email !== lead.email) changes.push(`E-mail: de "${lead.email}" para "${formData.email}"`);
+            if (formData.phone !== lead.phone) changes.push(`Telefone: de "${lead.phone || 'N/A'}" para "${formData.phone || 'N/A'}"`);
+            if (formData.source !== lead.source) changes.push(`Origem: de "${lead.source || 'N/A'}" para "${formData.source || 'N/A'}"`);
+        }
+        
+        const finalHistory = [...(formData.history || [])];
+        
+        if (changes.length > 0) {
+            finalHistory.push({
+                id: 'h' + Date.now().toString() + '_save',
+                userId: currentUser.id,
+                action: 'Dados do contato atualizados',
+                timestamp: Date.now(),
+                details: changes.join('\n')
+            });
+        }
+
+        finalHistory.push({
+            id: 'h' + Date.now().toString() + '_final',
+            userId: currentUser.id,
+            action: lead.id ? 'Lead atualizado' : 'Lead criado',
+            timestamp: Date.now()
+        });
         
         const finalLead: Lead = {
             ...formData,
@@ -62,15 +91,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             lastContact: formData.lastContact || new Date().toISOString(),
             createdAt: formData.createdAt || Date.now(),
             updatedAt: Date.now(),
-            history: [
-                ...(formData.history || []),
-                {
-                    id: Date.now().toString(),
-                    userId: currentUser.id,
-                    action: formData.id ? 'Lead atualizado' : 'Lead criado',
-                    timestamp: Date.now()
-                }
-            ]
+            history: finalHistory
         } as Lead;
 
         onSave(finalLead);
@@ -80,13 +101,39 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         if (status === 'LOST') {
             setShowLossModal(true);
         } else {
-            setFormData({ ...formData, status: 'WON', stageId: 'WON' });
+            const historyEntry: LeadHistory = {
+                id: 'h' + Date.now().toString(),
+                userId: currentUser.id,
+                action: 'Negócio Ganho!',
+                timestamp: Date.now(),
+                details: 'Oportunidade marcada como GANHA'
+            };
+            setFormData({ 
+                ...formData, 
+                status: 'WON', 
+                stageId: 'WON',
+                history: [...(formData.history || []), historyEntry]
+            });
         }
     };
 
     const confirmLoss = () => {
         if (!selectedLossReason) return;
-        setFormData({ ...formData, status: 'LOST', lossReasonId: selectedLossReason, stageId: 'LOST' });
+        const reason = lossReasons.find(r => r.id === selectedLossReason)?.label || selectedLossReason;
+        const historyEntry: LeadHistory = {
+            id: 'h' + Date.now().toString(),
+            userId: currentUser.id,
+            action: 'Negócio Perdido',
+            timestamp: Date.now(),
+            details: `Motivo: ${reason}`
+        };
+        setFormData({ 
+            ...formData, 
+            status: 'LOST', 
+            lossReasonId: selectedLossReason, 
+            stageId: 'LOST',
+            history: [...(formData.history || []), historyEntry]
+        });
         setShowLossModal(false);
     };
 
@@ -101,14 +148,57 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             time: newTask.time,
             createdAt: Date.now()
         };
-        setFormData({ ...formData, tasks: [...(formData.tasks || []), task] });
+        
+        const historyEntry: LeadHistory = {
+            id: 'h' + Date.now().toString(),
+            userId: currentUser.id,
+            action: `Tarefa criada: ${task.text}`,
+            timestamp: Date.now(),
+            details: `Vencimento: ${task.dueDate ? new Date(task.dueDate + 'T00:00:00').toLocaleDateString() : 'Não definido'} ${task.time || ''}`
+        };
+
+        setFormData({ 
+            ...formData, 
+            tasks: [...(formData.tasks || []), task],
+            history: [...(formData.history || []), historyEntry]
+        });
         setNewTask({ text: '', type: 'TASK' });
     };
 
     const toggleTask = (taskId: string) => {
+        const task = formData.tasks?.find(t => t.id === taskId);
+        if (!task) return;
+
+        const newCompleted = !task.completed;
+        const historyEntry: LeadHistory = {
+            id: 'h' + Date.now().toString(),
+            userId: currentUser.id,
+            action: newCompleted ? `Tarefa concluída: ${task.text}` : `Tarefa reaberta: ${task.text}`,
+            timestamp: Date.now()
+        };
+
         setFormData({
             ...formData,
-            tasks: formData.tasks?.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t)
+            tasks: formData.tasks?.map(t => t.id === taskId ? { ...t, completed: newCompleted } : t),
+            history: [...(formData.history || []), historyEntry]
+        });
+    };
+
+    const deleteTask = (taskId: string) => {
+        const task = formData.tasks?.find(t => t.id === taskId);
+        if (!task) return;
+
+        const historyEntry: LeadHistory = {
+            id: 'h' + Date.now().toString(),
+            userId: currentUser.id,
+            action: `Tarefa excluída: ${task.text}`,
+            timestamp: Date.now()
+        };
+
+        setFormData({
+            ...formData,
+            tasks: formData.tasks?.filter(t => t.id !== taskId),
+            history: [...(formData.history || []), historyEntry]
         });
     };
 
@@ -209,11 +299,29 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                 <div className="space-y-6">
                                     <div>
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Responsável</label>
-                                        <select 
-                                            className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl p-3.5 text-sm font-bold outline-none transition-all"
-                                            value={formData.responsibleId || ''}
-                                            onChange={e => setFormData({...formData, responsibleId: e.target.value})}
-                                        >
+                                            <select 
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl p-3.5 text-sm font-bold outline-none transition-all"
+                                                value={formData.responsibleId || ''}
+                                                onChange={e => {
+                                                    const newId = e.target.value;
+                                                    const oldId = formData.responsibleId;
+                                                    if (newId !== oldId) {
+                                                        const newUser = users.find(u => u.id === newId)?.name || 'Ninguém';
+                                                        const historyEntry: LeadHistory = {
+                                                            id: 'h' + Date.now().toString(),
+                                                            userId: currentUser.id,
+                                                            action: `Responsável alterado`,
+                                                            timestamp: Date.now(),
+                                                            details: `Alterado para: ${newUser}`
+                                                        };
+                                                        setFormData({
+                                                            ...formData,
+                                                            responsibleId: newId,
+                                                            history: [...(formData.history || []), historyEntry]
+                                                        });
+                                                    }
+                                                }}
+                                            >
                                             <option value="">Selecione um responsável</option>
                                             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                                         </select>
@@ -269,6 +377,24 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                                 type="number" 
                                                 placeholder="0.00" 
                                                 value={formData.value || ''} 
+                                                onBlur={e => {
+                                                    const newVal = parseFloat(e.target.value) || 0;
+                                                    const oldVal = lead.value || 0;
+                                                    if (newVal !== oldVal) {
+                                                        const historyEntry: LeadHistory = {
+                                                            id: 'h' + Date.now().toString(),
+                                                            userId: currentUser.id,
+                                                            action: `Valor estimado alterado`,
+                                                            timestamp: Date.now(),
+                                                            details: `De R$ ${oldVal.toLocaleString()} para R$ ${newVal.toLocaleString()}`
+                                                        };
+                                                        setFormData({
+                                                            ...formData,
+                                                            value: newVal,
+                                                            history: [...(formData.history || []), historyEntry]
+                                                        });
+                                                    }
+                                                }}
                                                 onChange={e => setFormData({...formData, value: parseFloat(e.target.value)})} 
                                             />
                                         </div>
@@ -291,7 +417,22 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                                 {(['COLD', 'WARM', 'HOT'] as const).map(temp => (
                                                     <button 
                                                         key={temp}
-                                                        onClick={() => setFormData({...formData, temperature: temp})}
+                                                        onClick={() => {
+                                                            if (formData.temperature !== temp) {
+                                                                const historyEntry: LeadHistory = {
+                                                                    id: 'h' + Date.now().toString(),
+                                                                    userId: currentUser.id,
+                                                                    action: `Temperatura alterada`,
+                                                                    timestamp: Date.now(),
+                                                                    details: `Alterada para: ${temp === 'COLD' ? 'Frio' : temp === 'WARM' ? 'Morno' : 'Quente'}`
+                                                                };
+                                                                setFormData({
+                                                                    ...formData, 
+                                                                    temperature: temp,
+                                                                    history: [...(formData.history || []), historyEntry]
+                                                                });
+                                                            }
+                                                        }}
                                                         className={`flex-1 py-2 rounded-xl text-[8px] font-black uppercase tracking-widest border transition-all ${formData.temperature === temp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-200'}`}
                                                     >
                                                         {temp === 'COLD' ? 'Frio' : temp === 'WARM' ? 'Morno' : 'Quente'}
@@ -321,19 +462,19 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                         <input 
                                             className="flex-1 bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 transition-all" 
                                             placeholder="O que precisa ser feito?" 
-                                            value={newTask.text}
+                                            value={newTask.text || ''}
                                             onChange={e => setNewTask({...newTask, text: e.target.value})}
                                         />
                                         <input 
                                             type="date"
                                             className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 transition-all" 
-                                            value={newTask.dueDate}
+                                            value={newTask.dueDate || ''}
                                             onChange={e => setNewTask({...newTask, dueDate: e.target.value})}
                                         />
                                         <input 
                                             type="time"
                                             className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 transition-all" 
-                                            value={newTask.time}
+                                            value={newTask.time || ''}
                                             onChange={e => setNewTask({...newTask, time: e.target.value})}
                                         />
                                         <button 
@@ -369,7 +510,10 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                                     </div>
                                                 )}
                                             </div>
-                                            <button className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                                            <button 
+                                                onClick={() => deleteTask(task.id)}
+                                                className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                            >
                                                 <Trash2 size={16} />
                                             </button>
                                         </div>

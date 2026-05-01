@@ -209,7 +209,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                         <div className="flex gap-4">
                             <div className="p-2.5 bg-slate-100 rounded-xl text-slate-400 h-fit"><Layout size={20}/></div>
                             <div className="flex-1">
-                                <input className="w-full text-2xl font-black text-slate-800 bg-transparent border-none focus:ring-0 p-0 outline-none placeholder:text-slate-200 tracking-tight" value={localTitle} onChange={e => setLocalTitle(e.target.value)} onBlur={() => updateWithLog({ title: localTitle }, 'alterou o título')} placeholder="Nome da Tarefa..."/>
+                                <input className="w-full text-2xl font-black text-slate-800 bg-transparent border-none focus:ring-0 p-0 outline-none placeholder:text-slate-200 tracking-tight" value={localTitle || ''} onChange={e => setLocalTitle(e.target.value)} onBlur={() => updateWithLog({ title: localTitle }, 'alterou o título')} placeholder="Nome da Tarefa..."/>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Status:</span>
                                     <span className="text-[9px] font-black text-pink-600 bg-pink-50 px-2.5 py-0.5 rounded-lg uppercase tracking-widest">{task.status}</span>
@@ -249,7 +249,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                 <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Entrega</h4>
                                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl">
                                     <Calendar size={14} className="text-slate-400"/>
-                                    <input type="date" className="bg-transparent text-[11px] font-black text-slate-700 outline-none" value={task.dueDate} onChange={e => updateWithLog({ dueDate: e.target.value }, 'alterou o prazo')}/>
+                                    <input type="date" className="bg-transparent text-[11px] font-black text-slate-700 outline-none" value={task.dueDate || ''} onChange={e => updateWithLog({ dueDate: e.target.value }, 'alterou o prazo')}/>
                                 </div>
                             </div>
                         </div>
@@ -265,7 +265,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                             <textarea 
                                                 ref={descTextareaRef}
                                                 className="w-full min-h-[120px] bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-xs font-medium outline-none focus:border-pink-500 focus:bg-white transition-all shadow-inner"
-                                                value={localDesc}
+                                                value={localDesc || ''}
                                                 onChange={e => handleTextChangeWithMention(e.target.value, setLocalDesc, 'DESC', e.target.selectionStart)}
                                                 autoFocus
                                                 placeholder="Detalhe o briefing (use @ para citar)..."

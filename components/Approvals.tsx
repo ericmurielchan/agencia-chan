@@ -284,6 +284,21 @@ export const Approvals: React.FC<ApprovalsProps> = ({
         const updatedBatch = { ...batch, status: 'SENT' as ApprovalStatus, updatedAt: Date.now() };
         setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
       }
+
+      // Notify clients
+      const clientUsers = users.filter(u => u.role === 'CLIENT' && u.clientId === batch.clientId);
+      clientUsers.forEach(clientUser => {
+        addNotification({
+          title: 'Novo Material para Aprovação',
+          message: `O lote "${batch.title}" foi enviado para sua aprovação.`,
+          type: 'INFO',
+          priority: 'HIGH',
+          originModule: 'APPROVALS',
+          targetUserId: clientUser.id,
+          navToView: 'approvals',
+          metadata: { batchId: batch.id, action: 'BATCH_SENT' }
+        });
+      });
     }
   };
 
@@ -345,6 +360,34 @@ export const Approvals: React.FC<ApprovalsProps> = ({
         await onSaveBatch(updatedBatch);
       } else {
         setBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
+      }
+
+      // Notification Logic for Item Status Update
+      if (currentUser.role === 'CLIENT') {
+        const client = clients.find(c => c.id === batch.clientId);
+        const squad = squads.find(s => s.id === client?.squadId);
+        const item = batch.items.find(i => i.id === itemId);
+        
+        const managers = users.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER');
+        const squadMembers = users.filter(u => squad?.members.includes(u.id));
+        
+        const uniqueTargets = Array.from(new Set([...managers, ...squadMembers].map(u => u.id)))
+          .filter(id => id !== currentUser.id)
+          .map(id => users.find(u => u.id === id))
+          .filter((u): u is User => !!u);
+
+        uniqueTargets.forEach(target => {
+          addNotification({
+            title: `Item ${status === 'APPROVED' ? 'Aprovado' : status === 'REJECTED' ? 'Rejeitado' : 'com Ajustes'}`,
+            message: `${currentUser.name} ${status === 'APPROVED' ? 'aprovou' : status === 'REJECTED' ? 'rejeitou' : 'solicitou ajustes em'} "${item?.title}" (${client?.name})`,
+            type: status === 'APPROVED' ? 'SUCCESS' : status === 'REJECTED' ? 'ALERT' : 'WARNING',
+            priority: 'MEDIUM',
+            originModule: 'APPROVALS',
+            targetUserId: target.id,
+            navToView: 'approvals',
+            metadata: { batchId, itemId, action: 'STATUS_UPDATE', status }
+          });
+        });
       }
     }
   };

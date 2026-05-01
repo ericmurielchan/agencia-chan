@@ -60,6 +60,8 @@ import {
   saveAgencyService,
   fetchNotifications,
   saveNotification,
+  mapNotification,
+  subscribeToNotifications,
   fetchApprovalBatches,
   saveApprovalBatch,
   updateApprovalBatchStatus,
@@ -72,10 +74,12 @@ import {
   deleteAgencyService,
   saveRolePermissions,
   fetchRolePermissions,
+  fetchFinancialCategories,
+  saveFinancialCategory,
   deleteUser
 } from './services/supabaseService';
-import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements } from './utils/mockData';
-import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from './types';
+import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements, initialCategories } from './utils/mockData';
+import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement, FinancialCategory } from './types';
 import { Users, Settings, Bell, Check, Gift, AlertTriangle, Info, Clock, CheckCircle, Shield, Trash2, Archive, Eye, DollarSign, Briefcase, Menu, X as XIcon } from 'lucide-react';
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -146,8 +150,8 @@ const App: React.FC = () => {
           if (squadsData.length > 0) setSquads(squadsData as any);
 
           // Lote 2: Operacional
-          const [tasksData, leadsData, financialData, bankData, cardsData] = await Promise.all([
-            fetchTasks(), fetchLeads(), fetchFinancialTransactions(), fetchBankAccounts(), fetchCreditCards()
+          const [tasksData, leadsData, financialData, bankData, cardsData, categoriesData] = await Promise.all([
+            fetchTasks(), fetchLeads(), fetchFinancialTransactions(), fetchBankAccounts(), fetchCreditCards(), fetchFinancialCategories()
           ]);
 
           setTasks(tasksData as any);
@@ -155,21 +159,22 @@ const App: React.FC = () => {
           setFinancialTransactions(financialData as any);
           setBankAccounts(bankData as any);
           if (cardsData.length > 0) setCreditCards(cardsData as any);
+          if (categoriesData.length > 0) setCategories(categoriesData as any);
 
           // Lote 3: Restante
           const [stockData, assetsData, cashSessionsData, cashMovementsData, requisitionsData, servicesData, notificationsData, batchesData, goalsData] = await Promise.all([
             fetchStockItems(), fetchAssets(), fetchCashSessions(), fetchCashMovements(), fetchRequisitions(), fetchAgencyServices(), fetchNotifications(), fetchApprovalBatches(), fetchGoals()
           ]);
           
-          if (stockData.length > 0) setStock(stockData as any);
-          if (assetsData.length > 0) setAssets(assetsData as any);
-          if (cashSessionsData.length > 0) setCashSessions(cashSessionsData as any);
-          if (cashMovementsData.length > 0) setCashMovements(cashMovementsData as any);
-          if (requisitionsData.length > 0) setRequisitions(requisitionsData as any);
-          if (servicesData.length > 0) setServices(servicesData as any);
-          if (notificationsData.length > 0) setNotifications(notificationsData as any);
-          if (batchesData.length > 0) setApprovalBatches(batchesData as any);
-          if (goalsData.length > 0) setGoals(goalsData as any);
+          setStock(stockData as any);
+          setAssets(assetsData as any);
+          setCashSessions(cashSessionsData as any);
+          setCashMovements(cashMovementsData as any);
+          setRequisitions(requisitionsData as any);
+          setServices(servicesData as any);
+          setNotifications(notificationsData as any);
+          setApprovalBatches(batchesData as any);
+          setGoals(goalsData as any);
         } else {
           console.warn('Conexão com Supabase falhou, usando dados mock.');
         }
@@ -178,6 +183,30 @@ const App: React.FC = () => {
       }
     };
     initSupabase();
+  }, []);
+
+  // Real-time notifications
+  useEffect(() => {
+    const subscription = subscribeToNotifications((payload) => {
+      console.log('Nova mudança na notificação:', payload);
+      
+      if (payload.eventType === 'INSERT') {
+        const newNotif = mapNotification(payload.new);
+        setNotifications(prev => {
+          if (prev.some(n => n.id === newNotif.id)) return prev;
+          return [newNotif, ...prev];
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        const updatedNotif = mapNotification(payload.new);
+        setNotifications(prev => prev.map(n => n.id === updatedNotif.id ? updatedNotif : n));
+      } else if (payload.eventType === 'DELETE') {
+        setNotifications(prev => prev.filter(n => n.id === payload.old.id));
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const toggleSidebar = () => {
@@ -215,6 +244,7 @@ const App: React.FC = () => {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(initialBankAccounts);
   const [creditCards, setCreditCards] = useState<CreditCard[]>(initialCreditCards);
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(initialFinancialTransactions);
+  const [categories, setCategories] = useState<FinancialCategory[]>(initialCategories);
   const [cardInvoices, setCardInvoices] = useState<CardInvoice[]>(initialCardInvoices);
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [squads, setSquads] = useState<Squad[]>(initialSquads);
@@ -317,11 +347,18 @@ const App: React.FC = () => {
   };
 
   const markAllAsRead = async () => {
-      const unread = notifications.filter(n => n.status === 'UNREAD');
-      setNotifications(prev => prev.map(n => n.status === 'UNREAD' ? { ...n, status: 'READ' } : n));
-      
-      // Persistir no Supabase
-      await Promise.all(unread.map(n => saveNotification({ ...n, status: 'READ' })));
+    const userUnread = notifications.filter(n => 
+      n.status === 'UNREAD' && 
+      (n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role)))
+    );
+    
+    setNotifications(prev => prev.map(n => {
+      const isMine = n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role));
+      return (n.status === 'UNREAD' && isMine) ? { ...n, status: 'READ' } : n;
+    }));
+    
+    // Persistir no Supabase
+    await Promise.all(userUnread.map(n => saveNotification({ ...n, status: 'READ' })));
   };
 
   const addNotification = async (data: Omit<Notification, 'id' | 'timestamp' | 'status'> & { id?: string }) => {
@@ -346,7 +383,10 @@ const App: React.FC = () => {
       return <Login onLogin={handleLogin} users={users} systemSettings={systemSettings} onNavigate={setCurrentView} />;
   }
 
-  const unreadCount = notifications.filter(n => n.status === 'UNREAD' && (!n.targetUserId || n.targetUserId === currentUser.id)).length;
+  const unreadCount = notifications.filter(n => 
+    n.status === 'UNREAD' && 
+    (n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role)))
+  ).length;
 
   const getSidebarWidth = () => {
     if (isMobile) return '0px';
@@ -428,7 +468,10 @@ const App: React.FC = () => {
                                 <div className="max-h-64 md:max-h-96 overflow-y-auto custom-scrollbar">
                                     {notifications.length > 0 ? (
                                         <div className="divide-y divide-slate-50">
-                                            {notifications.sort((a, b) => b.timestamp - a.timestamp).map(notif => (
+                                            {notifications
+                                                .filter(n => n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role)))
+                                                .sort((a, b) => b.timestamp - a.timestamp)
+                                                .map(notif => (
                                                 <button 
                                                     key={notif.id} 
                                                     onClick={() => handleNotificationClick(notif)}
@@ -533,6 +576,7 @@ const App: React.FC = () => {
                   if (view === 'finance' && refId) setSelectedTransactionId(refId);
                 }}
                 onSaveTask={async (task) => {
+                    const isNew = !tasks.find(t => t.id === task.id);
                     const result = await saveTask(task);
                     if (result.success) {
                         setTasks(prev => {
@@ -540,6 +584,24 @@ const App: React.FC = () => {
                             if (exists) return prev.map(t => t.id === task.id ? task : t);
                             return [...prev, task];
                         });
+
+                        // Emit notification if assigned to someone else
+                        if (task.assigneeIds && task.assigneeIds.length > 0) {
+                            task.assigneeIds.forEach(assigneeId => {
+                                if (assigneeId !== currentUser.id) {
+                                    addNotification({
+                                        title: isNew ? 'Nova Tarefa Atribuída' : 'Tarefa Atualizada',
+                                        message: `Você foi atribuído à tarefa: ${task.title}`,
+                                        type: 'INFO',
+                                        priority: 'MEDIUM',
+                                        originModule: 'KANBAN',
+                                        targetUserId: assigneeId,
+                                        navToView: 'kanban',
+                                        metadata: { referenceId: task.id, module: 'tasks' }
+                                    });
+                                }
+                            });
+                        }
                     }
                 }}
                 onDeleteTask={async (id) => {
@@ -598,6 +660,7 @@ const App: React.FC = () => {
                 currentUser={currentUser} 
                 users={users} 
                 addNotification={addNotification} 
+                openConfirm={openConfirm}
                 setTransactions={setFinancialTransactions} 
                 clients={clients} 
                 onSaveRequisition={async (req) => {
@@ -630,10 +693,13 @@ const App: React.FC = () => {
                 setCashSessions={setCashSessions}
                 cashMovements={cashMovements}
                 setCashMovements={setCashMovements}
-                currentUser={currentUser} 
+                currentUser={currentUser!} 
                 users={users} 
                 clients={clients}
                 squads={squads}
+                leads={leads}
+                categories={categories}
+                setCategories={setCategories}
                 openConfirm={openConfirm}
                 selectedTransactionId={selectedTransactionId}
                 onClearSelectedTransaction={() => setSelectedTransactionId(null)}
@@ -808,6 +874,10 @@ const App: React.FC = () => {
                     const result = await deleteSquad(id);
                     if (result.success) {
                         setSquads(prev => prev.filter(s => s.id !== id));
+                        // Dissociar localmente para manter a interface sincronizada
+                        setUsers(prev => prev.map(u => u.squad === id ? { ...u, squad: undefined } : u));
+                        setClients(prev => prev.map(c => c.squadId === id ? { ...c, squadId: undefined } : c));
+                        setTasks(prev => prev.map(t => t.squadId === id ? { ...t, squadId: undefined } : t));
                     }
                 }}
               />

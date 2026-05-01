@@ -80,7 +80,8 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                     priority: 'HIGH',
                                     originModule: 'CRM',
                                     targetUserId: currentUser.id,
-                                    navToView: 'crm'
+                                    navToView: 'crm',
+                                    metadata: { referenceId: lead.id, taskId: task.id, module: 'leads' }
                                 });
                             }
                             // Task in 1 hour
@@ -93,7 +94,8 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                     priority: 'MEDIUM',
                                     originModule: 'CRM',
                                     targetUserId: currentUser.id,
-                                    navToView: 'crm'
+                                    navToView: 'crm',
+                                    metadata: { referenceId: lead.id, taskId: task.id, module: 'leads' }
                                 });
                             }
                         }
@@ -110,7 +112,8 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                             priority: 'MEDIUM',
                             originModule: 'CRM',
                             targetUserId: currentUser.id,
-                            navToView: 'crm'
+                            navToView: 'crm',
+                            metadata: { referenceId: lead.id, module: 'leads' }
                         });
                     }
                 }
@@ -165,7 +168,8 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     priority: 'MEDIUM',
                     originModule: 'CRM',
                     targetUserId: lead.responsibleId,
-                    navToView: 'crm'
+                    navToView: 'crm',
+                    metadata: { referenceId: lead.id, module: 'leads' }
                 });
             }
         } else {
@@ -218,7 +222,8 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     priority: 'HIGH',
                     originModule: 'CRM',
                     targetUserId: lead.responsibleId,
-                    navToView: 'crm'
+                    navToView: 'crm',
+                    metadata: { referenceId: lead.id, module: 'leads' }
                 });
             }
         }

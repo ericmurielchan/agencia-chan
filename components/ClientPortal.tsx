@@ -150,7 +150,13 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
         type: 'INFO',
         priority: 'HIGH',
         originModule: 'CLIENTS',
-        navToView: 'kanban'
+        navToView: 'kanban',
+        targetRole: 'ADMIN',
+        metadata: {
+            referenceId: newTask.id,
+            module: 'tasks',
+            clientId: currentUser.clientId
+        }
     });
 
     setIsWizardOpen(false);

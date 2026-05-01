@@ -220,6 +220,11 @@ export const initialCategories: FinancialCategory[] = [
     { id: 'cat3', name: 'Marketing & Anúncios', type: 'EXPENSE', color: '#db2777' },
     { id: 'cat4', name: 'Salários & Encargos', type: 'EXPENSE', color: '#8b5cf6' },
     { id: 'cat5', name: 'Impostos', type: 'EXPENSE', color: '#ef4444' },
+    { id: 'cat6', name: 'Operação', type: 'EXPENSE', color: '#f59e0b' },
+    { id: 'cat7', name: 'Alimentação', type: 'EXPENSE', color: '#ec4899' },
+    { id: 'cat8', name: 'Hospedagem', type: 'EXPENSE', color: '#8b5cf6' },
+    { id: 'cat9', name: 'Transporte', type: 'EXPENSE', color: '#06b6d4' },
+    { id: 'cat10', name: 'Reembolso', type: 'BOTH', color: '#64748b' },
 ];
 
 export const initialSuppliers: Supplier[] = [

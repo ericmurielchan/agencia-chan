@@ -14,7 +14,8 @@ import {
     StockItem,
     Asset,
     CashRegisterSession,
-    CashMovement
+    CashMovement,
+    Lead
 } from '../types';
 import { 
     Wallet, 
@@ -54,10 +55,10 @@ import {
     Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { initialCategories } from '../utils/mockData';
 import { analyzeFinancialHealth } from '../services/aiService';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { saveCreditCard, deleteCreditCard, saveBankAccount, deleteBankAccount } from '../services/supabaseService';
+import { FinancialReports } from './FinancialReports';
 
 interface FinancialsProps {
     bankAccounts: BankAccount[];
@@ -72,6 +73,7 @@ interface FinancialsProps {
     users: User[];
     clients: Client[];
     squads: Squad[];
+    leads: Lead[];
     openConfirm: (options: ConfirmOptions) => Promise<boolean>;
     selectedTransactionId?: string | null;
     onClearSelectedTransaction?: () => void;
@@ -85,6 +87,8 @@ interface FinancialsProps {
     setCashSessions: React.Dispatch<React.SetStateAction<CashRegisterSession[]>>;
     cashMovements: CashMovement[];
     setCashMovements: React.Dispatch<React.SetStateAction<CashMovement[]>>;
+    categories: FinancialCategory[];
+    setCategories: React.Dispatch<React.SetStateAction<FinancialCategory[]>>;
     onSaveTransaction?: (t: FinancialTransaction) => Promise<void>;
     onDeleteTransaction?: (id: string) => Promise<void>;
     onSaveStockItem?: (item: Partial<StockItem>) => Promise<void>;
@@ -115,10 +119,13 @@ export const Financials: React.FC<FinancialsProps> = ({
     setCashSessions,
     cashMovements,
     setCashMovements,
+    categories,
+    setCategories,
     currentUser,
     users,
     clients,
     squads,
+    leads,
     openConfirm,
     selectedTransactionId,
     onClearSelectedTransaction,
@@ -330,7 +337,7 @@ export const Financials: React.FC<FinancialsProps> = ({
             t.type === 'INCOME' ? 'Receita' : 'Despesa',
             t.amount.toString(),
             t.status === 'PAID' ? 'Pago' : 'Pendente',
-            initialCategories.find(c => c.id === t.categoryId)?.name || 'Outros'
+            categories.find(c => c.id === t.categoryId)?.name || 'Outros'
         ]);
 
         const csvContent = [
@@ -1342,7 +1349,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
                                             {filteredTransactions.map(tx => {
-                                                const category = initialCategories.find(c => c.id === tx.categoryId);
+                                                const category = categories.find(c => c.id === tx.categoryId);
                                                 const account = bankAccounts.find(a => a.id === tx.bankAccountId);
                                                 const card = creditCards.find(c => c.id === tx.creditCardId);
                                                 
@@ -1613,174 +1620,19 @@ export const Financials: React.FC<FinancialsProps> = ({
                     {activeTab === 'REPORTS' && (
                         <motion.div 
                             key="reports"
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="space-y-6"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
                         >
-                            {/* Period Selector */}
-                            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-wrap items-center gap-4">
-                                <div className="flex bg-slate-100 p-1 rounded-xl">
-                                    {(['TODAY', '7DAYS', '30DAYS', '6MONTHS', 'CUSTOM'] as const).map(p => (
-                                        <button
-                                            key={p}
-                                            onClick={() => setSelectedPeriod(p)}
-                                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${selectedPeriod === p ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                        >
-                                            {p === 'TODAY' ? 'Hoje' : p === '7DAYS' ? '7 Dias' : p === '30DAYS' ? '30 Dias' : p === '6MONTHS' ? '6 Meses' : 'Personalizado'}
-                                        </button>
-                                    ))}
-                                </div>
-                                {selectedPeriod === 'CUSTOM' && (
-                                    <div className="flex items-center gap-2">
-                                        <input 
-                                            type="date" 
-                                            value={startDate} 
-                                            onChange={e => setStartDate(e.target.value)}
-                                            className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-slate-400"
-                                        />
-                                        <span className="text-slate-400 font-black text-[10px]">ATÉ</span>
-                                        <input 
-                                            type="date" 
-                                            value={endDate} 
-                                            onChange={e => setEndDate(e.target.value)}
-                                            className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-slate-400"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2 bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
-                                    <div className="flex items-center justify-between mb-8">
-                                        <div>
-                                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Fluxo de Caixa</h3>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Receitas vs Despesas no Período</p>
-                                        </div>
-                                        <button 
-                                            onClick={handleDownloadReport}
-                                            className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-all"
-                                        >
-                                            <Download size={18} />
-                                        </button>
-                                    </div>
-                                    <div className="h-[300px] w-full">
-                                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                                            <AreaChart data={chartData}>
-                                                <defs>
-                                                    <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                                    </linearGradient>
-                                                    <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/>
-                                                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                                                    </linearGradient>
-                                                </defs>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis 
-                                                    dataKey="name" 
-                                                    axisLine={false} 
-                                                    tickLine={false} 
-                                                    tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
-                                                />
-                                                <YAxis 
-                                                    axisLine={false} 
-                                                    tickLine={false} 
-                                                    tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
-                                                    tickFormatter={(value) => `R$ ${value}`}
-                                                />
-                                                <Tooltip 
-                                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                                />
-                                                <Area type="monotone" dataKey="receita" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorReceita)" />
-                                                <Area type="monotone" dataKey="despesa" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorDespesa)" />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-6">
-                                    <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Resumo do Período</h4>
-                                        <div className="space-y-4">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-xs font-bold text-slate-500">Receitas</span>
-                                                <span className="text-sm font-black text-emerald-600">R$ {transactions.filter(t => t.type === 'INCOME' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-xs font-bold text-slate-500">Despesas</span>
-                                                <span className="text-sm font-black text-red-600">R$ {transactions.filter(t => t.type === 'EXPENSE' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</span>
-                                            </div>
-                                            <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                                                <span className="text-xs font-black text-slate-800">Saldo Líquido</span>
-                                                <span className={`text-sm font-black ${transactions.filter(t => t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + (t.type === 'INCOME' ? t.amount : -t.amount), 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    R$ {transactions.filter(t => t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + (t.type === 'INCOME' ? t.amount : -t.amount), 0).toLocaleString()}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-slate-900 p-6 rounded-[32px] shadow-xl text-white">
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Patrimônio & Estoque</h4>
-                                        <div className="space-y-4">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-xs font-bold text-slate-300">Valor em Estoque</span>
-                                                <span className="text-sm font-black text-white">R$ {stock.reduce((acc, item) => acc + (item.quantity * (item.price || 0)), 0).toLocaleString()}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-xs font-bold text-slate-300">Valor em Ativos</span>
-                                                <span className="text-sm font-black text-white">R$ {assets.reduce((acc, asset) => acc + (asset.currentValue || 0), 0).toLocaleString()}</span>
-                                            </div>
-                                            <div className="pt-4 border-t border-slate-800 flex justify-between items-center">
-                                                <span className="text-xs font-black text-slate-100">Total Imobilizado</span>
-                                                <span className="text-sm font-black text-blue-400">
-                                                    R$ {(stock.reduce((acc, item) => acc + (item.quantity * (item.price || 0)), 0) + assets.reduce((acc, asset) => acc + (asset.currentValue || 0), 0)).toLocaleString()}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Detailed Reports Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><TrendingUp size={16} /></div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novas Vendas</h4>
-                                    </div>
-                                    <p className="text-2xl font-black text-slate-800">R$ {transactions.filter(t => t.type === 'INCOME' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</p>
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{transactions.filter(t => t.type === 'INCOME' && t.date >= startDate && t.date <= endDate).length} transações</p>
-                                </div>
-
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2 bg-red-50 text-red-600 rounded-xl"><TrendingDown size={16} /></div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Despesas</h4>
-                                    </div>
-                                    <p className="text-2xl font-black text-slate-800">R$ {transactions.filter(t => t.type === 'EXPENSE' && t.date >= startDate && t.date <= endDate).reduce((acc, t) => acc + t.amount, 0).toLocaleString()}</p>
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{transactions.filter(t => t.type === 'EXPENSE' && t.date >= startDate && t.date <= endDate).length} transações</p>
-                                </div>
-
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><FileText size={16} /></div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faturas</h4>
-                                    </div>
-                                    <p className="text-2xl font-black text-slate-800">R$ {cardInvoices.filter(i => i.month === new Date(startDate).getMonth() + 1).reduce((acc, i) => acc + i.amount, 0).toLocaleString()}</p>
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Neste mês</p>
-                                </div>
-
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2 bg-amber-50 text-amber-600 rounded-xl"><Package size={16} /></div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Itens em Alerta</h4>
-                                    </div>
-                                    <p className="text-2xl font-black text-slate-800">{stock.filter(i => i.quantity <= i.minQuantity).length}</p>
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Abaixo do estoque mínimo</p>
-                                </div>
-                            </div>
+                            <FinancialReports 
+                                transactions={transactions}
+                                leads={leads}
+                                cardInvoices={cardInvoices}
+                                users={users}
+                                clients={clients}
+                                squads={squads}
+                                categories={categories}
+                            />
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -1928,7 +1780,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                     <input 
                                         type="date"
                                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newAsset.purchaseDate}
+                                        value={newAsset.purchaseDate || ''}
                                         onChange={e => setNewAsset({...newAsset, purchaseDate: e.target.value})}
                                     />
                                 </div>
@@ -2084,7 +1936,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                     <input 
                                         type="date" 
                                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newTransaction.date}
+                                        value={newTransaction.date || ''}
                                         onChange={e => setNewTransaction({...newTransaction, date: e.target.value})}
                                     />
                                 </div>
@@ -2108,7 +1960,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                         value={newTransaction.categoryId}
                                         onChange={e => setNewTransaction({...newTransaction, categoryId: e.target.value})}
                                     >
-                                        {initialCategories.filter(c => c.type === 'BOTH' || c.type === newTransaction.type).map(c => (
+                                        {categories.filter(c => c.type === 'BOTH' || c.type === newTransaction.type).map(c => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>

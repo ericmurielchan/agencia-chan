@@ -59,7 +59,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const activeColumns = useMemo(() => columns.filter(c => !c.isArchived).sort((a,b) => a.order - b.order), [columns]);
   const archivedColumns = useMemo(() => columns.filter(c => c.isArchived).sort((a,b) => a.order - b.order), [columns]);
   
-  const unreadCount = notifications.filter(n => n.status === 'UNREAD').length;
+  const unreadCount = notifications.filter(n => 
+    n.status === 'UNREAD' && 
+    (n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role)))
+  ).length;
 
   useEffect(() => {
     if (selectedTaskId) {
@@ -192,9 +195,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </button>
                 </div>
                 <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                  {notifications.length > 0 ? (
+                  {notifications.filter(n => n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role))).length > 0 ? (
                     <div className="divide-y divide-slate-50">
-                      {notifications.sort((a, b) => b.timestamp - a.timestamp).map(notif => (
+                      {notifications
+                        .filter(n => n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role)))
+                        .sort((a, b) => b.timestamp - a.timestamp)
+                        .map(notif => (
                         <button 
                           key={notif.id} 
                           onClick={() => {

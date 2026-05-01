@@ -1,10 +1,32 @@
 import { supabase } from '../lib/supabaseClient';
-import { initialUsers, initialTasks, initialClients, initialLeads, initialSquads, initialCreditCards, initialNotifications, initialApprovalBatches } from '../utils/mockData';
+import { 
+  initialUsers, 
+  initialTasks, 
+  initialClients, 
+  initialLeads, 
+  initialSquads, 
+  initialCreditCards, 
+  initialNotifications, 
+  initialApprovalBatches,
+  initialCategories,
+  initialBankAccounts,
+  initialFinancialTransactions,
+  initialTaskColumns,
+  initialCrmColumns,
+  initialRolePermissions,
+  initialServices,
+  initialRequisitions,
+  initialGoals,
+  initialStock,
+  initialAssets,
+  initialCashSessions,
+  initialCashMovements
+} from '../utils/mockData';
 import { 
   User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount,
   FinancialTransaction, StockItem, Asset, CashRegisterSession, CashMovement,
   Requisition, AgencyService, Notification, ApprovalBatch, ProductivityGoal,
-  RolePermissions, ApprovalStatus, ApprovalItem
+  RolePermissions, ApprovalStatus, ApprovalItem, FinancialCategory
 } from '../types';
 
 /**
@@ -32,16 +54,16 @@ const mapSettings = (s: any): SystemSettings => ({
  */
 export const mapUser = (u: any): User => ({
   id: u.id,
-  name: u.name,
-  email: u.email,
-  role: u.role,
-  avatar: u.avatar,
-  squad: u.squad_id,
-  clientId: u.client_id,
-  hourlyRate: u.hourly_rate,
-  salary: u.salary,
-  hasSystemAccess: u.has_system_access,
-  password: u.password,
+  name: u.name || '',
+  email: u.email || '',
+  role: u.role || 'EMPLOYEE',
+  avatar: u.avatar || '',
+  squad: u.squad_id || '',
+  clientId: u.client_id || '',
+  hourlyRate: u.hourly_rate || 0,
+  salary: u.salary || 0,
+  hasSystemAccess: u.has_system_access || false,
+  password: u.password || '',
   preferences: u.preferences || { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false }
 });
 
@@ -50,15 +72,15 @@ export const mapUser = (u: any): User => ({
  */
 const mapTask = (t: any): Task => ({
   id: t.id,
-  clientId: t.client_id,
-  title: t.title,
+  clientId: t.client_id || '',
+  title: t.title || '',
   description: t.description || '',
-  status: t.status,
-  priority: t.priority,
-  dueDate: t.due_date,
+  status: t.status || 'TODO',
+  priority: t.priority || 'MEDIUM',
+  dueDate: t.due_date || '',
   estimatedTime: t.estimated_time || 0,
   assigneeIds: t.assignee_ids || [],
-  squadId: t.squad_id,
+  squadId: t.squad_id || '',
   isTracking: t.is_tracking || false,
   approvalStatus: t.approval_status || 'PENDING',
   archived: t.archived || false,
@@ -75,16 +97,16 @@ const mapTask = (t: any): Task => ({
  */
 const mapLead = (l: any): Lead => ({
   id: l.id,
-  name: l.name,
+  name: l.name || '',
   company: l.company || '',
   value: l.value || 0,
-  stageId: l.stage_id,
+  stageId: l.stage_id || 'NEW',
   status: l.status || 'OPEN',
   email: l.email || '',
   phone: l.phone || '',
   priority: l.priority || 'MEDIUM',
   temperature: l.temperature || 'WARM',
-  responsibleId: l.responsible_id,
+  responsibleId: l.responsible_id || '',
   notes: l.notes || '',
   tags: l.tags || [],
   createdAt: l.created_at || Date.now(),
@@ -99,26 +121,26 @@ const mapLead = (l: any): Lead => ({
  */
 const mapClient = (c: any): Client => ({
   id: c.id,
-  name: c.name,
-  legalName: c.legal_name,
-  document: c.document,
-  status: c.status,
-  responsibleId: c.responsible_id,
-  squadId: c.squad_id,
-  monthlyValue: c.monthly_value,
+  name: c.name || '',
+  legalName: c.legal_name || '',
+  document: c.document || '',
+  status: c.status || 'ACTIVE',
+  responsibleId: c.responsible_id || '',
+  squadId: c.squad_id || '',
+  monthlyValue: c.monthly_value || 0,
   isRecurring: c.is_recurring || false,
   level: c.level || 'BASIC',
-  summary: c.summary,
-  contractUrl: c.contract_url,
-  assetsFolderUrl: c.assets_folder_url,
-  contact: c.contact_info,
-  financialContact: c.financial_contact,
+  summary: c.summary || '',
+  contractUrl: c.contract_url || '',
+  assetsFolderUrl: c.assets_folder_url || '',
+  contact: c.contact_info || { name: '', email: '', phone: '' },
+  financialContact: c.financial_contact || { name: '', email: '', phone: '' },
   tags: c.tags || [],
-  internalNotes: c.internal_notes,
-  classification: c.classification,
+  internalNotes: c.internal_notes || '',
+  classification: c.classification || 'NORMAL',
   documentationLinks: c.documentation_links || [],
   serviceIds: c.service_ids || [],
-  entryDate: c.entry_date,
+  entryDate: c.entry_date || new Date().toISOString().split('T')[0],
   contacts: c.contacts || [],
   passwords: c.passwords || [],
   passwordLogs: c.password_logs || [],
@@ -169,7 +191,7 @@ export const fetchTasks = async () => {
 export const saveTask = async (task: Partial<Task>) => {
   const { error } = await supabase.from('tasks').upsert({
     id: task.id || undefined,
-    client_id: task.clientId,
+    client_id: task.clientId || null,
     title: task.title,
     description: task.description,
     status: task.status,
@@ -177,7 +199,7 @@ export const saveTask = async (task: Partial<Task>) => {
     due_date: task.dueDate ? new Date(task.dueDate).toISOString() : null,
     estimated_time: task.estimatedTime,
     assignee_ids: task.assigneeIds,
-    squad_id: task.squadId,
+    squad_id: task.squadId || null,
     is_tracking: task.isTracking,
     approval_status: task.approvalStatus,
     archived: task.archived,
@@ -232,8 +254,8 @@ export const saveClient = async (client: Partial<Client>) => {
     legal_name: client.legalName,
     document: client.document,
     status: client.status,
-    responsible_id: client.responsibleId,
-    squad_id: client.squadId,
+    responsible_id: client.responsibleId || null,
+    squad_id: client.squadId || null,
     monthly_value: client.monthlyValue,
     is_recurring: client.isRecurring,
     level: client.level,
@@ -295,14 +317,14 @@ export const saveLead = async (lead: Partial<Lead>) => {
     name: lead.name,
     company: lead.company,
     value: lead.value,
-    stage_id: lead.stageId,
+    stage_id: lead.stageId || null,
     status: lead.status,
-    loss_reason_id: lead.lossReasonId,
+    loss_reason_id: lead.lossReasonId || null,
     email: lead.email,
     phone: lead.phone,
     priority: lead.priority,
     temperature: lead.temperature,
-    responsible_id: lead.responsibleId,
+    responsible_id: lead.responsibleId || null,
     notes: lead.notes,
     tags: lead.tags,
     source: lead.source,
@@ -369,10 +391,10 @@ export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>)
     type: t.type,
     date: t.date,
     status: t.status,
-    category_id: t.categoryId,
-    bank_account_id: t.bankAccountId,
-    client_id: t.clientId,
-    responsible_id: t.responsibleId,
+    category_id: t.categoryId || null,
+    bank_account_id: t.bankAccountId || null,
+    client_id: t.clientId || null,
+    responsible_id: t.responsibleId || null,
     installments: t.installments,
     created_at: t.createdAt || Date.now()
   });
@@ -391,6 +413,50 @@ export const deleteFinancialTransaction = async (id: string) => {
   const { error } = await supabase.from('financial_transactions').delete().eq('id', id);
   if (error) {
     console.error('Erro ao excluir transação:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todas as categorias financeiras
+ */
+export const fetchFinancialCategories = async () => {
+  try {
+    const { data, error } = await supabase.from('financial_categories').select('*').order('name');
+    if (error) {
+      if (error.code === 'PGRST204' || error.code === 'PGRST205') {
+        console.warn('Tabela financial_categories não encontrada no Supabase. Usando dados locais.');
+        return initialCategories;
+      }
+      console.error('Erro ao buscar categorias financeiras:', error);
+      return initialCategories;
+    }
+    return data && data.length > 0 ? data.map(c => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      color: c.color
+    })) : initialCategories;
+  } catch (err) {
+    console.error('Erro inesperado ao buscar categorias:', err);
+    return initialCategories;
+  }
+};
+
+/**
+ * Salva ou atualiza uma categoria financeira
+ */
+export const saveFinancialCategory = async (category: Partial<FinancialCategory>) => {
+  const { error } = await supabase.from('financial_categories').upsert({
+    id: category.id || undefined,
+    name: category.name,
+    type: category.type,
+    color: category.color
+  });
+
+  if (error) {
+    console.error('Erro ao salvar categoria financeira:', error);
     return { success: false, error };
   }
   return { success: true };
@@ -571,15 +637,52 @@ export const saveSquad = async (squad: Partial<Squad>) => {
 };
 
 /**
- * Exclui uma squad do banco de dados
+ * Exclui uma squad do banco de dados dissociando primeiro usuários, clientes e tarefas
  */
 export const deleteSquad = async (id: string) => {
-  const { error } = await supabase.from('squads').delete().eq('id', id);
-  if (error) {
-    console.error('Erro ao excluir squad:', error);
-    return { success: false, error };
+  try {
+    // Dissociar usuários desta squad
+    const { error: userError } = await supabase
+      .from('users')
+      .update({ squad_id: null })
+      .eq('squad_id', id);
+    
+    if (userError) {
+      console.error('Erro ao dissociar usuários da squad:', userError);
+      // Continuamos mesmo se houver erro aqui para tentar as outras tabelas
+    }
+
+    // Dissociar clientes desta squad
+    const { error: clientError } = await supabase
+      .from('clients')
+      .update({ squad_id: null })
+      .eq('squad_id', id);
+    
+    if (clientError) {
+      console.error('Erro ao dissociar clientes da squad:', clientError);
+    }
+
+    // Dissociar tarefas desta squad
+    const { error: taskError } = await supabase
+      .from('tasks')
+      .update({ squad_id: null })
+      .eq('squad_id', id);
+    
+    if (taskError) {
+      console.error('Erro ao dissociar tarefas da squad:', taskError);
+    }
+
+    // Finalmente excluir a squad
+    const { error } = await supabase.from('squads').delete().eq('id', id);
+    if (error) {
+      console.error('Erro ao excluir squad:', error);
+      return { success: false, error };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('Erro inesperado ao excluir squad:', err);
+    return { success: false, error: err };
   }
-  return { success: true };
 };
 
 /**
@@ -608,6 +711,22 @@ export const saveUser = async (user: Partial<User>) => {
 };
 
 /**
+ * Mapeia um item de estoque do Supabase para o formato do App
+ */
+const mapStockItem = (s: any): StockItem => ({
+  id: s.id,
+  name: s.name,
+  category: s.category,
+  quantity: s.quantity,
+  minQuantity: s.min_quantity,
+  unit: s.unit,
+  price: s.price,
+  supplierId: s.supplier_id,
+  lastRestock: s.last_restock,
+  location: s.location
+});
+
+/**
  * Busca todos os itens de estoque
  */
 export const fetchStockItems = async () => {
@@ -616,7 +735,7 @@ export const fetchStockItems = async () => {
     console.error('Erro ao buscar estoque:', error);
     return [];
   }
-  return data || [];
+  return (data || []).map(mapStockItem);
 };
 
 /**
@@ -764,12 +883,12 @@ export const saveCashSession = async (session: Partial<CashRegisterSession>) => 
 };
 
 /**
- * Busca todos os movimentos de caixa
+ * Busca todas as movimentações de caixa
  */
 export const fetchCashMovements = async () => {
   const { data, error } = await supabase.from('cash_movements').select('*');
   if (error) {
-    console.error('Erro ao buscar movimentos de caixa:', error);
+    console.error('Erro ao buscar movimentações de caixa:', error);
     return [];
   }
   return (data || []).map(m => ({
@@ -784,7 +903,7 @@ export const fetchCashMovements = async () => {
 };
 
 /**
- * Salva ou atualiza um movimento de caixa
+ * Salva ou atualiza uma movimentação de caixa
  */
 export const saveCashMovement = async (movement: Partial<CashMovement>) => {
   const { error } = await supabase.from('cash_movements').upsert({
@@ -798,10 +917,30 @@ export const saveCashMovement = async (movement: Partial<CashMovement>) => {
   });
 
   if (error) {
-    console.error('Erro ao salvar movimento de caixa:', error);
+    console.error('Erro ao salvar movimentação de caixa:', error);
     return { success: false, error };
   }
   return { success: true };
+};
+
+/**
+ * Busca todas as movimentações anteriores (Legado/Geral)
+ */
+export const fetchAllMovements = async () => {
+  const { data, error } = await supabase.from('cash_movements').select('*');
+  if (error) {
+    console.error('Erro ao buscar movimentos:', error);
+    return [];
+  }
+  return (data || []).map(m => ({
+    id: m.id,
+    sessionId: m.session_id,
+    type: m.type,
+    amount: m.amount,
+    description: m.description,
+    timestamp: m.timestamp,
+    category: m.category
+  }));
 };
 
 /**
@@ -837,8 +976,8 @@ export const fetchRequisitions = async () => {
 export const saveRequisition = async (req: Partial<Requisition>) => {
   const { error } = await supabase.from('requisitions').upsert({
     id: req.id || undefined,
-    client_id: req.clientId,
-    requester_id: req.requesterId,
+    client_id: req.clientId || null,
+    requester_id: req.requesterId || null,
     title: req.title,
     description: req.description,
     estimated_cost: req.estimatedCost,
@@ -972,29 +1111,34 @@ export const saveAgencyService = async (service: Partial<AgencyService>) => {
 };
 
 /**
+ * Mapeia uma notificação do banco de dados para a interface do sistema
+ */
+export const mapNotification = (n: any): Notification => ({
+  id: n.id,
+  title: n.title || '',
+  message: n.message || '',
+  type: n.type || 'INFO',
+  priority: n.priority || 'LOW',
+  status: n.status || 'UNREAD',
+  originModule: n.origin_module || 'SYSTEM',
+  timestamp: n.timestamp || Date.now(),
+  targetUserId: n.target_user_id,
+  targetRole: n.target_role,
+  navToView: n.nav_to_view,
+  actionLabel: n.action_label,
+  metadata: n.metadata
+});
+
+/**
  * Busca todas as notificações
  */
 export const fetchNotifications = async () => {
-  const { data, error } = await supabase.from('notifications').select('id, title, message, type, priority, status, origin_module, timestamp, target_user_id, target_role, nav_to_view, action_label, metadata');
+  const { data, error } = await supabase.from('notifications').select('*');
   if (error) {
     console.error('Erro ao buscar notificações:', error);
     return [];
   }
-  return (data || []).map(n => ({
-    id: n.id,
-    title: n.title,
-    message: n.message,
-    type: n.type,
-    priority: n.priority,
-    status: n.status,
-    originModule: n.origin_module,
-    timestamp: n.timestamp,
-    targetUserId: n.target_user_id,
-    targetRole: n.target_role,
-    navToView: n.nav_to_view,
-    actionLabel: n.action_label,
-    metadata: n.metadata
-  }));
+  return (data || []).map(mapNotification);
 };
 
 /**
@@ -1022,6 +1166,16 @@ export const saveNotification = async (notif: Notification) => {
     return { success: false, error };
   }
   return { success: true };
+};
+
+/**
+ * Inscreve-se para mudanças em tempo real nas notificações
+ */
+export const subscribeToNotifications = (callback: (payload: any) => void) => {
+  return supabase
+    .channel('public:notifications')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, callback)
+    .subscribe();
 };
 
 /**
@@ -1060,7 +1214,7 @@ export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
   };
 
   if (batch.title !== undefined) dataToSave.title = batch.title;
-  if (batch.clientId !== undefined) dataToSave.client_id = batch.clientId;
+  if (batch.clientId !== undefined) dataToSave.client_id = batch.clientId || null;
   if (batch.status !== undefined) dataToSave.status = batch.status;
   if (batch.items !== undefined) dataToSave.items = batch.items;
   if (batch.archived !== undefined) dataToSave.archived = batch.archived;
