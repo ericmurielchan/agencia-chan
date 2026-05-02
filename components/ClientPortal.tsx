@@ -95,7 +95,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
   }, [batches, currentUser.clientId]);
 
   const stats = {
-    pending: myApprovals.filter(b => b.status === 'SENT').length,
+    pending: myApprovals.length,
     inProduction: myRequests.filter(t => t.status !== 'DONE').length,
     completed: myRequests.filter(t => t.status === 'DONE').length
   };

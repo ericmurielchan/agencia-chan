@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Task, User, ColumnConfig, Notification, ConfirmOptions, Client } from '../types';
+import { Task, User, ColumnConfig, Notification, SystemModule, ConfirmOptions, Client } from '../types';
 import { 
     Plus, Archive, Settings, X, Search, Bell, Layers, Menu
 } from 'lucide-react';
@@ -59,10 +59,27 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const activeColumns = useMemo(() => columns.filter(c => !c.isArchived).sort((a,b) => a.order - b.order), [columns]);
   const archivedColumns = useMemo(() => columns.filter(c => c.isArchived).sort((a,b) => a.order - b.order), [columns]);
   
-  const unreadCount = notifications.filter(n => 
-    n.status === 'UNREAD' && 
-    (n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role)))
-  ).length;
+  const filterNotification = (n: Notification) => {
+    // Basic existence and status checks
+    const basicMatch = n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role));
+    if (!basicMatch) return false;
+
+    // Commercial and Freelancer restrictions (Production vs Commercial)
+    if (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+        // If they are explicitly targeted by ID, allow it regardless of module
+        if (n.targetUserId === currentUser.id) return true;
+        
+        // Otherwise, only show notifications from commercial-related modules
+        const commercialModules: SystemModule[] = ['CRM', 'CLIENTS', 'HELP', 'DASHBOARD'];
+        return commercialModules.includes(n.originModule);
+    }
+
+    return true;
+  };
+
+  const unreadCount = (currentUser.preferences?.systemNotifications !== false)
+    ? notifications.filter(n => n.status === 'UNREAD' && filterNotification(n)).length
+    : 0;
 
   useEffect(() => {
     if (selectedTaskId) {
@@ -195,10 +212,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   </button>
                 </div>
                 <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                  {notifications.filter(n => n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role))).length > 0 ? (
+                  {(notifications.filter(filterNotification).length > 0 && currentUser.preferences?.systemNotifications !== false) ? (
                     <div className="divide-y divide-slate-50">
                       {notifications
-                        .filter(n => n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role)))
+                        .filter(filterNotification)
                         .sort((a, b) => b.timestamp - a.timestamp)
                         .map(notif => (
                         <button 

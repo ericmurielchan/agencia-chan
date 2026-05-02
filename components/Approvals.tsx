@@ -348,12 +348,20 @@ export const Approvals: React.FC<ApprovalsProps> = ({
   const handleUpdateItemStatus = async (batchId: string, itemId: string, status: ApprovalStatus) => {
     const batch = batches.find(b => b.id === batchId);
     if (batch) {
+      const updatedItems = batch.items.map(item => {
+        if (item.id !== itemId) return item;
+        return { ...item, status, updatedAt: Date.now() };
+      });
+
+      // Check if all items are now processed (not PENDING)
+      const allProcessed = updatedItems.length > 0 && updatedItems.every(item => item.status !== 'PENDING');
+      const newBatchStatus = allProcessed ? 'COMPLETED' : batch.status;
+
       const updatedBatch = {
         ...batch,
-        items: batch.items.map(item => {
-          if (item.id !== itemId) return item;
-          return { ...item, status, updatedAt: Date.now() };
-        })
+        status: newBatchStatus as any,
+        items: updatedItems,
+        updatedAt: Date.now()
       };
       
       if (onSaveBatch) {
