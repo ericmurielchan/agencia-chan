@@ -1,5 +1,5 @@
 
-import { Task, User, Lead, FinancialTransaction, BankAccount, CreditCard, CardInvoice, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, FinancialCategory, Supplier, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from '../types';
+import { Task, User, Lead, FinancialTransaction, BankAccount, CreditCard, CardInvoice, Squad, ColumnConfig, Client, Notification, AgencyService, Requisition, FinancialCategory, Supplier, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement } from '../types';
 
 const defaultPreferences = {
     theme: 'light' as const,
@@ -358,33 +358,6 @@ export const initialNotifications: Notification[] = [
         }
     }
 ];
-
-export const initialRolePermissions: RolePermissions = {
-    'ADMIN': [
-        'dashboard', 'kanban', 'productivity', 'teams', 'clients', 'catalog', 
-        'crm', 'finance', 'permissions', 'system-admin', 
-        'requisitions', 'help', 'approvals', 'stock', 'assets',
-        'action:delete', 'action:export', 'action:approve_budget', 'action:manage_users'
-    ],
-    'MANAGER': [
-        'dashboard', 'kanban', 'productivity', 'teams', 'clients', 'catalog', 
-        'crm', 'finance', 'requisitions', 'help', 'approvals', 'stock', 'assets',
-        'action:approve_budget', 'action:export'
-    ],
-    'EMPLOYEE': [
-        'kanban', 'productivity', 'requisitions', 'help', 'approvals'
-    ],
-    'COMMERCIAL': [
-        'dashboard', 'kanban', 'crm', 'clients', 'catalog', 'requisitions', 'help', 'productivity', 'teams', 'system-admin', 'finance', 'action:export'
-    ],
-    'FINANCE': [
-        'dashboard', 'finance', 'clients', 'requisitions', 'help', 'approvals', 'stock', 'assets',
-        'action:approve_budget', 'action:export'
-    ],
-    'CLIENT': [
-        'client-portal', 'help', 'approvals' 
-    ]
-};
 
 export const initialTaskColumns: ColumnConfig[] = [
   { id: 'BACKLOG', label: 'Backlog', color: 'border-slate-400', order: 0, isArchived: false },

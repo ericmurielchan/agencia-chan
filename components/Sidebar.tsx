@@ -6,13 +6,12 @@ import {
   ShoppingCart, Settings, HelpCircle, ChevronLeft, ChevronRight, X,
   CheckCircle2, Package, Box
 } from 'lucide-react';
-import { Role, RolePermissions, SystemSettings } from '../types';
+import { Role, SystemSettings } from '../types';
 
 interface SidebarProps {
   currentView: string;
   setView: (view: string) => void;
   currentUserRole: Role;
-  permissions: RolePermissions;
   logout: () => void;
   systemSettings: SystemSettings;
   isOpen: boolean;
@@ -26,7 +25,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentView, 
   setView, 
   currentUserRole, 
-  permissions, 
   logout, 
   systemSettings,
   isOpen,
@@ -49,12 +47,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'stock', label: 'Estoque', icon: Package },
     { id: 'assets', label: 'Ativos', icon: Box },
-    { id: 'permissions', label: 'Acessos (Admin)', icon: Shield },
     { id: 'system-admin', label: 'Config. Sistema', icon: Settings },
     { id: 'help', label: 'Central de Ajuda', icon: HelpCircle },
   ];
 
-  const allowedModules = permissions[currentUserRole] || [];
+  const isAllowed = (itemId: string) => {
+    // Cliente só vê o portal e ajuda
+    if (currentUserRole === 'CLIENT') {
+      return ['client-portal', 'help'].includes(itemId);
+    }
+    
+    // Comercial/Freelancer vê apenas o necessário para vendas
+    if (currentUserRole === 'COMMERCIAL' || currentUserRole === 'FREELANCER') {
+      const allowedForCommercial = ['crm', 'clients', 'catalog', 'requisitions', 'help', 'settings'];
+      return allowedForCommercial.includes(itemId);
+    }
+
+    // Outros usuários veem tudo exceto o portal do cliente e o módulo de permissões (que foi removido)
+    return itemId !== 'client-portal' && itemId !== 'permissions';
+  };
 
   return (
     <div 
@@ -109,8 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-1.5 mt-4 overflow-y-auto hide-scrollbar">
         {menuItems.map((item) => {
-           const isAllowed = allowedModules.includes(item.id) || item.id === 'help';
-           if (!isAllowed) return null;
+           if (!isAllowed(item.id)) return null;
 
            const active = currentView === item.id;
            

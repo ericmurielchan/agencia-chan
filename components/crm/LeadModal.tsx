@@ -91,6 +91,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             lastContact: formData.lastContact || new Date().toISOString(),
             createdAt: formData.createdAt || Date.now(),
             updatedAt: Date.now(),
+            createdBy: (formData as any).createdBy || currentUser.id,
             history: finalHistory
         } as Lead;
 

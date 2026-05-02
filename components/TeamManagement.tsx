@@ -25,6 +25,7 @@ const ROLES: { value: Role; label: string }[] = [
     { value: 'EMPLOYEE', label: 'Colaborador' },
     { value: 'COMMERCIAL', label: 'Comercial' },
     { value: 'CLIENT', label: 'Cliente' },
+    { value: 'FREELANCER', label: 'Comercial' },
 ];
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ 

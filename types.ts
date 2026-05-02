@@ -1,5 +1,5 @@
 
-export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'COMMERCIAL' | 'CLIENT' | 'FINANCE';
+export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'COMMERCIAL' | 'CLIENT' | 'FINANCE' | 'FREELANCER';
 
 export interface ConfirmOptions {
     title: string;
@@ -144,6 +144,7 @@ export interface Lead {
   temperature: 'COLD' | 'WARM' | 'HOT';
   createdAt: number;
   updatedAt: number;
+  createdBy?: string;
   history: LeadHistory[];
   tags?: string[];
 }
@@ -501,5 +502,3 @@ export interface ProductivityGoal {
     month: string;    // YYYY-MM
     createdAt: number;
 }
-
-export type RolePermissions = Record<Role, string[]>;

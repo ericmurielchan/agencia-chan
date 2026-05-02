@@ -13,7 +13,6 @@ import {
   initialFinancialTransactions,
   initialTaskColumns,
   initialCrmColumns,
-  initialRolePermissions,
   initialServices,
   initialRequisitions,
   initialGoals,
@@ -26,7 +25,7 @@ import {
   User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount,
   FinancialTransaction, StockItem, Asset, CashRegisterSession, CashMovement,
   Requisition, AgencyService, Notification, ApprovalBatch, ProductivityGoal,
-  RolePermissions, ApprovalStatus, ApprovalItem, FinancialCategory
+  ApprovalStatus, ApprovalItem, FinancialCategory
 } from '../types';
 
 /**
@@ -112,6 +111,7 @@ const mapLead = (l: any): Lead => ({
   createdAt: l.created_at || Date.now(),
   updatedAt: l.updated_at || Date.now(),
   lastContact: l.last_contact || new Date().toISOString(),
+  createdBy: l.created_by,
   history: l.history || [],
   tasks: l.tasks || []
 });
@@ -332,6 +332,7 @@ export const saveLead = async (lead: Partial<Lead>) => {
     tasks: lead.tasks,
     history: lead.history,
     last_contact: lead.lastContact,
+    created_by: lead.createdBy || null,
     created_at: lead.createdAt || Date.now(),
     updated_at: Date.now()
   });
@@ -1403,37 +1404,6 @@ export const deleteAgencyService = async (id: string) => {
   const { error } = await supabase.from('agency_services').delete().eq('id', id);
   if (error) {
     console.error('Erro ao excluir serviço:', error);
-    return { success: false, error };
-  }
-  return { success: true };
-};
-
-/**
- * Busca as permissões de papéis
- */
-export const fetchRolePermissions = async () => {
-  const { data, error } = await supabase.from('role_permissions').select('*').single();
-  if (error) {
-    if (error.code !== 'PGRST116') {
-      console.error('Erro ao buscar permissões:', error);
-    }
-    return null;
-  }
-  return data.permissions as RolePermissions;
-};
-
-/**
- * Salva as permissões de papéis
- */
-export const saveRolePermissions = async (permissions: RolePermissions) => {
-  const { error } = await supabase.from('role_permissions').upsert({
-    id: 1, // ID fixo para permissões globais
-    permissions,
-    updated_at: Date.now()
-  });
-
-  if (error) {
-    console.error('Erro ao salvar permissões:', error);
     return { success: false, error };
   }
   return { success: true };

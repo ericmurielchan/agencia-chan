@@ -127,11 +127,27 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
 
     // Access Control Logic
     const visibleLeads = useMemo(() => {
-        if (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') return leads;
-        if (currentUser.role === 'EMPLOYEE') return leads.filter(l => l.responsibleId === currentUser.id);
-        if (currentUser.role === 'COMMERCIAL') return leads.filter(l => l.responsibleId === currentUser.id);
+        if (currentUser.role === 'ADMIN') return leads;
+        
+        if (currentUser.role === 'MANAGER') {
+            // Manager sees all leads from their team/squad members
+            return leads.filter(l => {
+                const isResponsible = l.responsibleId === currentUser.id;
+                const isCreator = l.createdBy === currentUser.id;
+                const responsibleUser = users.find(u => u.id === l.responsibleId);
+                const isInMySquad = responsibleUser?.squad === currentUser.squad && currentUser.squad !== '';
+                
+                return isResponsible || isCreator || isInMySquad;
+            });
+        }
+
+        if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+            // Commercial/Employee sees only leads they are responsible for OR that they created
+            return leads.filter(l => l.responsibleId === currentUser.id || l.createdBy === currentUser.id);
+        }
+        
         return [];
-    }, [leads, currentUser]);
+    }, [leads, currentUser, users]);
 
     const handleSaveLead = async (lead: Lead) => {
         const isNew = !leads.find(l => l.id === lead.id);

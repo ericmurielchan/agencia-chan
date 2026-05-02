@@ -8,7 +8,6 @@ import { ClientPortal } from './components/ClientPortal';
 import { ProductivityDashboard } from './components/ProductivityDashboard';
 import { TeamManagement } from './components/TeamManagement';
 import { DashboardOverview } from './components/DashboardOverview';
-import { PermissionsManager } from './components/PermissionsManager';
 import { ClientManagement } from './components/ClientManagement';
 import { ServiceCatalog } from './components/ServiceCatalog';
 import { ProfileSettings } from './components/ProfileSettings';
@@ -72,14 +71,12 @@ import {
   deleteSquad,
   saveSquad,
   deleteAgencyService,
-  saveRolePermissions,
-  fetchRolePermissions,
   fetchFinancialCategories,
   saveFinancialCategory,
   deleteUser
 } from './services/supabaseService';
-import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialRolePermissions, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements, initialCategories } from './utils/mockData';
-import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, RolePermissions, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement, FinancialCategory } from './types';
+import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements, initialCategories } from './utils/mockData';
+import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, Client, Notification, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement, FinancialCategory } from './types';
 import { Users, Settings, Bell, Check, Gift, AlertTriangle, Info, Clock, CheckCircle, Shield, Trash2, Archive, Eye, DollarSign, Briefcase, Menu, X as XIcon } from 'lucide-react';
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -88,7 +85,8 @@ const ROLE_LABELS: Record<Role, string> = {
     'FINANCE': 'Financeiro',
     'EMPLOYEE': 'Colaborador',
     'COMMERCIAL': 'Comercial',
-    'CLIENT': 'Cliente'
+    'CLIENT': 'Cliente',
+    'FREELANCER': 'Comercial'
 };
 
 const App: React.FC = () => {
@@ -274,6 +272,19 @@ const App: React.FC = () => {
       sidebarColor: '#0f172a'
   });
 
+  // Guard against restricted views for COMMERCIAL role
+  useEffect(() => {
+    if (currentUser && (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER')) {
+      const restrictedViews = [
+        'dashboard', 'kanban', 'productivity', 'teams', 
+        'approvals', 'finance', 'stock', 'assets', 'system-admin'
+      ];
+      if (restrictedViews.includes(currentView)) {
+        setCurrentView('crm');
+      }
+    }
+  }, [currentUser, currentView]);
+
   // Apply Favicon and Title
   useEffect(() => {
     document.title = systemSettings.agencyName;
@@ -290,7 +301,6 @@ const App: React.FC = () => {
   const [taskColumns, setTaskColumns] = useState<ColumnConfig[]>(initialTaskColumns);
   const [crmColumns, setCrmColumns] = useState<PipelineStage[]>(initialCrmColumns as any);
   const [lossReasons, setLossReasons] = useState<LossReason[]>(initialLossReasons);
-  const [rolePermissions, setRolePermissions] = useState<RolePermissions>(initialRolePermissions);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -305,9 +315,9 @@ const App: React.FC = () => {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     if (user.role === 'CLIENT') setCurrentView('client-portal');
+    else if (user.role === 'COMMERCIAL' || user.role === 'FREELANCER') setCurrentView('crm');
     else {
-        const allowed = rolePermissions[user.role] || [];
-        setCurrentView(allowed.includes('dashboard') ? 'dashboard' : (allowed[0] || 'dashboard'));
+        setCurrentView('dashboard');
     }
   };
 
@@ -411,7 +421,6 @@ const App: React.FC = () => {
         currentView={currentView} 
         setView={setCurrentView} 
         currentUserRole={currentUser.role} 
-        permissions={rolePermissions} 
         logout={handleLogout} 
         systemSettings={systemSettings}
         isOpen={sidebarOpen}
@@ -879,19 +888,6 @@ const App: React.FC = () => {
                         setUsers(prev => prev.map(u => u.squad === id ? { ...u, squad: undefined } : u));
                         setClients(prev => prev.map(c => c.squadId === id ? { ...c, squadId: undefined } : c));
                         setTasks(prev => prev.map(t => t.squadId === id ? { ...t, squadId: undefined } : t));
-                    }
-                }}
-              />
-            )}
-            {currentView === 'permissions' && (
-              <PermissionsManager 
-                permissions={rolePermissions} 
-                setPermissions={setRolePermissions} 
-                openConfirm={openConfirm} 
-                onSavePermissions={async (perms) => {
-                    const result = await saveRolePermissions(perms);
-                    if (result.success) {
-                        setRolePermissions(perms);
                     }
                 }}
               />

@@ -45,14 +45,15 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   // Filter clients based on role
   const filteredClients = useMemo(() => {
     let base = clients;
-    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL') {
-        base = clients.filter(c => c.responsibleId === currentUser.id || squads.find(s => s.id === c.squadId)?.members.includes(currentUser.id));
+    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+        // Strict filter: only clients where the user is the responsible person
+        base = clients.filter(c => c.responsibleId === currentUser.id);
     }
     return base.filter(c => 
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         c.legalName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [clients, searchTerm, currentUser, squads]);
+  }, [clients, searchTerm, currentUser]);
 
   const handleSave = async () => {
       if (!editingClient.name?.trim()) {
@@ -72,6 +73,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           documentationLinks: editingClient.documentationLinks || [],
           tags: editingClient.tags || [],
           systemAccesses: editingClient.systemAccesses || [],
+          responsibleId: editingClient.responsibleId || currentUser.id,
           entryDate: editingClient.entryDate || new Date().toISOString().split('T')[0]
       } as Client;
 

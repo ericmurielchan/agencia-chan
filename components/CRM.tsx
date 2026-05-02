@@ -32,12 +32,39 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
 
   const isAdmin = currentUser.role === 'ADMIN';
+  const isManager = currentUser.role === 'MANAGER';
   const activeColumns = useMemo(() => columns.filter(c => !c.isArchived).sort((a,b) => a.order - b.order), [columns]);
 
-  const totalValue = leads.reduce((acc, lead) => acc + (lead.value || 0), 0);
+  const filteredLeads = useMemo(() => {
+    let baseLeads = leads;
+    
+    // Commercial and Freelancer see only their own leads
+    if (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER' || currentUser.role === 'EMPLOYEE') {
+        baseLeads = leads.filter(l => l.responsibleId === currentUser.id);
+    }
+    // ADMIN and MANAGER see everything
+
+    return baseLeads.filter(l => 
+        l.company.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        l.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [leads, currentUser, searchTerm]);
+
+  const totalValue = filteredLeads.reduce((acc, lead) => acc + (lead.value || 0), 0);
 
   const resetForm = () => {
-    setEditingLead({ stage: activeColumns[0]?.id || 'NEW', rating: 0, tasks: [] });
+    setEditingLead({ 
+        stageId: activeColumns[0]?.id || 'NEW', 
+        rating: 0, 
+        tasks: [],
+        responsibleId: currentUser.id,
+        priority: 'MEDIUM',
+        temperature: 'WARM',
+        status: 'OPEN',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        history: []
+    });
     setActiveTab('DETAILS');
     setShowValidation(false);
   };
@@ -47,8 +74,26 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
           setShowValidation(true);
           return;
       }
-      if(editingLead.id) setLeads(prev => prev.map(l => l.id === editingLead.id ? { ...l, ...editingLead } as Lead : l));
-      else setLeads(prev => [...prev, { ...editingLead, id: Date.now().toString(), lastContact: new Date().toISOString() } as Lead]);
+      
+      const now = Date.now();
+      if (editingLead.id) {
+          setLeads(prev => prev.map(l => l.id === editingLead.id ? { ...l, ...editingLead, updatedAt: now } as Lead : l));
+      } else {
+          const newLead: Lead = {
+              ...editingLead,
+              id: Date.now().toString(),
+              lastContact: new Date().toISOString(),
+              responsibleId: editingLead.responsibleId || currentUser.id,
+              createdAt: now,
+              updatedAt: now,
+              status: editingLead.status || 'OPEN',
+              stageId: editingLead.stageId || activeColumns[0]?.id || 'NEW',
+              history: editingLead.history || [],
+              priority: editingLead.priority || 'MEDIUM',
+              temperature: editingLead.temperature || 'WARM',
+          } as Lead;
+          setLeads(prev => [...prev, newLead]);
+      }
       setIsModalOpen(false);
       resetForm();
   };
@@ -114,11 +159,11 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
                          <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-600">{col.label}</h3>
                       </div>
                       <span className="text-[10px] bg-white/90 px-2.5 py-1 rounded-full font-black text-slate-500 shadow-sm border border-white">
-                          {leads.filter(l => l.stage === col.id && l.company.toLowerCase().includes(searchTerm.toLowerCase())).length}
+                          {filteredLeads.filter(l => l.stageId === col.id).length}
                       </span>
                   </div>
                   <div className="p-4 flex-1 overflow-y-auto space-y-4 custom-scrollbar min-h-[200px]">
-                      {leads.filter(l => l.stage === col.id && l.company.toLowerCase().includes(searchTerm.toLowerCase())).map(lead => (
+                      {filteredLeads.filter(l => l.stageId === col.id).map(lead => (
                           <div 
                             key={lead.id} 
                             draggable
