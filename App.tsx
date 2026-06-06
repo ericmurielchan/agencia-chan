@@ -93,8 +93,72 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const savedUser = sessionStorage.getItem('currentUser');
+    const lastActivity = sessionStorage.getItem('lastActivity');
+    if (savedUser && lastActivity) {
+      if (Date.now() - Number(lastActivity) < 3600000) {
+        // Sessão válida (menos de 1 hora de inatividade)
+        return JSON.parse(savedUser);
+      } else {
+        // Expirou por inatividade
+        sessionStorage.removeItem('currentUser');
+        sessionStorage.removeItem('lastActivity');
+        sessionStorage.removeItem('currentView');
+      }
+    }
+    return null;
+  });
+
+  const [currentView, setCurrentView] = useState(() => {
+    return sessionStorage.getItem('currentView') || 'dashboard';
+  });
+
+  // Salvar currentView no sessionStorage sempre que mudar
+  useEffect(() => {
+    if (currentView) {
+      sessionStorage.setItem('currentView', currentView);
+    }
+  }, [currentView]);
+
+  // Monitorar atividade do usuário e atualizar timestamp para controle de inatividade
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const updateActivity = () => {
+      sessionStorage.setItem('lastActivity', Date.now().toString());
+    };
+
+    let lastUpdate = 0;
+    const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastUpdate > 5000) { // Throttle de 5s para performance
+        updateActivity();
+        lastUpdate = now;
+      }
+    };
+
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('touchstart', handleActivity);
+
+    // Verifica a cada 30 segundos se estourou o limite de 1 hora de inatividade
+    const checkInterval = setInterval(() => {
+      const lastActivity = sessionStorage.getItem('lastActivity');
+      if (lastActivity && Date.now() - Number(lastActivity) > 3600000) {
+        handleLogout();
+      }
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      clearInterval(checkInterval);
+    };
+  }, [currentUser]);
   
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('sidebarOpen');
@@ -320,6 +384,9 @@ const App: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    sessionStorage.setItem('currentUser', JSON.stringify(user));
+    sessionStorage.setItem('lastActivity', Date.now().toString());
+    
     if (user.role === 'CLIENT') setCurrentView('client-portal');
     else if (user.role === 'COMMERCIAL' || user.role === 'FREELANCER') setCurrentView('crm');
     else {
@@ -329,6 +396,9 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    sessionStorage.removeItem('currentUser');
+    sessionStorage.removeItem('lastActivity');
+    sessionStorage.removeItem('currentView');
     setCurrentView('dashboard');
   };
 
