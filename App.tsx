@@ -94,30 +94,30 @@ const ROLE_LABELS: Record<Role, string> = {
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const savedUser = sessionStorage.getItem('currentUser');
-    const lastActivity = sessionStorage.getItem('lastActivity');
+    const savedUser = localStorage.getItem('currentUser');
+    const lastActivity = localStorage.getItem('lastActivity');
     if (savedUser && lastActivity) {
       if (Date.now() - Number(lastActivity) < 3600000) {
         // Sessão válida (menos de 1 hora de inatividade)
         return JSON.parse(savedUser);
       } else {
         // Expirou por inatividade
-        sessionStorage.removeItem('currentUser');
-        sessionStorage.removeItem('lastActivity');
-        sessionStorage.removeItem('currentView');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('lastActivity');
+        localStorage.removeItem('currentView');
       }
     }
     return null;
   });
 
   const [currentView, setCurrentView] = useState(() => {
-    return sessionStorage.getItem('currentView') || 'dashboard';
+    return localStorage.getItem('currentView') || 'dashboard';
   });
 
-  // Salvar currentView no sessionStorage sempre que mudar
+  // Salvar currentView no localStorage sempre que mudar
   useEffect(() => {
     if (currentView) {
-      sessionStorage.setItem('currentView', currentView);
+      localStorage.setItem('currentView', currentView);
     }
   }, [currentView]);
 
@@ -126,7 +126,7 @@ const App: React.FC = () => {
     if (!currentUser) return;
 
     const updateActivity = () => {
-      sessionStorage.setItem('lastActivity', Date.now().toString());
+      localStorage.setItem('lastActivity', Date.now().toString());
     };
 
     let lastUpdate = 0;
@@ -145,7 +145,7 @@ const App: React.FC = () => {
 
     // Verifica a cada 30 segundos se estourou o limite de 1 hora de inatividade
     const checkInterval = setInterval(() => {
-      const lastActivity = sessionStorage.getItem('lastActivity');
+      const lastActivity = localStorage.getItem('lastActivity');
       if (lastActivity && Date.now() - Number(lastActivity) > 3600000) {
         handleLogout();
       }
@@ -169,6 +169,7 @@ const App: React.FC = () => {
     return saved !== null ? JSON.parse(saved) : false;
   });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
     const handleResize = () => {
@@ -248,6 +249,8 @@ const App: React.FC = () => {
         }
       } catch (err) {
         console.error('Erro crítico na inicialização do Supabase:', err);
+      } finally {
+        setIsInitializing(false);
       }
     };
     initSupabase();
@@ -384,8 +387,8 @@ const App: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    sessionStorage.setItem('currentUser', JSON.stringify(user));
-    sessionStorage.setItem('lastActivity', Date.now().toString());
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    localStorage.setItem('lastActivity', Date.now().toString());
     
     if (user.role === 'CLIENT') setCurrentView('client-portal');
     else if (user.role === 'COMMERCIAL' || user.role === 'FREELANCER') setCurrentView('crm');
@@ -396,9 +399,9 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    sessionStorage.removeItem('currentUser');
-    sessionStorage.removeItem('lastActivity');
-    sessionStorage.removeItem('currentView');
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('lastActivity');
+    localStorage.removeItem('currentView');
     setCurrentView('dashboard');
   };
 
@@ -462,6 +465,24 @@ const App: React.FC = () => {
     });
     await saveNotification(newNotif);
   };
+
+  if (isInitializing) {
+    return (
+      <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center text-slate-200 z-[99999]" id="app-initializer">
+        <div className="flex flex-col items-center gap-4 max-w-sm text-center px-4">
+          <div className="w-16 h-16 relative flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-4 border-slate-800 border-t-pink-600 animate-spin" />
+            <span className="text-xl font-black text-pink-500">OS</span>
+          </div>
+          <div className="space-y-2 mt-4">
+            <h1 className="text-xl font-extrabold tracking-tight text-white">{systemSettings.agencyName || 'Agência Chan'}</h1>
+            <p className="text-xs text-pink-500/80 font-bold tracking-wider uppercase font-mono animate-pulse">Sincronizando com Supabase...</p>
+            <p className="text-xs text-slate-400 font-mono">Carregando módulos da agência...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
       if (currentView === 'privacy') return <PrivacyPolicy onBack={() => setCurrentView('login')} agencyName={systemSettings.agencyName} />;
