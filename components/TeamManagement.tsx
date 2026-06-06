@@ -199,7 +199,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                       <div key={user.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors group">
                           <div className="flex items-center gap-3">
                               <div className="relative">
-                                  <img src={user.avatar} className="w-10 h-10 rounded-full border shadow-sm" />
+                                  <img src={user.avatar || undefined} className="w-10 h-10 rounded-full border shadow-sm" />
                                   {user.hasSystemAccess && (
                                       <div className="absolute -bottom-1 -right-1 bg-emerald-500 border-2 border-white w-4 h-4 rounded-full flex items-center justify-center" title="Acesso ao Sistema Habilitado">
                                           <CheckCircle size={10} className="text-white"/>

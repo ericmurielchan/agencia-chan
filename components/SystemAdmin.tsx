@@ -172,7 +172,7 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
                             <label className="block text-sm font-bold text-slate-700 mb-3">Logotipo do Sistema</label>
                             <div className="flex items-start gap-4">
                                 <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 relative overflow-hidden group">
-                                    {localSettings.logo ? (
+                                    {localSettings.logo && localSettings.logo.length > 5 ? (
                                         <img src={localSettings.logo} alt="Logo" className="w-full h-full object-contain p-2" />
                                     ) : (
                                         <span className="text-xs text-slate-400 text-center px-2">Sem Logo</span>
@@ -210,7 +210,7 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
                             <label className="block text-sm font-bold text-slate-700 mb-3">Favicon (Ícone da Aba)</label>
                             <div className="flex items-start gap-4">
                                 <div className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 relative overflow-hidden group">
-                                    {localSettings.favicon ? (
+                                    {localSettings.favicon && localSettings.favicon.length > 5 ? (
                                         <img src={localSettings.favicon} alt="Favicon" className="w-8 h-8 object-contain" />
                                     ) : (
                                         <span className="text-[10px] text-slate-400 text-center px-1">Sem Ícone</span>

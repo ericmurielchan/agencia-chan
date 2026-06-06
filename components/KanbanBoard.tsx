@@ -259,7 +259,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               <p className="text-[9px] text-slate-400 uppercase font-black mt-1 tracking-widest">{currentUser.role}</p>
             </div>
             <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg md:rounded-xl overflow-hidden border-2 border-white shadow-sm bg-slate-100 transition-transform group-hover:scale-105">
-              <img src={currentUser.avatar} alt="Perfil" className="w-full h-full object-cover" />
+              <img src={currentUser.avatar || undefined} alt="Perfil" className="w-full h-full object-cover" />
             </div>
           </div>
         </div>
@@ -344,8 +344,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       {task.coverType === 'color' && (
                         <div className="h-20 w-full border-b border-slate-100 transition-transform group-hover:scale-105 duration-500" style={{ backgroundColor: task.coverValue || '#cbd5e1' }} />
                       )}
-                      {task.coverType === 'image' && (
-                        <img src={task.coverValue || ''} className="h-24 w-full object-cover border-b border-slate-100 transition-transform group-hover:scale-105 duration-500" alt="Capa" />
+                      {task.coverType === 'image' && task.coverValue && (
+                        <img src={task.coverValue} className="h-24 w-full object-cover border-b border-slate-100 transition-transform group-hover:scale-105 duration-500" alt="Capa" />
                       )}
 
                       <div className="p-6">
@@ -353,7 +353,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>{task.priority}</span>
                           <div className="flex -space-x-2 transition-transform group-hover:translate-x-1">
                             {task.assigneeIds.slice(0, 3).map(id => (
-                              <img key={id} src={users.find(u => u.id === id)?.avatar} className="w-7 h-7 rounded-xl border-2 border-white shadow-sm object-cover" />
+                              <img key={id} src={users.find(u => u.id === id)?.avatar || undefined} className="w-7 h-7 rounded-xl border-2 border-white shadow-sm object-cover" />
                             ))}
                           </div>
                         </div>

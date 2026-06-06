@@ -193,7 +193,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                 
                 {/* --- HEADER / CAPA (FIXO NO TOPO) --- */}
                 <div className={`w-full h-36 shrink-0 relative transition-all duration-500 flex items-center justify-center ${!task.coverType ? 'bg-slate-100' : ''}`} style={{ backgroundColor: task.coverType === 'color' ? task.coverValue! : undefined }}>
-                    {task.coverType === 'image' && <img src={task.coverValue!} alt="Capa" className="w-full h-full object-cover" />}
+                    {task.coverType === 'image' && <img src={task.coverValue || undefined} alt="Capa" className="w-full h-full object-cover" />}
                     <button onClick={() => setActivePopover('COVERS')} className="absolute bottom-4 right-4 bg-white/95 hover:bg-white text-slate-800 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.1em] shadow-xl flex items-center gap-2 transition-all hover:scale-105 active:scale-95">
                         <Palette size={14} className="text-pink-600"/> {task.coverType ? 'Mudar Capa' : 'Add Capa'}
                     </button>
@@ -225,7 +225,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                     <div className="flex -space-x-2.5">
                                         {task.assigneeIds.map(id => {
                                             const u = users.find(user => user.id === id);
-                                            return <img key={id} src={u?.avatar} title={u?.name} className="w-8 h-8 rounded-full border-2 border-white shadow-sm object-cover hover:translate-y-[-2px] transition-transform cursor-pointer" />;
+                                            return <img key={id} src={u?.avatar || undefined} title={u?.name} className="w-8 h-8 rounded-full border-2 border-white shadow-sm object-cover hover:translate-y-[-2px] transition-transform cursor-pointer" />;
                                         })}
                                         <button onClick={() => setActivePopover('MEMBERS')} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-slate-400 hover:bg-slate-200 transition-colors shadow-sm"><Plus size={14}/></button>
                                     </div>
@@ -276,7 +276,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                                     <div className="max-h-48 overflow-y-auto custom-scrollbar mt-1">
                                                         {filteredMentionUsers.map(u => (
                                                             <button key={u.id} onClick={() => insertMention(u, 'DESC')} className="w-full flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg text-left transition-colors">
-                                                                <img src={u.avatar} className="w-6 h-6 rounded-full object-cover border" />
+                                                                <img src={u.avatar || undefined} className="w-6 h-6 rounded-full object-cover border" />
                                                                 <span className="text-[10px] font-bold text-slate-700">{u.name}</span>
                                                             </button>
                                                         ))}
@@ -333,7 +333,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                                     </div>
                                                     <div className="relative">
                                                         <button onClick={() => setActivePopover(`CHECKLIST_USER_${item.id}`)} className="flex items-center gap-1.5 bg-white/50 px-2 py-1 rounded-lg border border-slate-100 hover:bg-indigo-50 transition-all">
-                                                            {assignee ? <img src={assignee.avatar} className="w-3.5 h-3.5 rounded-full object-cover" /> : <UserPlus size={10} className="text-slate-300"/>}
+                                                            {assignee ? <img src={assignee.avatar || undefined} className="w-3.5 h-3.5 rounded-full object-cover" /> : <UserPlus size={10} className="text-slate-300"/>}
                                                             <span className="text-[9px] font-bold text-slate-500">{assignee ? assignee.name.split(' ')[0] : 'Atribuir'}</span>
                                                         </button>
                                                         {activePopover === `CHECKLIST_USER_${item.id}` && (
@@ -342,7 +342,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                                                 <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar mt-1">
                                                                     {users.filter(u => u.role !== 'CLIENT').map(u => (
                                                                         <button key={u.id} onClick={() => { handleUpdateChecklistItem(item.id, { assigneeId: item.assigneeId === u.id ? undefined : u.id }); setActivePopover(null); }} className={`w-full flex items-center gap-2 p-1.5 rounded-lg text-[10px] font-bold transition-all ${item.assigneeId === u.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-500'}`}>
-                                                                            <img src={u.avatar} className="w-4 h-4 rounded-full object-cover" /> {u.name}
+                                                                            <img src={u.avatar || undefined} className="w-4 h-4 rounded-full object-cover" /> {u.name}
                                                                         </button>
                                                                     ))}
                                                                 </div>
@@ -373,7 +373,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                 {activeTab === 'CHAT' ? (
                                     <div className="space-y-6 animate-pop">
                                         <div className="flex gap-3">
-                                            <img src={currentUser.avatar} className="w-8 h-8 rounded-xl border shadow-sm object-cover" />
+                                            <img src={currentUser.avatar || undefined} className="w-8 h-8 rounded-xl border shadow-sm object-cover" />
                                             <div className="flex-1 space-y-2 relative">
                                                 <textarea 
                                                     ref={chatTextareaRef}
@@ -387,7 +387,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                                         <div className="max-h-40 overflow-y-auto custom-scrollbar">
                                                             {filteredMentionUsers.map(u => (
                                                                 <button key={u.id} onClick={() => insertMention(u, 'CHAT')} className="w-full flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg text-left transition-colors">
-                                                                    <img src={u.avatar} className="w-5 h-5 rounded-full object-cover border" />
+                                                                    <img src={u.avatar || undefined} className="w-5 h-5 rounded-full object-cover border" />
                                                                     <span className="text-[10px] font-bold text-slate-700">{u.name}</span>
                                                                 </button>
                                                             ))}
@@ -403,7 +403,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                                 const isMe = comment.userId === currentUser.id;
                                                 return (
                                                     <div key={comment.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''} group`}>
-                                                        <img src={user?.avatar} className="w-8 h-8 rounded-xl border shadow-sm shrink-0 object-cover" />
+                                                    <img src={user?.avatar || undefined} className="w-8 h-8 rounded-xl border shadow-sm shrink-0 object-cover" />
                                                         <div className={`flex-1 max-w-[85%] ${isMe ? 'text-right' : ''}`}>
                                                             <div className={`flex items-center gap-2 mb-1 ${isMe ? 'justify-end' : ''}`}>
                                                                 <span className="font-black text-[9px] text-slate-700 uppercase">{user?.name}</span>
@@ -426,7 +426,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                             const user = users.find(u => u.id === log.userId);
                                             return (
                                                 <div key={log.id} className="flex gap-3 items-start pl-1 relative before:absolute before:left-[1.1rem] before:top-6 before:bottom-[-1.2rem] before:w-px before:bg-slate-100 last:before:hidden">
-                                                    <img src={user?.avatar} className="w-6 h-6 rounded-lg border-2 border-white shadow-sm shrink-0 relative z-10" />
+                                                    <img src={user?.avatar || undefined} className="w-6 h-6 rounded-lg border-2 border-white shadow-sm shrink-0 relative z-10" />
                                                     <div className="pt-0.5">
                                                         <p className="text-[11px] text-slate-500"><span className="font-black text-slate-800 uppercase text-[9px] mr-1">{user?.name}</span> {log.action}</p>
                                                         <span className="text-[8px] text-slate-300 font-black uppercase tracking-widest">{new Date(log.timestamp).toLocaleString()}</span>
@@ -513,7 +513,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                     const newIds = current.includes(u.id) ? current.filter(id => id !== u.id) : [...current, u.id];
                                     updateWithLog({ assigneeIds: newIds }, current.includes(u.id) ? `removeu ${u.name}` : `atribuiu a tarefa para ${u.name}`);
                                 }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all border-2 ${task.assigneeIds.includes(u.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'hover:bg-slate-50 text-slate-500 border-transparent'}`}>
-                                    <div className="flex items-center gap-3"><img src={u.avatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" /><span className="text-[11px] font-bold">{u.name}</span></div>
+                                    <div className="flex items-center gap-3"><img src={u.avatar || undefined} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm" /><span className="text-[11px] font-bold">{u.name}</span></div>
                                     {task.assigneeIds.includes(u.id) && <div className="bg-indigo-600 p-1 rounded-full text-white"><Check size={12} strokeWidth={4}/></div>}
                                 </button>
                             ))}

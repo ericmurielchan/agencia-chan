@@ -132,7 +132,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({
                                     <div className="flex items-center gap-2 mb-3 sm:mb-4">
                                         <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-slate-100 flex items-center justify-center text-[9px] sm:text-[10px] font-bold text-slate-500 overflow-hidden">
                                             {lead.responsibleId ? (
-                                                <img src={users.find(u => u.id === lead.responsibleId)?.avatar} alt="" className="w-full h-full object-cover" />
+                                                <img src={users.find(u => u.id === lead.responsibleId)?.avatar || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" />
                                             ) : (
                                                 <UserIcon size={10} className="sm:w-3 sm:h-3" />
                                             )}

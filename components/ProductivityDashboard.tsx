@@ -448,7 +448,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
                                 <td className="p-4">
                                     <div className="flex items-center gap-3">
                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>{idx+1}</div>
-                                        <img src={user.avatar} className="w-8 h-8 rounded-full border-2 border-white shadow-sm"/>
+                                        <img src={user.avatar || undefined} className="w-8 h-8 rounded-full border-2 border-white shadow-sm"/>
                                         <span className="font-bold text-slate-700 group-hover:text-pink-600 transition-colors">{user.name}</span>
                                     </div>
                                 </td>

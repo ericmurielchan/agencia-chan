@@ -446,7 +446,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                                 <td className="px-4 sm:px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-slate-100 overflow-hidden">
-                                                            <img src={users.find(u => u.id === lead.responsibleId)?.avatar} alt="" className="w-full h-full object-cover" />
+                                                            <img src={users.find(u => u.id === lead.responsibleId)?.avatar || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" />
                                                         </div>
                                                         <span className="text-[11px] sm:text-xs font-bold text-slate-600">{users.find(u => u.id === lead.responsibleId)?.name || 'N/A'}</span>
                                                     </div>

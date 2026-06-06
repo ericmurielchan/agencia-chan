@@ -157,7 +157,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
                    <div className="space-y-6 animate-pop">
                        <div className="flex items-center gap-6 mb-8">
                            <div className="relative group">
-                                <img src={formData.avatar} alt="Avatar" className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 object-cover" />
+                                <img src={formData.avatar || 'https://via.placeholder.com/150'} alt="Avatar" className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 object-cover" />
                                 
                                 <div className="absolute -bottom-2 -right-2 flex gap-1">
                                     <button 

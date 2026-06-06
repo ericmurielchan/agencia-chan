@@ -19,13 +19,15 @@ import {
   initialStock,
   initialAssets,
   initialCashSessions,
-  initialCashMovements
+  initialCashMovements,
+  initialLossReasons,
+  initialCardInvoices
 } from '../utils/mockData';
 import { 
   User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount,
   FinancialTransaction, StockItem, Asset, CashRegisterSession, CashMovement,
   Requisition, AgencyService, Notification, ApprovalBatch, ProductivityGoal,
-  ApprovalStatus, ApprovalItem, FinancialCategory
+  ApprovalStatus, ApprovalItem, FinancialCategory, PipelineStage, LossReason, CardInvoice
 } from '../types';
 
 /**
@@ -159,6 +161,107 @@ export const testSupabaseConnection = async () => {
     console.error('Erro ao conectar com Supabase:', err);
     return { success: false, error: err };
   }
+};
+
+/**
+ * Busca todos os estágios do pipeline
+ */
+export const fetchPipelineStages = async () => {
+  try {
+    const { data, error } = await supabase.from('pipeline_stages').select('*').order('order');
+    if (error) {
+      if (error.code === 'PGRST116' || error.code === '42P01' || error.code === 'PGRST205') return initialCrmColumns;
+      console.error('Erro ao buscar estágios:', error);
+      return initialCrmColumns;
+    }
+    return data && data.length > 0 ? data.map(s => ({
+      id: s.id,
+      label: s.label,
+      color: s.color,
+      order: s.order,
+      isArchived: false
+    })) : initialCrmColumns;
+  } catch (err) {
+    return initialCrmColumns;
+  }
+};
+
+/**
+ * Salva ou atualiza um estágio do pipeline
+ */
+export const savePipelineStage = async (stage: Partial<PipelineStage>) => {
+  const { error } = await supabase.from('pipeline_stages').upsert({
+    id: stage.id || undefined,
+    label: stage.label,
+    color: stage.color,
+    order: stage.order
+  });
+
+  if (error) {
+    console.error('Erro ao salvar estágio:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Busca todos os motivos de perda
+ */
+export const fetchLossReasons = async () => {
+  try {
+    const { data, error } = await supabase.from('loss_reasons').select('*');
+    if (error) {
+      if (error.code === 'PGRST116' || error.code === '42P01' || error.code === 'PGRST205') return initialLossReasons;
+      console.error('Erro ao buscar motivos de perda:', error);
+      return initialLossReasons;
+    }
+    return data && data.length > 0 ? data.map(r => ({
+      id: r.id,
+      label: r.label,
+      isActive: r.is_active
+    })) : initialLossReasons;
+  } catch (err) {
+    return initialLossReasons;
+  }
+};
+
+/**
+ * Busca todas as faturas de cartão
+ */
+export const fetchCardInvoices = async () => {
+  const { data, error } = await supabase.from('card_invoices').select('*');
+  if (error) {
+    console.error('Erro ao buscar faturas:', error);
+    return [];
+  }
+  return (data || []).map(inv => ({
+    id: inv.id,
+    creditCardId: inv.credit_card_id,
+    month: inv.month,
+    amount: inv.amount,
+    status: inv.status,
+    dueDate: inv.due_date
+  }));
+};
+
+/**
+ * Salva ou atualiza uma fatura de cartão
+ */
+export const saveCardInvoice = async (inv: Partial<CardInvoice>) => {
+  const { error } = await supabase.from('card_invoices').upsert({
+    id: inv.id || undefined,
+    credit_card_id: inv.creditCardId,
+    month: inv.month,
+    amount: inv.amount,
+    status: inv.status,
+    due_date: inv.dueDate
+  });
+
+  if (error) {
+    console.error('Erro ao salvar fatura:', error);
+    return { success: false, error };
+  }
+  return { success: true };
 };
 
 /**
@@ -626,7 +729,7 @@ export const fetchCreditCards = async () => {
     id: c.id,
     name: c.name,
     brand: c.brand,
-    limit: c.limit,
+    limit: c.credit_limit,
     availableLimit: c.available_limit,
     closingDay: c.closing_day,
     dueDate: c.due_day,
@@ -643,7 +746,7 @@ export const saveCreditCard = async (card: Partial<CreditCard>) => {
     id: card.id || undefined,
     name: card.name,
     brand: card.brand,
-    limit: card.limit,
+    credit_limit: card.limit,
     available_limit: card.availableLimit,
     closing_day: card.closingDay,
     due_day: card.dueDate,
@@ -1242,28 +1345,94 @@ export const subscribeToNotifications = (callback: (payload: any) => void) => {
 };
 
 /**
- * Busca todos os lotes de aprovação
+ * Busca todos os lotes de aprovação (Normalizado)
  */
 export const fetchApprovalBatches = async () => {
-  const { data, error } = await supabase.from('approval_batches').select('id, title, client_id, status, items, created_at, updated_at, archived');
-  if (error) {
-    console.error('Erro ao buscar lotes de aprovação:', error);
+  // Busca lotes, itens e comentários em uma única query relacional
+  // Tenta incluir page_number, se falhar (42703), tenta sem ele
+  const query = `
+    id, title, client_id, status, items, created_at, updated_at, archived,
+    approval_items (
+      id, title, description, category, status, files, caption, created_at, updated_at,
+      approval_comments (
+        id, user_id, text, timestamp, page_number
+      )
+    )
+  `;
+
+  try {
+    const { data, error } = await supabase.from('approval_batches').select(query);
+
+    if (error) {
+      if (error.code === '42703') { // Coluna inexistente
+        const simpleQuery = `
+          id, title, client_id, status, items, created_at, updated_at, archived,
+          approval_items (
+            id, title, description, category, status, files, caption, created_at, updated_at,
+            approval_comments (
+              id, user_id, text, timestamp
+            )
+          )
+        `;
+        const { data: simpleData, error: simpleError } = await supabase.from('approval_batches').select(simpleQuery);
+        if (simpleError) throw simpleError;
+        
+        return processApprovalData(simpleData);
+      }
+      throw error;
+    }
+
+    return processApprovalData(data);
+  } catch (err) {
+    console.error('Erro ao buscar lotes de aprovação:', err);
     return [];
   }
-  return (data || []).map(b => ({
-    id: b.id,
-    title: b.title,
-    clientId: b.client_id,
-    status: b.status,
-    items: b.items,
-    createdAt: b.created_at,
-    updatedAt: b.updated_at,
-    archived: b.archived || false
-  }));
 };
 
 /**
- * Salva ou atualiza um lote de aprovação
+ * Processa os dados brutos do Supabase para o formato do App
+ */
+const processApprovalData = (data: any[]) => {
+  return (data || []).map(b => {
+    // Se a tabela approval_items está vazia para este lote, usa o campo legado 'items' (JSONB)
+    const hasNormalizedItems = b.approval_items && b.approval_items.length > 0;
+    
+    const mappedItems = hasNormalizedItems 
+      ? b.approval_items.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          category: item.category,
+          status: item.status,
+          files: item.files || [],
+          caption: item.caption,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          comments: (item.approval_comments || []).map((c: any) => ({
+            id: c.id,
+            userId: c.user_id,
+            text: c.text,
+            timestamp: c.timestamp,
+            pageNumber: (c as any).page_number || null
+          }))
+        }))
+      : b.items || [];
+
+    return {
+      id: b.id,
+      title: b.title,
+      clientId: b.client_id,
+      status: b.status,
+      items: mappedItems,
+      createdAt: b.created_at,
+      updatedAt: b.updated_at,
+      archived: b.archived || false
+    };
+  });
+};
+
+/**
+ * Salva ou atualiza um lote de aprovação e seus itens (Normalizado)
  */
 export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
   if (!batch.id) {
@@ -1271,25 +1440,66 @@ export const saveApprovalBatch = async (batch: Partial<ApprovalBatch>) => {
     return { success: false, error: 'ID is required' };
   }
 
-  const dataToSave: any = {
+  const now = Date.now();
+  const batchData: any = {
     id: batch.id,
-    updated_at: Date.now()
+    updated_at: now
   };
 
-  if (batch.title !== undefined) dataToSave.title = batch.title;
-  if (batch.clientId !== undefined) dataToSave.client_id = batch.clientId || null;
-  if (batch.status !== undefined) dataToSave.status = batch.status;
-  if (batch.items !== undefined) dataToSave.items = batch.items;
-  if (batch.archived !== undefined) dataToSave.archived = batch.archived;
-  if (batch.createdAt) dataToSave.created_at = batch.createdAt;
+  if (batch.title !== undefined) batchData.title = batch.title;
+  if (batch.clientId !== undefined) batchData.client_id = batch.clientId || null;
+  if (batch.status !== undefined) batchData.status = batch.status;
+  if (batch.archived !== undefined) batchData.archived = batch.archived;
+  if (batch.createdAt) batchData.created_at = batch.createdAt;
+  
+  // Salva o JSON no lote para retrocompatibilidade
+  if (batch.items !== undefined) batchData.items = batch.items;
 
-  const { error } = await supabase.from('approval_batches').upsert(dataToSave);
+  try {
+    const { error: batchError } = await supabase.from('approval_batches').upsert(batchData);
+    if (batchError) throw batchError;
 
-  if (error) {
-    console.error('Erro ao salvar lote de aprovação:', error);
-    return { success: false, error };
+    // Se houver itens, salva-os individualmente nas tabelas normalizadas
+    if (batch.items && batch.items.length > 0) {
+      for (const item of batch.items) {
+        const itemData: any = {
+          id: item.id,
+          batch_id: batch.id,
+          title: item.title,
+          description: item.description,
+          category: item.category,
+          status: item.status,
+          files: item.files,
+          caption: item.caption,
+          created_at: item.createdAt || now,
+          updated_at: item.updatedAt || now
+        };
+
+        const { error: itemError } = await supabase.from('approval_items').upsert(itemData);
+        if (itemError) console.error(`Erro ao salvar item ${item.id}:`, itemError);
+
+        // Salva comentários se existirem
+        if (item.comments && item.comments.length > 0) {
+          const commentsData = item.comments.map(c => ({
+            id: c.id,
+            item_id: item.id,
+            user_id: c.userId,
+            text: c.text,
+            timestamp: c.timestamp,
+            page_number: c.pageNumber || null
+          }));
+
+          const { error: commentError } = await supabase.from('approval_comments').upsert(commentsData);
+          if (commentError) console.error(`Erro ao salvar comentários para item ${item.id}:`, commentError);
+        }
+      }
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Erro ao salvar lote normalizado:', err);
+    return { success: false, error: err };
   }
-  return { success: true };
 };
 
 /**
@@ -1645,11 +1855,115 @@ export const seedDatabase = async () => {
     if (txError) {
       if (txError.code === '42703') {
         console.warn('credit_card_id não existe na tabela financial_transactions. Tentando sem ele...');
-        const txNoCard = transactionsToMigrate.map(({ credit_card_id, ...tx }) => tx);
+        const txNoCard = transactionsToMigrate.map((tx: any) => {
+           const { credit_card_id, ...txWithoutCard } = tx;
+           return txWithoutCard;
+        });
         const { error: txRetryError } = await supabase.from('financial_transactions').upsert(txNoCard);
         if (txRetryError) console.error('Erro ao migrar Transações (retry):', txRetryError);
       } else {
         console.error('Erro ao migrar Transações:', txError);
+      }
+    }
+
+    // 12. Migrar Estágios Pipeline
+    const { error: pipelineError } = await supabase.from('pipeline_stages').upsert(
+      initialCrmColumns.map(s => ({
+        id: s.id,
+        label: s.label,
+        color: s.color,
+        order: s.order
+      }))
+    );
+    if (pipelineError) console.error('Erro ao migrar Estágios:', pipelineError);
+
+    // 13. Migrar Motivos de Perda
+    const { error: lossError } = await supabase.from('loss_reasons').upsert(
+      initialLossReasons.map(r => ({
+        id: r.id,
+        label: r.label,
+        is_active: r.isActive
+      }))
+    );
+    if (lossError) console.error('Erro ao migrar Motivos de Perda:', lossError);
+
+    // 14. Migrar Faturas de Cartão
+    const { error: invoiceError } = await supabase.from('card_invoices').upsert(
+      initialCardInvoices.map(inv => ({
+        id: inv.id,
+        credit_card_id: inv.creditCardId,
+        month: inv.month,
+        amount: inv.amount,
+        status: inv.status,
+        due_date: inv.dueDate
+      }))
+    );
+    if (invoiceError) console.error('Erro ao migrar Faturas:', invoiceError);
+
+    // 15. Migrar Itens de Estoque
+    const { error: stockError } = await supabase.from('stock_items').upsert(
+      initialStock.map(s => ({
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        quantity: s.quantity,
+        min_quantity: s.minQuantity,
+        unit: s.unit,
+        price: s.price,
+        location: s.location
+      }))
+    );
+    if (stockError) console.error('Erro ao migrar Estoque:', stockError);
+
+    // 16. Migrar Ativos
+    const { error: assetError } = await supabase.from('assets').upsert(
+      initialAssets.map(a => ({
+        id: a.id,
+        name: a.name,
+        category: a.category,
+        purchase_date: a.purchaseDate,
+        purchase_value: a.purchaseValue,
+        current_value: a.currentValue,
+        status: a.status,
+        location: a.location,
+        responsible_id: a.responsibleId,
+        serial_number: a.serialNumber
+      }))
+    );
+    if (assetError) console.error('Erro ao migrar Ativos:', assetError);
+
+    // 17. Migrar Itens de Aprovação e Comentários (Normalização)
+    for (const batch of initialApprovalBatches) {
+      if (batch.items && batch.items.length > 0) {
+        for (const item of batch.items) {
+          const { error: itemError } = await supabase.from('approval_items').upsert({
+            id: item.id,
+            batch_id: batch.id,
+            title: item.title,
+            description: item.description,
+            category: item.category,
+            status: item.status,
+            files: item.files,
+            caption: item.caption,
+            created_at: item.createdAt,
+            updated_at: item.updatedAt
+          });
+          if (itemError) console.error('Erro migrar Item Aprovação:', itemError);
+
+          if (item.comments && item.comments.length > 0) {
+             const { error: commError } = await supabase.from('approval_comments').upsert(
+               item.comments.map(c => ({
+                 id: c.id,
+                 item_id: item.id,
+                 user_id: c.userId,
+                 text: c.text,
+                 timestamp: c.timestamp,
+                 page_number: c.pageNumber || null
+               }))
+             );
+             if (commError) console.error('Erro migrar Comentários:', commError);
+          }
+        }
       }
     }
 

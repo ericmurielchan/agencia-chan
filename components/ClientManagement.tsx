@@ -921,7 +921,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                                             <div className="flex -space-x-2">
                                                 {task.assigneeIds.map(uid => (
                                                     <div key={uid} className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 overflow-hidden" title={users.find(u => u.id === uid)?.name}>
-                                                        <img src={users.find(u => u.id === uid)?.avatar} alt="" />
+                                                        <img src={users.find(u => u.id === uid)?.avatar || undefined} alt="" />
                                                     </div>
                                                 ))}
                                             </div>
@@ -1024,7 +1024,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                                     [...(viewingClient.passwordLogs || [])].reverse().map(log => (
                                         <div key={log.id} className="flex gap-4">
                                             <div className="w-10 h-10 rounded-full border-2 border-white bg-slate-100 overflow-hidden shrink-0">
-                                                <img src={users.find(u => u.id === log.userId)?.avatar} alt="" />
+                                                <img src={users.find(u => u.id === log.userId)?.avatar || undefined} alt="" />
                                             </div>
                                             <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex-1">
                                                 <p className="text-xs text-slate-600">

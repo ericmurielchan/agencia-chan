@@ -205,7 +205,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, users, systemSettings, on
         
         {/* Logo Section */}
         <div className="flex justify-center mb-8">
-           {systemSettings.logo ? (
+           {systemSettings.logo && systemSettings.logo.length > 5 ? (
                <img src={systemSettings.logo} alt="Logo" className="h-20 object-contain drop-shadow-sm" />
            ) : (
                <div 

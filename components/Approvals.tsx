@@ -702,7 +702,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                     const user = users.find(u => u.id === comment.userId);
                     return (
                       <div key={comment.id} className="flex gap-3">
-                        <img src={user?.avatar} className="w-8 h-8 rounded-xl object-cover shrink-0" alt="" />
+                        <img src={user?.avatar || undefined} className="w-8 h-8 rounded-xl object-cover shrink-0" alt="" />
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-baseline mb-1">
                             <span className="text-[11px] font-black text-slate-800">{user?.name}</span>
@@ -1261,14 +1261,14 @@ const FilePreviewThumbnail: React.FC<{ url: string }> = ({ url }) => {
   if (isVideo(url)) {
     return (
       <div className="w-full h-full bg-slate-900 flex items-center justify-center relative">
-        <video 
+          {url && <video 
           src={url} 
           className="w-full h-full object-cover opacity-60"
           muted
           playsInline
           autoPlay
           loop
-        />
+        />}
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white">
             <Video size={16} />
@@ -1287,14 +1287,14 @@ const FilePreviewThumbnail: React.FC<{ url: string }> = ({ url }) => {
     );
   }
 
-  return (
+  return url ? (
     <img 
       src={url} 
       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
       alt="" 
       referrerPolicy="no-referrer" 
     />
-  );
+  ) : null;
 };
 
 const SocialMediaPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
@@ -1319,7 +1319,7 @@ const SocialMediaPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
 
       {/* Image / Video / Carousel */}
       <div className="aspect-[9/16] max-h-[70vh] bg-black relative group flex items-center justify-center">
-        {isCurrentVideo ? (
+        {currentFile && (isCurrentVideo ? (
           <video 
             src={currentFile} 
             controls 
@@ -1335,7 +1335,7 @@ const SocialMediaPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
             alt="" 
             referrerPolicy="no-referrer"
           />
-        )}
+        ))}
         
         {item.files.length > 1 && (
           <>
@@ -1392,7 +1392,7 @@ const DesignPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
   return (
     <div className="max-w-4xl w-full space-y-4">
       <div className="bg-white p-2 rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden flex items-center justify-center bg-slate-50">
-        {isCurrentVideo ? (
+        {currentFile && (isCurrentVideo ? (
           <video 
             src={currentFile} 
             controls 
@@ -1405,7 +1405,7 @@ const DesignPreview: React.FC<{ item: ApprovalItem }> = ({ item }) => {
             alt={item.title} 
             referrerPolicy="no-referrer"
           />
-        )}
+        ))}
       </div>
       <div className="flex justify-center gap-4">
         <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
@@ -1472,12 +1472,12 @@ const PdfPreview: React.FC<{ item: ApprovalItem, onUpdateStatus: (status: Approv
       <div className="flex-1 bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden relative flex items-center justify-center">
         {isRealPdf ? (
           <div className="w-full h-full flex flex-col">
-            <iframe 
+            {currentFile && <iframe 
               src={currentFile} 
               className="w-full h-full border-none"
               title="PDF Preview"
               onError={(e) => console.error("Iframe error:", e)}
-            />
+            />}
             {/* Fallback for blocked iframes */}
             <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex flex-col items-center justify-center text-center z-10 opacity-0 hover:opacity-100 transition-opacity">
                 <div className="bg-white p-8 rounded-[32px] shadow-2xl border border-slate-100 max-w-sm">

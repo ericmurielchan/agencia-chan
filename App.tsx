@@ -67,6 +67,9 @@ import {
   addApprovalItemToBatch,
   deleteApprovalBatch,
   fetchGoals,
+  fetchPipelineStages,
+  fetchLossReasons,
+  fetchCardInvoices,
   saveProductivityGoal,
   deleteSquad,
   saveSquad,
@@ -148,8 +151,8 @@ const App: React.FC = () => {
           if (squadsData.length > 0) setSquads(squadsData as any);
 
           // Lote 2: Operacional
-          const [tasksData, leadsData, financialData, bankData, cardsData, categoriesData] = await Promise.all([
-            fetchTasks(), fetchLeads(), fetchFinancialTransactions(), fetchBankAccounts(), fetchCreditCards(), fetchFinancialCategories()
+          const [tasksData, leadsData, financialData, bankData, cardsData, categoriesData, crmColumnsData, lossReasonsData, invoicesData] = await Promise.all([
+            fetchTasks(), fetchLeads(), fetchFinancialTransactions(), fetchBankAccounts(), fetchCreditCards(), fetchFinancialCategories(), fetchPipelineStages(), fetchLossReasons(), fetchCardInvoices()
           ]);
 
           setTasks(tasksData as any);
@@ -158,6 +161,9 @@ const App: React.FC = () => {
           setBankAccounts(bankData as any);
           if (cardsData.length > 0) setCreditCards(cardsData as any);
           if (categoriesData.length > 0) setCategories(categoriesData as any);
+          if (crmColumnsData.length > 0) setCrmColumns(crmColumnsData as any);
+          if (lossReasonsData.length > 0) setLossReasons(lossReasonsData as any);
+          if (invoicesData.length > 0) setCardInvoices(invoicesData as any);
 
           // Lote 3: Restante
           const [stockData, assetsData, cashSessionsData, cashMovementsData, requisitionsData, servicesData, notificationsData, batchesData, goalsData] = await Promise.all([
@@ -549,8 +555,14 @@ const App: React.FC = () => {
                             <p className="text-xs md:text-sm font-black text-slate-800 leading-none group-hover:text-pink-600 truncate max-w-[80px] md:max-w-none">{currentUser.name}</p>
                             <p className="text-[8px] md:text-[10px] text-slate-400 uppercase font-black mt-1 tracking-wider">{ROLE_LABELS[currentUser.role] || currentUser.role}</p>
                         </div>
-                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-2xl overflow-hidden border-2 border-slate-50 bg-slate-100 shrink-0">
-                          <img src={currentUser.avatar} alt="Perfil" className="w-full h-full object-cover" />
+                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-2xl overflow-hidden border-2 border-slate-50 bg-slate-100 shrink-0 flex items-center justify-center">
+                          {currentUser.avatar && currentUser.avatar.length > 5 ? (
+                            <img src={currentUser.avatar} alt="Perfil" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-pink-50 text-pink-500 font-bold text-xs uppercase">
+                              {currentUser.name.charAt(0)}
+                            </div>
+                          )}
                         </div>
                     </div>
                 </div>

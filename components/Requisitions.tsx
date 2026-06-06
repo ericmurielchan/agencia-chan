@@ -351,7 +351,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                       <h4 className="font-black text-slate-800 text-base truncate group-hover:text-pink-600 transition-colors tracking-tight">{req.title}</h4>
                       <div className="flex items-center gap-4 mt-1">
                         <div className="flex items-center gap-2">
-                          <img src={requester?.avatar} className="w-5 h-5 rounded-full object-cover border border-slate-200" />
+                          <img src={requester?.avatar || undefined} className="w-5 h-5 rounded-full object-cover border border-slate-200" />
                           <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{requester?.name}</span>
                         </div>
                         {req.attachments && req.attachments.length > 0 && (
@@ -528,7 +528,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                           <div className="flex flex-wrap gap-3">
                               {attachments.map((file, idx) => (
                                   <div key={idx} className="relative w-20 h-20 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 group animate-in zoom-in">
-                                      <img src={file} className="w-full h-full object-cover" alt="" />
+                                      {file && <img src={file} className="w-full h-full object-cover" alt="" />}
                                       <button 
                                           onClick={() => removeAttachment(idx)}
                                           className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
@@ -629,7 +629,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                         <div>
                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Solicitante</h4>
                           <div className="flex items-center gap-3">
-                            <img src={users.find(u => u.id === selectedReq.requesterId)?.avatar} className="w-8 h-8 rounded-full border border-slate-200" alt="" />
+                            <img src={users.find(u => u.id === selectedReq.requesterId)?.avatar || undefined} className="w-8 h-8 rounded-full border border-slate-200" alt="" />
                             <span className="text-sm font-bold text-slate-700">{users.find(u => u.id === selectedReq.requesterId)?.name}</span>
                           </div>
                         </div>
@@ -647,7 +647,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                                 rel="noopener noreferrer"
                                 className="w-20 h-20 bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden hover:border-pink-300 transition-all group relative"
                               >
-                                <img src={file} className="w-full h-full object-cover" alt="" />
+                                {file && <img src={file} className="w-full h-full object-cover" alt="" />}
                                 <div className="absolute inset-0 bg-pink-600/0 group-hover:bg-pink-600/20 transition-all flex items-center justify-center">
                                   <ChevronRight size={20} className="text-white opacity-0 group-hover:opacity-100 transition-all" />
                                 </div>
@@ -664,7 +664,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                           </h4>
                           <div className="space-y-3">
                             <div className="flex items-center gap-3">
-                              <img src={users.find(u => u.id === (selectedReq.approvedBy || selectedReq.rejectedBy))?.avatar} className="w-6 h-6 rounded-full" alt="" />
+                              <img src={users.find(u => u.id === (selectedReq.approvedBy || selectedReq.rejectedBy))?.avatar || undefined} className="w-6 h-6 rounded-full" alt="" />
                               <span className="text-xs font-bold text-slate-700">Por {users.find(u => u.id === (selectedReq.approvedBy || selectedReq.rejectedBy))?.name}</span>
                               <span className="text-[10px] text-slate-400 font-bold">• {new Date(selectedReq.approvedAt || selectedReq.rejectedAt || '').toLocaleString('pt-BR')}</span>
                             </div>

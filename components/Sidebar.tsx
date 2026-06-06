@@ -91,7 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Header / Logo */}
       <div className={`p-6 flex items-center transition-all duration-300 ${isCompact ? 'justify-center p-4' : 'gap-3'}`}>
-        {systemSettings.logo ? (
+        {systemSettings.logo && systemSettings.logo.length > 5 ? (
             <img src={systemSettings.logo} alt="Logo" className="w-8 h-8 object-contain rounded bg-white p-0.5 shrink-0" />
         ) : (
             <div 
