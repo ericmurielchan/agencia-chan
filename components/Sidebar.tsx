@@ -63,6 +63,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return allowedForCommercial.includes(itemId);
     }
 
+    // Colaborador (EMPLOYEE) não tem acesso a: Financeiro (finance), estoque (stock), ativos (assets) e administração (system-admin)
+    if (currentUserRole === 'EMPLOYEE') {
+      const restrictedForEmployee = ['finance', 'stock', 'assets', 'system-admin'];
+      if (restrictedForEmployee.includes(itemId)) return false;
+    }
+
     // Outros usuários veem tudo exceto o portal do cliente e o módulo de permissões (que foi removido)
     return itemId !== 'client-portal' && itemId !== 'permissions';
   };

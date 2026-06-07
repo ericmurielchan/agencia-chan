@@ -402,15 +402,24 @@ const App: React.FC = () => {
       sidebarColor: '#0f172a'
   });
 
-  // Guard against restricted views for COMMERCIAL role
+  // Guard against restricted views for various roles
   useEffect(() => {
-    if (currentUser && (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER')) {
+    if (!currentUser) return;
+
+    if (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
       const restrictedViews = [
         'dashboard', 'kanban', 'productivity', 'teams', 
         'approvals', 'finance', 'stock', 'assets', 'system-admin'
       ];
       if (restrictedViews.includes(currentView)) {
         setCurrentView('crm');
+      }
+    } else if (currentUser.role === 'EMPLOYEE') {
+      const restrictedViews = [
+        'finance', 'stock', 'assets', 'system-admin'
+      ];
+      if (restrictedViews.includes(currentView)) {
+        setCurrentView('dashboard');
       }
     }
   }, [currentUser, currentView]);
@@ -1083,6 +1092,7 @@ const App: React.FC = () => {
                 setSquads={setSquads} 
                 openConfirm={openConfirm} 
                 currentUserRole={currentUser?.role}
+                currentUserId={currentUser?.id}
                 onSaveUser={async (user) => {
                     const result = await saveUser(user);
                     if (result.success) {

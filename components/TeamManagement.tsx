@@ -12,6 +12,7 @@ interface TeamManagementProps {
   setSquads: React.Dispatch<React.SetStateAction<Squad[]>>;
   openConfirm: (options: ConfirmOptions) => Promise<boolean>;
   currentUserRole?: Role;
+  currentUserId?: string;
   onSaveUser?: (user: Partial<User>) => Promise<void>;
   onDeleteUser?: (id: string) => Promise<void>;
   onSaveSquad?: (squad: Partial<Squad>) => Promise<void>;
@@ -30,6 +31,7 @@ const ROLES: { value: Role; label: string }[] = [
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ 
     users, setUsers, squads, setSquads, openConfirm, currentUserRole = 'ADMIN' as Role,
+    currentUserId,
     onSaveUser, onDeleteUser, onSaveSquad, onDeleteSquad
 }) => {
   const isCommercial = currentUserRole === 'COMMERCIAL';
@@ -191,7 +193,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     <div className="space-y-8 animate-pop">
       <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-slate-800">Equipes & Squads</h2>
-          <button onClick={() => { setEditingUser(INITIAL_USER_STATE); setIsModalOpen(true) }} className="bg-pink-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={18}/> Novo Colaborador</button>
+          {currentUserRole !== 'EMPLOYEE' && (
+              <button onClick={() => { setEditingUser(INITIAL_USER_STATE); setIsModalOpen(true) }} className="bg-pink-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow hover:bg-pink-700 active:scale-95 transition-all"><Plus size={18}/> Novo Colaborador</button>
+          )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -222,22 +226,24 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                   </div>
                               </div>
                           </div>
-                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
-                                className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Editar"
-                              >
-                                  <Edit2 size={16}/>
-                              </button>
-                              <button 
-                                onClick={()=>handleDeleteUser(user.id)} 
-                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Excluir"
-                              >
-                                  <Trash2 size={16}/>
-                              </button>
-                          </div>
+                          {currentUserRole !== 'EMPLOYEE' && (
+                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button 
+                                    onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
+                                    className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Editar"
+                                  >
+                                      <Edit2 size={16}/>
+                                  </button>
+                                  <button 
+                                    onClick={()=>handleDeleteUser(user.id)} 
+                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Excluir"
+                                  >
+                                      <Trash2 size={16}/>
+                                  </button>
+                              </div>
+                          )}
                       </div>
                   ))}
               </div>
@@ -245,29 +251,80 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
           {!isCommercial && (
             <div className="bg-white rounded-xl border shadow-sm p-4">
-              <div className="flex justify-between mb-6 items-center"><h3 className="font-bold">Squads</h3><button onClick={()=>{setEditingSquad({name:'',members:[]});setIsSquadModalOpen(true)}} className="text-xs text-pink-600 font-bold">+ Criar Squad</button></div>
+              <div className="flex justify-between mb-6 items-center">
+                  <h3 className="font-bold">Squads</h3>
+                  {currentUserRole !== 'EMPLOYEE' && (
+                      <button onClick={()=>{setEditingSquad({name:'',members:[]});setIsSquadModalOpen(true)}} className="text-xs text-pink-600 font-bold hover:text-pink-800 transition-colors">+ Criar Squad</button>
+                  )}
+              </div>
               <div className="space-y-4">
-                  {squads.map(s => (
-                      <div key={s.id} className="p-4 border rounded-xl bg-slate-50/50 flex justify-between items-center group">
-                          <span className="font-bold">{s.name}</span>
-                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} 
-                                className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Editar"
-                              >
-                                  <Edit2 size={16}/>
-                              </button>
-                              <button 
-                                onClick={()=>handleDeleteSquad(s.id)} 
-                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Excluir"
-                              >
-                                  <Trash2 size={16}/>
-                              </button>
+                  {squads.map(s => {
+                      const isMySquad = !!(currentUserId && s.members?.includes(currentUserId));
+                      return (
+                          <div 
+                              key={s.id} 
+                              className={`p-4 border rounded-xl flex justify-between items-center group transition-all ${
+                                  isMySquad 
+                                      ? 'bg-pink-50/30 border-pink-300 shadow-sm ring-1 ring-pink-200' 
+                                      : 'bg-slate-50/50 border-slate-200'
+                              }`}
+                          >
+                              <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-bold text-slate-800">{s.name}</span>
+                                      {isMySquad && (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-pink-100 text-pink-700 px-2 py-0.5 rounded border border-pink-200 animate-pulse">
+                                              <Users size={10} className="text-pink-600" /> Minha Squad
+                                          </span>
+                                      )}
+                                  </div>
+
+                                  {/* List of members avatars */}
+                                  {s.members && s.members.length > 0 && (
+                                      <div className="flex items-center gap-2 mt-1">
+                                          <div className="flex -space-x-1.5 overflow-hidden">
+                                              {s.members.map(memberId => {
+                                                  const member = users.find(u => u.id === memberId);
+                                                  if (!member) return null;
+                                                  return (
+                                                      <img 
+                                                          key={memberId}
+                                                          className="inline-block h-6 w-6 rounded-full ring-2 ring-white border border-slate-100 object-cover" 
+                                                          src={member.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${member.name}`} 
+                                                          alt={member.name}
+                                                          title={member.name}
+                                                      />
+                                                  );
+                                              })}
+                                          </div>
+                                          <span className="text-[10px] text-slate-400 font-semibold">
+                                              {s.members.length} {s.members.length === 1 ? 'membro' : 'membros'}
+                                          </span>
+                                      </div>
+                                  )}
+                              </div>
+
+                              {currentUserRole !== 'EMPLOYEE' && (
+                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} 
+                                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="Editar"
+                                      >
+                                          <Edit2 size={16}/>
+                                      </button>
+                                      <button 
+                                        onClick={()=>handleDeleteSquad(s.id)} 
+                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Excluir"
+                                      >
+                                          <Trash2 size={16}/>
+                                      </button>
+                                  </div>
+                              )}
                           </div>
-                      </div>
-                  ))}
+                      );
+                  })}
               </div>
             </div>
           )}
