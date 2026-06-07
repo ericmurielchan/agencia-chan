@@ -351,14 +351,35 @@ export const fetchClients = async () => {
  * Salva ou atualiza um cliente no banco de dados
  */
 export const saveClient = async (client: Partial<Client>) => {
+  // Obter dados reais das tabelas de referência para evitar violações de chaves estrangeiras
+  const [dbUsersResult, dbSquadsResult] = await Promise.all([
+    supabase.from('users').select('id'),
+    supabase.from('squads').select('id')
+  ]);
+
+  const existingUserIds = new Set<string>((dbUsersResult.data || []).map((u: any) => u.id));
+  const existingSquadIds = new Set<string>((dbSquadsResult.data || []).map((s: any) => s.id));
+
+  const resolveDbUserId = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    const uuid = mapUserId(id);
+    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
+      return uuid;
+    }
+    return null;
+  };
+
+  const responsible_id = resolveDbUserId(client.responsibleId);
+  const squad_id = client.squadId && existingSquadIds.has(client.squadId) ? client.squadId : null;
+
   const { error } = await supabase.from('clients').upsert({
     id: client.id || undefined,
     name: client.name,
     legal_name: client.legalName,
     document: client.document,
     status: client.status,
-    responsible_id: mapUserId(client.responsibleId) || null,
-    squad_id: client.squadId || null,
+    responsible_id: responsible_id,
+    squad_id: squad_id,
     monthly_value: client.monthlyValue,
     is_recurring: client.isRecurring,
     level: client.level,
@@ -428,25 +449,10 @@ export const saveLead = async (lead: Partial<Lead>) => {
 
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
-    
-    // 1. Se já for um UUID perfeitamente válido, retornamos ele mesmo
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    if (isUuid) {
-      return id;
+    const uuid = mapUserId(id);
+    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
+      return uuid;
     }
-    
-    // 2. Se for um ID que começa com 'user-' ou 'u' (mock ou legacy ID), sempre mapeamos para UUID determinístico.
-    // Isso garante total compatibilidade com colunas do tipo UUID no Supabase e impede erros de sintaxe de UUID.
-    const mapped = mapUserId(id);
-    if (mapped) {
-      return mapped;
-    }
-
-    // 3. Fallback: se estiver registrado de forma literal no banco, retornamos o id original
-    if (existingUserIds.has(id)) {
-      return id;
-    }
-    
     return null;
   };
 
@@ -583,6 +589,33 @@ export const fetchFinancialTransactions = async () => {
  * Salva ou atualiza uma transação financeira
  */
 export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>) => {
+  // Obter dados reais das tabelas de referência para evitar violações de chaves estrangeiras
+  const [dbUsersResult, dbCategoriesResult, dbAccountsResult, dbClientsResult] = await Promise.all([
+    supabase.from('users').select('id'),
+    supabase.from('financial_categories').select('id'),
+    supabase.from('bank_accounts').select('id'),
+    supabase.from('clients').select('id')
+  ]);
+
+  const existingUserIds = new Set<string>((dbUsersResult.data || []).map((u: any) => u.id));
+  const existingCategoryIds = new Set<string>((dbCategoriesResult.data || []).map((c: any) => c.id));
+  const existingAccountIds = new Set<string>((dbAccountsResult.data || []).map((a: any) => a.id));
+  const existingClientIds = new Set<string>((dbClientsResult.data || []).map((c: any) => c.id));
+
+  const resolveDbUserId = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    const uuid = mapUserId(id);
+    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
+      return uuid;
+    }
+    return null;
+  };
+
+  const responsible_id = resolveDbUserId(t.responsibleId);
+  const category_id = t.categoryId && existingCategoryIds.has(t.categoryId) ? t.categoryId : null;
+  const bank_account_id = t.bankAccountId && existingAccountIds.has(t.bankAccountId) ? t.bankAccountId : null;
+  const client_id = t.clientId && existingClientIds.has(t.clientId) ? t.clientId : null;
+
   const transactionData: any = {
     id: t.id || undefined,
     description: t.description,
@@ -590,10 +623,10 @@ export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>)
     type: t.type,
     date: t.date,
     status: t.status,
-    category_id: t.categoryId || null,
-    bank_account_id: t.bankAccountId || null,
-    client_id: t.clientId || null,
-    responsible_id: mapUserId(t.responsibleId) || null,
+    category_id: category_id,
+    bank_account_id: bank_account_id,
+    client_id: client_id,
+    responsible_id: responsible_id,
     installments: t.installments,
     created_at: t.createdAt || Date.now()
   };
@@ -1024,6 +1057,21 @@ export const fetchAssets = async () => {
  * Salva ou atualiza um ativo
  */
 export const saveAsset = async (asset: Partial<Asset>) => {
+  // Obter dados reais das tabelas de referência para evitar violações de chaves estrangeiras
+  const { data: dbUsers } = await supabase.from('users').select('id');
+  const existingUserIds = new Set<string>((dbUsers || []).map((u: any) => u.id));
+
+  const resolveDbUserId = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    const uuid = mapUserId(id);
+    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
+      return uuid;
+    }
+    return null;
+  };
+
+  const responsible_id = resolveDbUserId(asset.responsibleId);
+
   const { error } = await supabase.from('assets').upsert({
     id: asset.id || undefined,
     name: asset.name,
@@ -1033,7 +1081,7 @@ export const saveAsset = async (asset: Partial<Asset>) => {
     current_value: asset.currentValue,
     status: asset.status,
     location: asset.location,
-    responsible_id: mapUserId(asset.responsibleId),
+    responsible_id: responsible_id,
     serial_number: asset.serialNumber,
     description: asset.description
   });
