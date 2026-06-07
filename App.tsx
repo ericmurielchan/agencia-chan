@@ -91,7 +91,7 @@ const ROLE_LABELS: Record<Role, string> = {
     'EMPLOYEE': 'Colaborador',
     'COMMERCIAL': 'Comercial',
     'CLIENT': 'Cliente',
-    'FREELANCER': 'Comercial'
+    'FREELANCER': 'Freelancer'
 };
 
 const App: React.FC = () => {
