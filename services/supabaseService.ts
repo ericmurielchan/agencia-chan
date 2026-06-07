@@ -80,7 +80,7 @@ const mapTask = (t: any): Task => ({
   priority: t.priority || 'MEDIUM',
   dueDate: t.due_date || '',
   estimatedTime: t.estimated_time || 0,
-  assigneeIds: t.assignee_ids || [],
+  assigneeIds: (t.assignee_ids || []).map((id: string) => mapUserId(id) || id),
   squadId: t.squad_id || '',
   isTracking: t.is_tracking || false,
   approvalStatus: t.approval_status || 'PENDING',
@@ -301,7 +301,7 @@ export const saveTask = async (task: Partial<Task>) => {
     priority: task.priority,
     due_date: task.dueDate ? new Date(task.dueDate).toISOString() : null,
     estimated_time: task.estimatedTime,
-    assignee_ids: task.assigneeIds,
+    assignee_ids: task.assigneeIds ? task.assigneeIds.map(id => mapUserId(id) || id) : [],
     squad_id: task.squadId || null,
     is_tracking: task.isTracking,
     approval_status: task.approvalStatus,
@@ -429,39 +429,24 @@ export const saveLead = async (lead: Partial<Lead>) => {
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
     
-    // 1. Verificar se o ID é usado de forma direta no banco de dados
+    // 1. Se já for um UUID perfeitamente válido, retornamos ele mesmo
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (isUuid) {
+      return id;
+    }
+    
+    // 2. Se for um ID que começa com 'user-' ou 'u' (mock ou legacy ID), sempre mapeamos para UUID determinístico.
+    // Isso garante total compatibilidade com colunas do tipo UUID no Supabase e impede erros de sintaxe de UUID.
+    const mapped = mapUserId(id);
+    if (mapped) {
+      return mapped;
+    }
+
+    // 3. Fallback: se estiver registrado de forma literal no banco, retornamos o id original
     if (existingUserIds.has(id)) {
       return id;
     }
     
-    // 2. Verificar se o valor mapeado existe
-    const mapped = mapUserId(id);
-    if (mapped && existingUserIds.has(mapped)) {
-      return mapped;
-    }
-
-    // 3. Fallbacks bidirecionais explícitos para u1, u2, u3
-    if (id === 'u1' && existingUserIds.has('00000000-0000-0000-0000-000000000001')) {
-      return '00000000-0000-0000-0000-000000000001';
-    }
-    if (id === 'u2' && existingUserIds.has('00000000-0000-0000-0000-000000000002')) {
-      return '00000000-0000-0000-0000-000000000002';
-    }
-    if (id === 'u3' && existingUserIds.has('00000000-0000-0000-0000-000000000003')) {
-      return '00000000-0000-0000-0000-000000000003';
-    }
-    
-    if (id === '00000000-0000-0000-0000-000000000001' && existingUserIds.has('u1')) {
-      return 'u1';
-    }
-    if (id === '00000000-0000-0000-0000-000000000002' && existingUserIds.has('u2')) {
-      return 'u2';
-    }
-    if (id === '00000000-0000-0000-0000-000000000003' && existingUserIds.has('u3')) {
-      return 'u3';
-    }
-    
-    // Se o usuário não existir no banco, retornamos nulo com segurança
     return null;
   };
 
@@ -1900,10 +1885,10 @@ export const seedDatabase = async () => {
     );
     if (squadError) console.error('Erro ao migrar Squads:', squadError);
 
-    // 2. Migrar Usuários
+    // 2. Migrar Usuários (Mapeando IDs para UUID para evitar conflitos na base real do Supabase)
     const { error: userError } = await supabase.from('users').upsert(
       initialUsers.map(u => ({
-        id: u.id,
+        id: mapUserId(u.id) || u.id,
         name: u.name,
         email: u.email,
         role: u.role,
@@ -1919,7 +1904,7 @@ export const seedDatabase = async () => {
     );
     if (userError) console.error('Erro ao migrar Usuários:', userError);
 
-    // 3. Migrar Clientes
+    // 3. Migrar Clientes (Mapeando responsible_id para UUID)
     const { error: clientError } = await supabase.from('clients').upsert(
       initialClients.map(c => ({
         id: c.id,
@@ -1927,7 +1912,7 @@ export const seedDatabase = async () => {
         legal_name: c.legalName,
         document: c.document,
         status: c.status,
-        responsible_id: c.responsibleId,
+        responsible_id: mapUserId(c.responsibleId) || null,
         squad_id: c.squadId,
         monthly_value: c.monthlyValue,
         is_recurring: c.isRecurring,
@@ -1943,7 +1928,7 @@ export const seedDatabase = async () => {
     );
     if (clientError) console.error('Erro ao migrar Clientes:', clientError);
 
-    // 4. Migrar Tarefas
+    // 4. Migrar Tarefas (Mapeando assignee_ids para UUID)
     const { error: taskError } = await supabase.from('tasks').upsert(
       initialTasks.map(t => ({
         id: t.id,
@@ -1954,7 +1939,7 @@ export const seedDatabase = async () => {
         priority: t.priority,
         due_date: t.dueDate ? new Date(t.dueDate).toISOString() : null,
         estimated_time: t.estimatedTime,
-        assignee_ids: t.assigneeIds,
+        assignee_ids: t.assigneeIds ? t.assigneeIds.map(id => mapUserId(id) || id) : [],
         squad_id: t.squadId,
         is_tracking: t.isTracking,
         approval_status: t.approvalStatus,
@@ -1965,7 +1950,7 @@ export const seedDatabase = async () => {
     );
     if (taskError) console.error('Erro ao migrar Tarefas:', taskError);
 
-    // 5. Migrar Leads
+    // 5. Migrar Leads (Mapeando responsible_id e created_by para UUID)
     const { error: leadError } = await supabase.from('leads').upsert(
       initialLeads.map(l => ({
         id: l.id,
@@ -1978,7 +1963,7 @@ export const seedDatabase = async () => {
         phone: l.phone,
         priority: l.priority,
         temperature: l.temperature,
-        responsible_id: l.responsibleId,
+        responsible_id: mapUserId(l.responsibleId) || null,
         notes: l.notes,
         tags: l.tags,
         created_at: l.createdAt,
@@ -2014,7 +1999,7 @@ export const seedDatabase = async () => {
         status: n.status,
         origin_module: n.originModule,
         timestamp: n.timestamp,
-        target_user_id: n.targetUserId,
+        target_user_id: mapUserId(n.targetUserId),
         target_role: n.targetRole,
         nav_to_view: n.navToView,
         action_label: n.actionLabel,
@@ -2079,7 +2064,7 @@ export const seedDatabase = async () => {
         category_id: t.categoryId,
         bank_account_id: t.bankAccountId,
         client_id: t.clientId,
-        responsible_id: t.responsibleId,
+        responsible_id: mapUserId(t.responsibleId) || null,
         installments: t.installments,
         created_at: t.createdAt
       };
