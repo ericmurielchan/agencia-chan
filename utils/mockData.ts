@@ -525,7 +525,49 @@ export const initialTasks: Task[] = [
         createdAt: Date.now() - 86400000 * 3
     }
 ];
-export const initialRequisitions: Requisition[] = [];
+export const initialRequisitions: Requisition[] = [
+    {
+        id: 'req-1',
+        clientId: undefined,
+        requesterId: 'u2',
+        title: 'Assinatura Semestral Figma Professional',
+        description: 'Upgrade de licenças para as novas contratações do squad de design.',
+        estimatedCost: 1200,
+        status: 'APPROVED',
+        date: new Date(Date.now() - 86400000 * 5).toISOString().split('T')[0],
+        category: 'Compra',
+        approvedBy: 'u1',
+        approvedAt: new Date(Date.now() - 86400000 * 4).toISOString(),
+        archived: false,
+        attachments: []
+    },
+    {
+        id: 'req-2',
+        clientId: 'c1',
+        requesterId: 'u3',
+        title: 'Reembolso Almoço de Alinhamento com Cliente TechStart',
+        description: 'Almoço com assessora de comunicação da TechStart para fechamento de escopo.',
+        estimatedCost: 185.50,
+        status: 'PENDING',
+        date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
+        category: 'Reembolso',
+        archived: false,
+        attachments: []
+    },
+    {
+        id: 'req-3',
+        clientId: undefined,
+        requesterId: 'u2',
+        title: 'Hub USB-C Multivias Baseus para Estações',
+        description: 'Aquisição de adaptadores de rede para notebooks dos novos assessores.',
+        estimatedCost: 420,
+        status: 'PENDING',
+        date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+        category: 'Compra',
+        archived: false,
+        attachments: []
+    }
+];
 
 export const initialApprovalBatches: ApprovalBatch[] = [
     {

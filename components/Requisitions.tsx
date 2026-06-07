@@ -49,6 +49,13 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
   const canApprove = currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE';
   const isClient = currentUser.role === 'CLIENT';
 
+  const canArchiveOrDelete = (req: Requisition) => {
+    if (canApprove) return true;
+    const isOwner = req.requesterId === currentUser.id;
+    const isProcessed = req.status === 'APPROVED' || req.status === 'REJECTED';
+    return isOwner && isProcessed;
+  };
+
   const displayedRequisitions = requisitions.filter(req => {
       const matchesFilter = filter === 'ALL' ? (canApprove || req.requesterId === currentUser.id) : req.requesterId === currentUser.id;
       const matchesSearch = req.title.toLowerCase().includes(searchTerm.toLowerCase());
@@ -107,9 +114,17 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
   };
 
   const handleSaveReq = async () => {
-      if (!editingReq.title || !editingReq.estimatedCost) return;
+      if (!editingReq.title) {
+          alert('Por favor, preencha o título/descrição da solicitação.');
+          return;
+      }
+      if (!editingReq.estimatedCost || editingReq.estimatedCost <= 0) {
+          alert('Por favor, defina um custo estimado maior que zero (R$ 0,00).');
+          return;
+      }
+
       const newReq: Requisition = {
-          id: Date.now().toString(),
+          id: 'req-' + Date.now().toString(),
           requesterId: currentUser.id,
           title: editingReq.title || '',
           description: editingReq.description || '',
@@ -131,8 +146,15 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
       setAttachments([]);
   };
 
-  const handleDeleteReq = async (id: string) => {
-    if (!canApprove) return;
+  const handleDeleteReq = async (id: string, reqContext?: Requisition) => {
+    const req = reqContext || requisitions.find(r => r.id === id);
+    if (!req) return;
+
+    const allowed = canApprove || (req.requesterId === currentUser.id && (req.status === 'APPROVED' || req.status === 'REJECTED'));
+    if (!allowed) {
+      alert('Você não tem permissão para excluir esta solicitação (usuários comuns só podem excluir suas próprias solicitações após aprovação ou recusa).');
+      return;
+    }
     
     const confirmDelete = openConfirm 
       ? await openConfirm({
@@ -161,12 +183,21 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
           originModule: 'REQUISITIONS',
           timestamp: Date.now()
         });
+    } else {
+        alert('Erro ao excluir solicitação do banco de dados.');
     }
     setProcessingId(null);
   };
 
-  const handleArchiveReq = async (id: string) => {
-    if (!canApprove) return;
+  const handleArchiveReq = async (id: string, reqContext?: Requisition) => {
+    const req = reqContext || requisitions.find(r => r.id === id);
+    if (!req) return;
+
+    const allowed = canApprove || (req.requesterId === currentUser.id && (req.status === 'APPROVED' || req.status === 'REJECTED'));
+    if (!allowed) {
+      alert('Você não tem permissão para arquivar esta solicitação (usuários comuns só podem arquivar suas próprias solicitações após aprovação ou recusa).');
+      return;
+    }
 
     const confirmArchive = openConfirm 
       ? await openConfirm({
@@ -195,6 +226,8 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
           originModule: 'REQUISITIONS',
           timestamp: Date.now()
         });
+    } else {
+        alert('Erro ao arquivar solicitação no banco de dados.');
     }
     setProcessingId(null);
   };
@@ -330,83 +363,144 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
               const requester = users.find(u => u.id === req.requesterId);
               const isProcessing = processingId === req.id;
 
+              const leftBorderColor = 
+                req.status === 'APPROVED' ? 'border-l-emerald-500' : 
+                req.status === 'REJECTED' ? 'border-l-red-500' : 'border-l-amber-500';
+
+              const iconBgColor = 
+                req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100/50' : 
+                req.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100/50' : 
+                'bg-amber-50 text-amber-600 border-amber-100/50';
+
               return (
                 <div 
                   key={req.id} 
                   onClick={() => setSelectedReq(req)}
-                  className="group bg-white p-5 rounded-[28px] border border-slate-100 hover:border-pink-200 hover:shadow-2xl hover:shadow-slate-200/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 relative overflow-hidden cursor-pointer"
+                  className={`group bg-white p-5 rounded-2xl border border-slate-100 border-l-4 ${leftBorderColor} hover:border-pink-200 hover:shadow-xl hover:shadow-slate-200/30 transition-all flex flex-col relative overflow-hidden cursor-pointer`}
                 >
-                  {isProcessing && <div className="absolute inset-0 bg-white/80 z-20 flex items-center justify-center backdrop-blur-sm"><Clock className="animate-spin text-pink-600" size={32}/></div>}
-                  
-                  <div className="flex items-center gap-5 flex-1 min-w-0">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border transition-colors ${req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : req.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
-                      {req.category === 'Reembolso' ? <DollarSign size={24}/> : <ShoppingBag size={24}/>}
+                  {isProcessing && (
+                    <div className="absolute inset-0 bg-white/80 z-20 flex items-center justify-center backdrop-blur-sm">
+                      <Clock className="animate-spin text-pink-600" size={32}/>
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 tracking-widest">{req.category}</span>
-                        <span className="text-[10px] text-slate-300 font-black">•</span>
-                        <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 uppercase tracking-tight"><Calendar size={12} className="text-slate-300"/> {req.date.split('-').reverse().join('/')}</span>
+                  )}
+                  
+                  {/* Top Section: Main Info & Price */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                    {/* Left: Category icon + texts */}
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border transition-colors ${iconBgColor}`}>
+                        {req.category === 'Reembolso' ? <DollarSign size={20}/> : <ShoppingBag size={20}/>}
                       </div>
-                      <h4 className="font-black text-slate-800 text-base truncate group-hover:text-pink-600 transition-colors tracking-tight">{req.title}</h4>
-                      <div className="flex items-center gap-4 mt-1">
-                        <div className="flex items-center gap-2">
-                          <img src={requester?.avatar || undefined} className="w-5 h-5 rounded-full object-cover border border-slate-200" />
-                          <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{requester?.name}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100 tracking-wider">
+                            {req.category}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 uppercase tracking-tight">
+                            <Calendar size={11} className="text-slate-300"/> 
+                            {req.date.split('-').reverse().join('/')}
+                          </span>
                         </div>
-                        {req.attachments && req.attachments.length > 0 && (
-                          <div className="flex items-center gap-1 text-emerald-600">
-                            <FileText size={12} />
-                            <span className="text-[9px] font-black uppercase tracking-widest">{req.attachments.length} Anexo(s)</span>
+                        
+                        <h4 className="font-extrabold text-slate-800 text-[15px] leading-tight mt-2 tracking-tight group-hover:text-pink-600 transition-colors">
+                          {req.title}
+                        </h4>
+
+                        <div className="flex items-center gap-3 mt-3">
+                          <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
+                            {requester?.avatar ? (
+                              <img src={requester.avatar} className="w-4.5 h-4.5 rounded-full object-cover border border-white" />
+                            ) : (
+                              <div className="w-4.5 h-4.5 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-[8px] font-black">{requester?.name?.charAt(0)}</div>
+                            )}
+                            <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest leading-none">
+                              {requester?.name}
+                            </span>
                           </div>
-                        )}
+
+                          {req.attachments && req.attachments.length > 0 && (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+                              <FileText size={11} />
+                              <span className="text-[9px] font-extrabold uppercase tracking-widest leading-none">
+                                {req.attachments.length} {req.attachments.length === 1 ? 'Anexo' : 'Anexos'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Price & Status */}
+                    <div className="flex sm:flex-col items-end justify-between sm:justify-start gap-4 w-full sm:w-auto shrink-0 self-stretch sm:self-auto pt-1">
+                      {/* Status Badge */}
+                      <span className={`px-3.5 py-1 rounded-xl text-[9px] font-extrabold uppercase tracking-widest border shadow-sm flex items-center gap-1.5 ${
+                        req.status === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
+                        req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          req.status === 'PENDING' ? 'bg-amber-500 animate-pulse' : 
+                          req.status === 'APPROVED' ? 'bg-emerald-500' : 'bg-red-500'
+                        }`} />
+                        {req.status === 'PENDING' ? 'Aguardando' : req.status === 'APPROVED' ? 'Aprovado' : 'Recusado'}
+                      </span>
+
+                      {/* Price tag */}
+                      <div className="text-right">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Custo Estimado</p>
+                        <p className="font-extrabold text-slate-800 text-base md:text-lg leading-none tracking-tight">
+                          R$ {req.estimatedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-6 bg-slate-50 md:bg-transparent p-4 md:p-0 rounded-2xl border border-slate-100 md:border-none">
-                    <div className="text-left md:text-right">
-                      <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1.5">Valor Total</p>
-                      <p className="font-black text-slate-800 text-lg leading-none">R$ {req.estimatedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                       <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border shadow-sm ${
-                          req.status === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
-                          req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
-                       }`}>
-                         {req.status === 'PENDING' ? 'Aguardando' : req.status === 'APPROVED' ? 'Aprovado' : 'Recusado'}
-                       </span>
-
-                      <div className="flex gap-2">
+                  {/* Bottom: Action Footer */}
+                  {((canApprove && req.status === 'PENDING') || canArchiveOrDelete(req)) && (
+                    <div className="border-t border-slate-50 mt-4 pt-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+                      <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider hidden sm:inline-block">
+                        {canApprove && req.status === 'PENDING' ? 'Controles Administrativos' : 'Controles de Registro'}
+                      </span>
+                      <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
                         {canApprove && req.status === 'PENDING' && (
                           <>
-                            <button onClick={() => handleApproveReq(req)} title="Aprovar" className="p-2.5 bg-white hover:bg-emerald-600 hover:text-white text-emerald-600 rounded-xl transition-all border border-emerald-200 hover:border-emerald-600 shadow-sm"><Check size={18} strokeWidth={3}/></button>
-                            <button onClick={() => { setSelectedReqForReject(req); setIsRejectModalOpen(true); }} title="Recusar" className="p-2.5 bg-white hover:bg-red-600 hover:text-white text-red-600 rounded-xl transition-all border border-red-200 hover:border-red-600 shadow-sm"><X size={18} strokeWidth={3}/></button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleApproveReq(req); }} 
+                              title="Aprovar Solicitação" 
+                              className="px-3 py-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-xl transition-all border border-emerald-100 hover:border-emerald-600 shadow-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"
+                            >
+                              <Check size={13} strokeWidth={3}/> Aprovar
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setSelectedReqForReject(req); setIsRejectModalOpen(true); }} 
+                              title="Recusar Solicitação" 
+                              className="px-3 py-2 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition-all border border-red-100 hover:border-red-600 shadow-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"
+                            >
+                              <X size={13} strokeWidth={3}/> Recusar
+                            </button>
                           </>
                         )}
-                        {canApprove && (
+                        {canArchiveOrDelete(req) && (
                           <>
                             <button 
-                              onClick={(e) => { e.stopPropagation(); handleArchiveReq(req.id); }} 
-                              title="Arquivar" 
-                              className="p-2.5 bg-white hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl transition-all border border-slate-200 hover:border-slate-900 shadow-sm"
+                              onClick={(e) => { e.stopPropagation(); handleArchiveReq(req.id, req); }} 
+                              title="Arquivar Solicitação" 
+                              className="p-2 bg-slate-50 hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl transition-all border border-slate-200 hover:border-slate-900 shadow-sm flex items-center justify-center shrink-0"
                             >
-                              <Archive size={18}/>
+                              <Archive size={14}/>
                             </button>
                             <button 
-                              onClick={(e) => { e.stopPropagation(); handleDeleteReq(req.id); }} 
+                              onClick={(e) => { e.stopPropagation(); handleDeleteReq(req.id, req); }} 
                               title="Excluir Permanentemente" 
-                              className="p-2.5 bg-white hover:bg-red-600 hover:text-white text-red-400 rounded-xl transition-all border border-red-200 hover:border-red-600 shadow-sm"
+                              className="p-2 bg-red-50 hover:bg-red-600 hover:text-white text-red-400 rounded-xl transition-all border border-red-100 hover:border-red-600 shadow-sm flex items-center justify-center shrink-0"
                             >
-                              <Trash2 size={18}/>
+                              <Trash2 size={14}/>
                             </button>
                           </>
                         )}
-                        {!canApprove && <button className="p-2.5 bg-slate-50 text-slate-300 rounded-xl border border-slate-100 cursor-default"><ChevronRight size={18}/></button>}
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })
@@ -699,18 +793,20 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                       </div>
                     )}
 
-                    {canApprove && (
+                    {(canApprove || canArchiveOrDelete(selectedReq)) && (
                       <div className="flex items-center justify-between border-t border-slate-200 pt-4 mt-2">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ações Administrativas</p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                          {canApprove ? 'Ações Administrativas' : 'Minhas Ações'}
+                        </p>
                         <div className="flex gap-2">
                           <button 
-                            onClick={() => handleArchiveReq(selectedReq.id)}
+                            onClick={() => handleArchiveReq(selectedReq.id, selectedReq)}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm"
                           >
                             <Archive size={14}/> Arquivar
                           </button>
                           <button 
-                            onClick={() => handleDeleteReq(selectedReq.id)}
+                            onClick={() => handleDeleteReq(selectedReq.id, selectedReq)}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-red-100 text-red-400 hover:text-white hover:bg-red-600 hover:border-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm"
                           >
                             <Trash2 size={14}/> Excluir

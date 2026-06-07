@@ -55,6 +55,8 @@ import {
   fetchAssets,
   fetchRequisitions,
   saveRequisition,
+  mapRequisition,
+  subscribeToRequisitions,
   fetchAgencyServices,
   saveAgencyService,
   fetchNotifications,
@@ -99,7 +101,12 @@ const App: React.FC = () => {
     if (savedUser && lastActivity) {
       if (Date.now() - Number(lastActivity) < 3600000) {
         // Sessão válida (menos de 1 hora de inatividade)
-        return JSON.parse(savedUser);
+        try {
+          const parsed = JSON.parse(savedUser);
+          return parsed;
+        } catch (e) {
+          return null;
+        }
       } else {
         // Expirou por inatividade
         localStorage.removeItem('currentUser');
@@ -272,6 +279,30 @@ const App: React.FC = () => {
         setNotifications(prev => prev.map(n => n.id === updatedNotif.id ? updatedNotif : n));
       } else if (payload.eventType === 'DELETE') {
         setNotifications(prev => prev.filter(n => n.id !== payload.old.id));
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Real-time requisitions
+  useEffect(() => {
+    const subscription = subscribeToRequisitions((payload) => {
+      console.log('Nova mudança na requisição:', payload);
+      
+      if (payload.eventType === 'INSERT') {
+        const newReq = mapRequisition(payload.new);
+        setRequisitions(prev => {
+          if (prev.some(r => r.id === newReq.id)) return prev;
+          return [...prev, newReq];
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        const updatedReq = mapRequisition(payload.new);
+        setRequisitions(prev => prev.map(r => r.id === updatedReq.id ? updatedReq : r));
+      } else if (payload.eventType === 'DELETE') {
+        setRequisitions(prev => prev.filter(r => r.id !== payload.old.id));
       }
     });
 
@@ -800,6 +831,8 @@ const App: React.FC = () => {
                             if (exists) return prev.map(r => r.id === req.id ? req as Requisition : r);
                             return [...prev, req as Requisition];
                         });
+                    } else {
+                        alert('Erro ao salvar solicitação no banco de dados: ' + (result.error?.message || result.error || 'Erro desconhecido'));
                     }
                 }}
               />

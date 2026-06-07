@@ -54,7 +54,7 @@ const mapSettings = (s: any): SystemSettings => ({
  * Mapeia um usuário do Supabase para o formato do App
  */
 export const mapUser = (u: any): User => ({
-  id: u.id,
+  id: mapUserId(u.id) || u.id,
   name: u.name || '',
   email: u.email || '',
   role: u.role || 'EMPLOYEE',
@@ -107,7 +107,7 @@ const mapLead = (l: any): Lead => ({
   phone: l.phone || '',
   priority: l.priority || 'MEDIUM',
   temperature: l.temperature || 'WARM',
-  responsibleId: l.responsible_id || '',
+  responsibleId: mapUserId(l.responsible_id) || '',
   notes: l.notes || '',
   tags: l.tags || [],
   createdAt: l.created_at || Date.now(),
@@ -127,7 +127,7 @@ const mapClient = (c: any): Client => ({
   legalName: c.legal_name || '',
   document: c.document || '',
   status: c.status || 'ACTIVE',
-  responsibleId: c.responsible_id || '',
+  responsibleId: mapUserId(c.responsible_id) || '',
   squadId: c.squad_id || '',
   monthlyValue: c.monthly_value || 0,
   isRecurring: c.is_recurring || false,
@@ -357,7 +357,7 @@ export const saveClient = async (client: Partial<Client>) => {
     legal_name: client.legalName,
     document: client.document,
     status: client.status,
-    responsible_id: client.responsibleId || null,
+    responsible_id: mapUserId(client.responsibleId) || null,
     squad_id: client.squadId || null,
     monthly_value: client.monthlyValue,
     is_recurring: client.isRecurring,
@@ -427,7 +427,7 @@ export const saveLead = async (lead: Partial<Lead>) => {
     phone: lead.phone,
     priority: lead.priority,
     temperature: lead.temperature,
-    responsible_id: lead.responsibleId || null,
+    responsible_id: mapUserId(lead.responsibleId) || null,
     notes: lead.notes,
     tags: lead.tags,
     source: lead.source,
@@ -492,7 +492,7 @@ export const fetchFinancialTransactions = async () => {
           bankAccountId: t.bank_account_id,
           creditCardId: undefined,
           clientId: t.client_id,
-          responsibleId: t.responsible_id,
+          responsibleId: mapUserId(t.responsible_id),
           installments: t.installments,
           createdAt: t.created_at || Date.now()
         }));
@@ -513,7 +513,7 @@ export const fetchFinancialTransactions = async () => {
       bankAccountId: t.bank_account_id,
       creditCardId: t.credit_card_id,
       clientId: t.client_id,
-      responsibleId: t.responsible_id,
+      responsibleId: mapUserId(t.responsible_id),
       installments: t.installments,
       createdAt: t.created_at || Date.now()
     }));
@@ -537,7 +537,7 @@ export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>)
     category_id: t.categoryId || null,
     bank_account_id: t.bankAccountId || null,
     client_id: t.clientId || null,
-    responsible_id: t.responsibleId || null,
+    responsible_id: mapUserId(t.responsibleId) || null,
     installments: t.installments,
     created_at: t.createdAt || Date.now()
   };
@@ -856,7 +856,7 @@ export const deleteSquad = async (id: string) => {
  */
 export const saveUser = async (user: Partial<User>) => {
   const { error } = await supabase.from('users').upsert({
-    id: user.id || undefined,
+    id: mapUserId(user.id) || undefined,
     name: user.name,
     email: user.email,
     role: user.role,
@@ -958,7 +958,7 @@ export const fetchAssets = async () => {
     currentValue: a.current_value,
     status: a.status,
     location: a.location,
-    responsibleId: a.responsible_id,
+    responsibleId: mapUserId(a.responsible_id),
     serialNumber: a.serial_number,
     description: a.description
   }));
@@ -977,7 +977,7 @@ export const saveAsset = async (asset: Partial<Asset>) => {
     current_value: asset.currentValue,
     status: asset.status,
     location: asset.location,
-    responsible_id: asset.responsibleId,
+    responsible_id: mapUserId(asset.responsibleId),
     serial_number: asset.serialNumber,
     description: asset.description
   });
@@ -1109,6 +1109,56 @@ export const fetchAllMovements = async () => {
   }));
 };
 
+export const mapUserId = (id: string | null | undefined): string | null => {
+  if (!id) return null;
+  if (id === 'u1') return '00000000-0000-0000-0000-000000000001';
+  if (id === 'u2') return '00000000-0000-0000-0000-000000000002';
+  if (id === 'u3') return '00000000-0000-0000-0000-000000000003';
+  if (id === '00000000-0000-0000-0000-000000000001') return 'u1';
+  if (id === '00000000-0000-0000-0000-000000000002') return 'u2';
+  if (id === '00000000-0000-0000-0000-000000000003') return 'u3';
+  return id;
+};
+
+/**
+ * Mapeia uma requisição do Supabase para o formato do App
+ */
+export const mapRequisition = (r: any): Requisition => {
+  let archived = false;
+  let attachments: string[] = [];
+  let realDescription = r.description || '';
+
+  if (r.description && r.description.startsWith('__JSON_EXT__:')) {
+    try {
+      const parsed = JSON.parse(r.description.slice(13));
+      realDescription = parsed.description || '';
+      archived = parsed.archived || false;
+      attachments = parsed.attachments || [];
+    } catch (e) {
+      console.error('Erro ao fazer parse dos metadados da requisição:', e);
+    }
+  }
+
+  return {
+    id: r.id,
+    clientId: r.client_id || undefined,
+    requesterId: mapUserId(r.requester_id) || '',
+    title: r.title || '',
+    description: realDescription,
+    estimatedCost: Number(r.estimated_cost) || 0,
+    status: r.status || 'PENDING',
+    date: r.date || new Date().toISOString().split('T')[0],
+    category: r.category || 'Compra',
+    approvedBy: mapUserId(r.approved_by) || undefined,
+    approvedAt: r.approved_at || undefined,
+    rejectedBy: mapUserId(r.rejected_by) || undefined,
+    rejectedAt: r.rejected_at || undefined,
+    rejectedReason: r.rejected_reason || undefined,
+    archived,
+    attachments
+  };
+};
+
 /**
  * Busca todas as requisições
  */
@@ -1118,45 +1168,37 @@ export const fetchRequisitions = async () => {
     console.error('Erro ao buscar requisições:', error);
     return [];
   }
-  return (data || []).map(r => ({
-    id: r.id,
-    clientId: r.client_id,
-    requesterId: r.requester_id,
-    title: r.title,
-    description: r.description,
-    estimatedCost: r.estimated_cost,
-    status: r.status,
-    date: r.date,
-    category: r.category,
-    approvedBy: r.approved_by,
-    approvedAt: r.approved_at,
-    rejectedBy: r.rejected_by,
-    rejectedAt: r.rejected_at,
-    rejectedReason: r.rejected_reason
-  }));
+  return (data || []).map(mapRequisition);
 };
 
 /**
  * Salva ou atualiza uma requisição
  */
 export const saveRequisition = async (req: Partial<Requisition>) => {
+  let dbDescription = req.description;
+  if (req.archived !== undefined || req.attachments !== undefined) {
+    dbDescription = '__JSON_EXT__:' + JSON.stringify({
+      description: req.description || '',
+      archived: req.archived || false,
+      attachments: req.attachments || []
+    });
+  }
+
   const { error } = await supabase.from('requisitions').upsert({
     id: req.id || undefined,
     client_id: req.clientId || null,
-    requester_id: req.requesterId || null,
+    requester_id: mapUserId(req.requesterId),
     title: req.title,
-    description: req.description,
+    description: dbDescription,
     estimated_cost: req.estimatedCost,
     status: req.status,
     date: req.date,
     category: req.category,
-    approved_by: req.approvedBy,
+    approved_by: mapUserId(req.approvedBy),
     approved_at: req.approvedAt,
-    rejected_by: req.rejectedBy,
+    rejected_by: mapUserId(req.rejectedBy),
     rejected_at: req.rejectedAt,
-    rejected_reason: req.rejectedReason,
-    archived: req.archived || false,
-    attachments: req.attachments || []
+    rejected_reason: req.rejectedReason
   });
 
   if (error) {
@@ -1182,12 +1224,43 @@ export const deleteRequisition = async (id: string) => {
  * Arquiva uma requisição
  */
 export const archiveRequisition = async (id: string) => {
-  const { error } = await supabase.from('requisitions').update({ archived: true }).eq('id', id);
-  if (error) {
-    console.error('Erro ao arquivar requisição:', error);
-    return { success: false, error };
+  try {
+    const { data, error: fetchError } = await supabase.from('requisitions').select('*').eq('id', id).single();
+    if (fetchError || !data) {
+      console.error('Erro ao buscar requisição para arquivar:', fetchError);
+      return { success: false, error: fetchError };
+    }
+
+    let parsedDesc = { description: data.description || '', archived: true, attachments: [] };
+    if (data.description && data.description.startsWith('__JSON_EXT__:')) {
+      try {
+        const parsed = JSON.parse(data.description.slice(13));
+        parsedDesc = {
+          ...parsed,
+          archived: true
+        };
+      } catch (e) {}
+    } else {
+      parsedDesc = {
+        description: data.description || '',
+        archived: true,
+        attachments: []
+      };
+    }
+
+    const { error: updateError } = await supabase.from('requisitions').update({
+      description: '__JSON_EXT__:' + JSON.stringify(parsedDesc)
+    }).eq('id', id);
+
+    if (updateError) {
+      console.error('Erro ao arquivar requisição:', updateError);
+      return { success: false, error: updateError };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('Erro inesperado ao arquivar requisição:', err);
+    return { success: false, error: err };
   }
-  return { success: true };
 };
 
 /**
@@ -1341,6 +1414,16 @@ export const subscribeToNotifications = (callback: (payload: any) => void) => {
   return supabase
     .channel('public:notifications')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, callback)
+    .subscribe();
+};
+
+/**
+ * Inscreve-se para mudanças em tempo real nas solicitações/requisitions
+ */
+export const subscribeToRequisitions = (callback: (payload: any) => void) => {
+  return supabase
+    .channel('public:requisitions')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, callback)
     .subscribe();
 };
 
@@ -1599,7 +1682,7 @@ export const saveProductivityGoal = async (goal: Partial<ProductivityGoal>) => {
  * Exclui um usuário do banco de dados
  */
 export const deleteUser = async (id: string) => {
-  const { error } = await supabase.from('users').delete().eq('id', id);
+  const { error } = await supabase.from('users').delete().eq('id', mapUserId(id) || id);
   if (error) {
     console.error('Erro ao excluir usuário:', error);
     return { success: false, error };
@@ -1966,6 +2049,72 @@ export const seedDatabase = async () => {
         }
       }
     }
+
+    // 18. Migrar Soluções/Reembolsos (Requisitions)
+    const { error: reqError } = await supabase.from('requisitions').upsert(
+      initialRequisitions.map(req => {
+        let dbDescription = req.description;
+        if (req.archived !== undefined || req.attachments !== undefined) {
+          dbDescription = '__JSON_EXT__:' + JSON.stringify({
+            description: req.description || '',
+            archived: req.archived || false,
+            attachments: req.attachments || []
+          });
+        }
+        return {
+          id: req.id,
+          client_id: req.clientId || null,
+          requester_id: mapUserId(req.requesterId),
+          title: req.title,
+          description: dbDescription,
+          estimated_cost: req.estimatedCost,
+          status: req.status,
+          date: req.date,
+          category: req.category,
+          approved_by: mapUserId(req.approvedBy),
+          approved_at: req.approvedAt,
+          rejected_by: mapUserId(req.rejectedBy),
+          rejected_at: req.rejectedAt,
+          rejected_reason: req.rejectedReason
+        };
+      })
+    );
+    if (reqError) console.error('Erro ao migrar Soluções/Reembolsos:', reqError);
+
+    // 19. Migrar Serviços da Agência (Agency Services)
+    const { error: serviceError } = await supabase.from('agency_services').upsert(
+      initialServices.map(s => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        type: s.type,
+        category: s.category,
+        status: s.status,
+        base_price: s.basePrice,
+        deliveries: s.deliveries,
+        task_templates: s.taskTemplates,
+        tags: s.tags,
+        observations: s.observations,
+        updated_at: Date.now()
+      }))
+    );
+    if (serviceError) console.error('Erro ao migrar Serviços da Agência:', serviceError);
+
+    // 20. Migrar Metas de Produtividade (Productivity Goals)
+    const { error: goalError } = await supabase.from('productivity_goals').upsert(
+      initialGoals.map(g => ({
+        id: g.id,
+        title: g.title,
+        type: g.type,
+        period: g.period,
+        target_value: g.targetValue,
+        squad_id: g.squadId,
+        user_id: g.userId,
+        month: g.month,
+        created_at: g.createdAt || Date.now()
+      }))
+    );
+    if (goalError) console.error('Erro ao migrar Metas:', goalError);
 
     console.log('Migração concluída com sucesso!');
     return { success: true };

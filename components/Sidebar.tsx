@@ -47,7 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'stock', label: 'Estoque', icon: Package },
     { id: 'assets', label: 'Ativos', icon: Box },
-    { id: 'system-admin', label: 'Config. Sistema', icon: Settings },
+    { id: 'system-admin', label: 'Administração do Sistema', icon: Settings },
     { id: 'help', label: 'Central de Ajuda', icon: HelpCircle },
   ];
 
@@ -118,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 space-y-1.5 mt-4 overflow-y-auto hide-scrollbar">
+      <nav className="flex-1 px-3 space-y-1 mt-3 overflow-y-auto custom-scrollbar">
         {menuItems.map((item) => {
            if (!isAllowed(item.id)) return null;
 
@@ -133,7 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
               title={isCompact ? item.label : ""}
               className={`w-full flex items-center rounded-xl transition-all duration-300 group
-                ${isCompact ? 'justify-center py-3' : 'px-4 py-2.5 gap-3'}
+                ${isCompact ? 'justify-center py-2.5' : 'px-4 py-2 gap-3'}
                 ${active 
                   ? 'text-white shadow-lg shadow-pink-500/20' 
                   : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'}
