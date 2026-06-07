@@ -974,14 +974,26 @@ export const deleteSquad = async (id: string) => {
  * Salva ou atualiza um usuário no banco de dados
  */
 export const saveUser = async (user: Partial<User>) => {
+  // Obter dados reais das tabelas de referência para evitar violações de chaves estrangeiras
+  const [dbSquadsResult, dbClientsResult] = await Promise.all([
+    supabase.from('squads').select('id'),
+    supabase.from('clients').select('id')
+  ]);
+
+  const existingSquadIds = new Set<string>((dbSquadsResult.data || []).map((s: any) => s.id));
+  const existingClientIds = new Set<string>((dbClientsResult.data || []).map((c: any) => c.id));
+
+  const squad_id = user.squad && existingSquadIds.has(user.squad) ? user.squad : null;
+  const client_id = user.clientId && existingClientIds.has(user.clientId) ? user.clientId : null;
+
   const { error } = await supabase.from('users').upsert({
     id: mapUserId(user.id) || undefined,
     name: user.name,
     email: user.email,
     role: user.role,
     avatar: user.avatar,
-    squad_id: user.squad,
-    client_id: user.clientId,
+    squad_id: squad_id,
+    client_id: client_id,
     hourly_rate: user.hourlyRate,
     salary: user.salary,
     has_system_access: user.hasSystemAccess,
