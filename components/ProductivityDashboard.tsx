@@ -109,7 +109,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
           ? filteredTasks.filter(t => t.status === 'DONE').length
           : filteredTasks.reduce((acc, t) => acc + t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0), 0) / 3600;
 
-      const percent = (realized / activeGoal.targetValue) * 100;
+      const percent = activeGoal.targetValue > 0 ? (realized / activeGoal.targetValue) * 100 : 0;
       
       // Projeção
       const now = new Date();
@@ -117,7 +117,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
       const currentDay = now.getDate();
       const dailyAvg = realized / Math.max(currentDay, 1);
       const projection = dailyAvg * daysInMonth;
-      const projectionPercent = (projection / activeGoal.targetValue) * 100;
+      const projectionPercent = activeGoal.targetValue > 0 ? (projection / activeGoal.targetValue) * 100 : 0;
 
       let status: 'ABOVE' | 'ON_TRACK' | 'BELOW' = 'ON_TRACK';
       if (projectionPercent < 90) status = 'BELOW';
@@ -186,7 +186,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
 
         // Meta individual
         const userGoal = goals.find(g => g.userId === user.id && g.month === currentMonth);
-        const goalProgress = userGoal ? (userGoal.type === 'PRODUCTION' ? (completed / userGoal.targetValue) * 100 : ((seconds / 3600) / userGoal.targetValue) * 100) : 0;
+        const goalProgress = userGoal && userGoal.targetValue > 0 ? (userGoal.type === 'PRODUCTION' ? (completed / userGoal.targetValue) * 100 : ((seconds / 3600) / userGoal.targetValue) * 100) : 0;
 
         return {
             id: user.id,

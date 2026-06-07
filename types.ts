@@ -258,7 +258,7 @@ export interface AgencyService {
     id: string;
     name: string;
     description: string;
-    type: 'RECURRENT' | 'ONEOFF';
+    type: 'RECURRENT' | 'ONEOFF' | 'COMBO';
     category: string;
     status: 'ACTIVE' | 'INACTIVE';
     basePrice: number;
@@ -266,6 +266,8 @@ export interface AgencyService {
     taskTemplates: TaskTemplate[];
     tags: string[];
     observations?: string;
+    isCombo?: boolean;
+    servicesInCombo?: string[];
 }
 
 export interface FinancialCategory {

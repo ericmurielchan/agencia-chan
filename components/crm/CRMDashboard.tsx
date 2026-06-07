@@ -27,9 +27,9 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
         const noContact = leads.filter(l => !l.lastContact).length;
         const noResponsible = leads.filter(l => !l.responsibleId).length;
 
-        const valueNegotiation = leads.filter(l => l.status === 'OPEN').reduce((acc, l) => acc + l.value, 0);
-        const valueWon = leads.filter(l => l.status === 'WON').reduce((acc, l) => acc + l.value, 0);
-        const valueLost = leads.filter(l => l.status === 'LOST').reduce((acc, l) => acc + l.value, 0);
+        const valueNegotiation = leads.filter(l => l.status === 'OPEN').reduce((acc, l) => acc + (l.value || 0), 0);
+        const valueWon = leads.filter(l => l.status === 'WON').reduce((acc, l) => acc + (l.value || 0), 0);
+        const valueLost = leads.filter(l => l.status === 'LOST').reduce((acc, l) => acc + (l.value || 0), 0);
         const avgTicket = won > 0 ? valueWon / won : 0;
 
         // Conversion rate
@@ -53,7 +53,7 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
         return stages.map(s => ({
             name: s.label,
             value: leads.filter(l => l.stageId === s.id || (s.id === 'WON' && l.status === 'WON')).length,
-            amount: leads.filter(l => l.stageId === s.id || (s.id === 'WON' && l.status === 'WON')).reduce((acc, l) => acc + l.value, 0)
+            amount: leads.filter(l => l.stageId === s.id || (s.id === 'WON' && l.status === 'WON')).reduce((acc, l) => acc + (l.value || 0), 0)
         }));
     }, [leads]);
 

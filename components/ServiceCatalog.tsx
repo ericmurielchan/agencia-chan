@@ -34,8 +34,8 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('ALL');
 
-    const canManage = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER';
-    const canDelete = currentUser.role === 'ADMIN';
+    const canManage = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE' || currentUser.role === 'COMMERCIAL';
+    const canDelete = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE' || currentUser.role === 'COMMERCIAL';
 
     const categories = useMemo(() => {
         const cats = new Set(services.map(s => s.category));
@@ -50,8 +50,12 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
     });
 
     const handleOpenModal = (service?: AgencyService, viewOnly = false) => {
+        const forceViewOnly = viewOnly || !canManage;
         if (service) {
-            setEditingService({ ...service });
+            setEditingService({ 
+                ...service,
+                servicesInCombo: service.servicesInCombo || []
+            });
         } else {
             setEditingService({
                 name: '',
@@ -63,10 +67,11 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                 deliveries: [],
                 taskTemplates: [],
                 tags: [],
-                observations: ''
+                observations: '',
+                servicesInCombo: []
             });
         }
-        setIsViewOnly(viewOnly);
+        setIsViewOnly(forceViewOnly);
         setActiveTab('GENERAL');
         setIsModalOpen(true);
     };
@@ -79,7 +84,8 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
             id: editingService.id || Math.random().toString(36).substring(2, 9),
             deliveries: editingService.deliveries || [],
             taskTemplates: editingService.taskTemplates || [],
-            tags: editingService.tags || []
+            tags: editingService.tags || [],
+            servicesInCombo: editingService.servicesInCombo || []
         } as AgencyService;
 
         if (onSaveService) {
@@ -187,15 +193,34 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                         <div className="p-8 flex-1">
                             <div className="flex justify-between items-start mb-6">
                                 <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em] ${
+                                    service.type === 'COMBO' ? 'bg-pink-50 text-pink-600' :
                                     service.type === 'RECURRENT' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
                                 }`}>
-                                    {service.type === 'RECURRENT' ? 'Recorrente' : 'Pontual'}
+                                    {service.type === 'COMBO' ? 'Combo / Pacote' :
+                                     service.type === 'RECURRENT' ? 'Recorrente' : 'Pontual'}
                                 </div>
                                 <div className={`w-2.5 h-2.5 rounded-full ${service.status === 'ACTIVE' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
                             </div>
 
                             <h3 className="text-xl font-black text-slate-800 mb-2 group-hover:text-pink-600 transition-colors">{service.name}</h3>
                             <p className="text-slate-500 text-sm font-medium line-clamp-2 mb-6 leading-relaxed">{service.description}</p>
+
+                            {service.type === 'COMBO' && service.servicesInCombo && service.servicesInCombo.length > 0 && (
+                                <div className="mt-4 mb-6 p-4 bg-pink-50/20 rounded-2xl border border-pink-100/30">
+                                    <p className="text-[8px] font-bold uppercase tracking-wider text-pink-600 mb-2">Serviços inclusos no Combo:</p>
+                                    <div className="flex flex-col gap-1.5">
+                                        {service.servicesInCombo.map(id => {
+                                            const sub = services.find(s => s.id === id);
+                                            return sub ? (
+                                                <div key={id} className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
+                                                    <span>{sub.name}</span>
+                                                </div>
+                                            ) : null;
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex flex-wrap gap-2 mb-6">
                                 <span className="px-3 py-1.5 bg-slate-50 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-100">
@@ -323,6 +348,16 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                                 >
                                     <MessageSquare size={18} /> Observações
                                 </button>
+                                {editingService.type === 'COMBO' && (
+                                    <button 
+                                        onClick={() => setActiveTab('VALUE')}
+                                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                            activeTab === 'VALUE' ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:bg-white/50'
+                                        }`}
+                                    >
+                                        <Layers size={18} /> Serviços Inclusos
+                                    </button>
+                                )}
                             </div>
 
                             {/* Tab Panels */}
@@ -350,6 +385,7 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                                                 >
                                                     <option value="RECURRENT">Serviço Recorrente</option>
                                                     <option value="ONEOFF">Serviço Pontual</option>
+                                                    <option value="COMBO">Combo ou Pacote</option>
                                                 </select>
                                             </div>
                                             <div>
@@ -452,10 +488,11 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                                                                     disabled={isViewOnly}
                                                                     type="number"
                                                                     className="w-full bg-white border-2 border-transparent focus:border-pink-200 rounded-xl p-3 text-sm font-bold outline-none transition-all"
-                                                                    value={delivery.quantity}
+                                                                    value={isNaN(delivery.quantity) ? '' : delivery.quantity}
                                                                     onChange={e => {
+                                                                        const val = parseInt(e.target.value);
                                                                         const newDeliveries = [...(editingService.deliveries || [])];
-                                                                        newDeliveries[idx].quantity = parseInt(e.target.value);
+                                                                        newDeliveries[idx].quantity = isNaN(val) ? 0 : val;
                                                                         setEditingService({...editingService, deliveries: newDeliveries});
                                                                     }}
                                                                 />
@@ -566,6 +603,93 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                                             value={editingService.observations || ''}
                                             onChange={e => setEditingService({...editingService, observations: e.target.value})}
                                         />
+                                    </div>
+                                )}
+
+                                {activeTab === 'VALUE' && (
+                                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                        <div className="flex flex-col gap-1">
+                                            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Serviços no Combo / Pacote</h4>
+                                            <p className="text-slate-400 text-xs font-medium">Selecione quais serviços individuais compõem este combo ou pacote.</p>
+                                        </div>
+
+                                        {/* Financial Summary */}
+                                        <div className="p-6 bg-slate-50/50 rounded-[28px] border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Preço Individual Somado</p>
+                                                <p className="text-xl font-black text-slate-800">
+                                                    R$ {
+                                                        (services.filter(s => (editingService.servicesInCombo || []).includes(s.id))
+                                                            .reduce((acc, curr) => acc + (curr.basePrice || 0), 0)
+                                                        ).toLocaleString()
+                                                    }
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Preço do Combo</p>
+                                                <p className="text-xl font-black text-pink-600">
+                                                    R$ {(editingService.basePrice || 0).toLocaleString()}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Economia / Desconto</p>
+                                                <p className="text-xl font-black text-emerald-600">
+                                                    {(() => {
+                                                        const sum = services.filter(s => (editingService.servicesInCombo || []).includes(s.id))
+                                                                            .reduce((acc, curr) => acc + (curr.basePrice || 0), 0);
+                                                        const comboPrice = editingService.basePrice || 0;
+                                                        if (sum <= 0) return '0%';
+                                                        const pct = Math.round(((sum - comboPrice) / sum) * 100);
+                                                        return pct > 0 ? `${pct}%` : '0%';
+                                                    })()}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Services List with Checkboxes */}
+                                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                                            {services.filter(s => s.id !== editingService.id && s.type !== 'COMBO').map(s => {
+                                                const isChecked = (editingService.servicesInCombo || []).includes(s.id);
+                                                return (
+                                                    <label 
+                                                        key={s.id} 
+                                                        className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all cursor-pointer ${
+                                                            isChecked 
+                                                                ? 'border-pink-500 bg-pink-50/10' 
+                                                                : 'border-slate-100 hover:border-slate-200'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-4">
+                                                            <input 
+                                                                type="checkbox"
+                                                                disabled={isViewOnly}
+                                                                checked={isChecked}
+                                                                onChange={() => {
+                                                                    if (isViewOnly) return;
+                                                                    const current = editingService.servicesInCombo || [];
+                                                                    const next = current.includes(s.id)
+                                                                        ? current.filter(id => id !== s.id)
+                                                                        : [...current, s.id];
+                                                                    
+                                                                    setEditingService({
+                                                                        ...editingService,
+                                                                        servicesInCombo: next
+                                                                    });
+                                                                }}
+                                                                className="w-5 h-5 accent-pink-600 rounded border-slate-300"
+                                                            />
+                                                            <div>
+                                                                <p className="text-sm font-bold text-slate-800">{s.name}</p>
+                                                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md mt-1 inline-block">
+                                                                    {s.category}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-sm font-black text-slate-800">R$ {(s.basePrice || 0).toLocaleString()}</p>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 )}
                             </div>

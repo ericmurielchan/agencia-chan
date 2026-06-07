@@ -317,6 +317,23 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
           }
       }
 
+      // Envia notificação geral (broadcast para todos os gestores/financeiro poderem ver no sininho)
+      try {
+          await addNotification({
+              title: 'Solicitação Aprovada',
+              message: `A solicitação de "${req.title}" foi aprovada por ${currentUser.name}.`,
+              type: 'SUCCESS',
+              status: 'UNREAD',
+              priority: 'MEDIUM',
+              originModule: 'REQUISITIONS',
+              navToView: 'requisitions',
+              metadata: { referenceId: req.id, action: 'APPROVED' },
+              timestamp: Date.now()
+          });
+      } catch (err) {
+          console.error('Erro ao enviar notificação geral de aprovação:', err);
+      }
+
       setProcessingId(null);
   };
 
@@ -356,6 +373,23 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
           } catch (err) {
               console.error('Erro ao enviar notificação de recusa:', err);
           }
+      }
+
+      // Envia notificação geral (broadcast para todos os gestores/financeiro poderem ver no sininho)
+      try {
+          await addNotification({
+              title: 'Solicitação Recusada',
+              message: `A solicitação de "${reqToReject.title}" foi recusada por ${currentUser.name}. Motivo: ${rejectionReason}`,
+              type: 'WARNING',
+              status: 'UNREAD',
+              priority: 'HIGH',
+              originModule: 'REQUISITIONS',
+              navToView: 'requisitions',
+              metadata: { referenceId: reqToReject.id, action: 'REJECTED', reason: rejectionReason },
+              timestamp: Date.now()
+          });
+      } catch (err) {
+          console.error('Erro ao enviar notificação geral de recusa:', err);
       }
       
       setProcessingId(null);

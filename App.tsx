@@ -247,7 +247,11 @@ const App: React.FC = () => {
           setCashSessions(cashSessionsData as any);
           setCashMovements(cashMovementsData as any);
           setRequisitions(requisitionsData as any);
-          setServices(servicesData as any);
+          if (servicesData && servicesData.length > 0) {
+              setServices(servicesData as any);
+          } else {
+              setServices(initialServices);
+          }
           setNotifications(notificationsData as any);
           setApprovalBatches(batchesData as any);
           setGoals(goalsData as any);
@@ -982,19 +986,29 @@ const App: React.FC = () => {
                 currentUser={currentUser} 
                 openConfirm={openConfirm} 
                 onSaveService={async (service) => {
-                    const result = await saveAgencyService(service);
-                    if (result.success) {
-                        setServices(prev => {
-                            const exists = prev.some(s => s.id === service.id);
-                            if (exists) return prev.map(s => s.id === service.id ? service : s);
-                            return [...prev, service];
-                        });
+                    // Update state locally first for instant feedback & functional completeness
+                    const savedService = { ...service };
+                    setServices(prev => {
+                        const exists = prev.some(s => s.id === savedService.id);
+                        if (exists) return prev.map(s => s.id === savedService.id ? savedService : s);
+                        return [...prev, savedService];
+                    });
+                    
+                    const result = await saveAgencyService(savedService);
+                    if (!result.success) {
+                        console.error('Erro ao sincronizar serviço com o banco:', result.error);
+                    } else if (result.serviceId && result.serviceId !== savedService.id) {
+                        // Se o id foi redefinido no banco, sincroniza no estado
+                        setServices(prev => prev.map(s => s.id === savedService.id ? { ...savedService, id: result.serviceId } : s));
                     }
                 }}
                 onDeleteService={async (id) => {
+                    // Delete locally first for instant feedback
+                    setServices(prev => prev.filter(s => s.id !== id));
+                    
                     const result = await deleteAgencyService(id);
-                    if (result.success) {
-                        setServices(prev => prev.filter(s => s.id !== id));
+                    if (!result.success) {
+                        console.error('Erro ao excluir serviço do banco:', result.error);
                     }
                 }}
               />

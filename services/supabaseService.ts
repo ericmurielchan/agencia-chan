@@ -1297,19 +1297,40 @@ export const cleanupExpiredApprovalItems = async () => {
 /**
  * Mapeia um serviço da agência do Supabase para o formato do App
  */
-const mapAgencyService = (s: any): AgencyService => ({
-  id: s.id,
-  name: s.name,
-  description: s.description || '',
-  type: s.type || 'RECURRENT',
-  category: s.category || '',
-  status: s.status || 'ACTIVE',
-  basePrice: s.base_price || 0,
-  deliveries: s.deliveries || [],
-  taskTemplates: s.task_templates || [],
-  tags: s.tags || [],
-  observations: s.observations || ''
-});
+export const mapAgencyService = (s: any): AgencyService => {
+  let realObservations = s.observations || '';
+  let isCombo = false;
+  let servicesInCombo: string[] = [];
+
+  if (s.observations && s.observations.startsWith('__COMBO_EXT__:')) {
+    try {
+      const parsed = JSON.parse(s.observations.slice(14));
+      realObservations = parsed.observations || '';
+      isCombo = parsed.isCombo || false;
+      servicesInCombo = parsed.servicesInCombo || [];
+    } catch (e) {
+      console.error('Erro ao fazer parse dos metadados do combo:', e);
+    }
+  } else if (s.type === 'COMBO') {
+    isCombo = true;
+  }
+
+  return {
+    id: s.id,
+    name: s.name,
+    description: s.description || '',
+    type: s.type || 'RECURRENT',
+    category: s.category || '',
+    status: s.status || 'ACTIVE',
+    basePrice: s.base_price || 0,
+    deliveries: s.deliveries || [],
+    taskTemplates: s.task_templates || [],
+    tags: s.tags || [],
+    observations: realObservations,
+    isCombo,
+    servicesInCombo
+  };
+};
 
 /**
  * Busca todos os serviços da agência
@@ -1327,18 +1348,28 @@ export const fetchAgencyServices = async () => {
  * Salva ou atualiza um serviço da agência
  */
 export const saveAgencyService = async (service: Partial<AgencyService>) => {
+  const serviceId = service.id || Math.random().toString(36).substring(2, 9);
+  let dbObservations = service.observations || '';
+  if (service.type === 'COMBO' || service.isCombo || service.servicesInCombo) {
+    dbObservations = '__COMBO_EXT__:' + JSON.stringify({
+      observations: service.observations || '',
+      isCombo: service.type === 'COMBO' || !!service.isCombo,
+      servicesInCombo: service.servicesInCombo || []
+    });
+  }
+
   const { error } = await supabase.from('agency_services').upsert({
-    id: service.id || undefined,
-    name: service.name,
-    description: service.description,
-    type: service.type,
-    category: service.category,
-    status: service.status,
-    base_price: service.basePrice,
-    deliveries: service.deliveries,
-    task_templates: service.taskTemplates,
-    tags: service.tags,
-    observations: service.observations,
+    id: serviceId,
+    name: service.name || 'Novo Serviço',
+    description: service.description || '',
+    type: service.type || 'RECURRENT',
+    category: service.category || 'Geral',
+    status: service.status || 'ACTIVE',
+    base_price: service.basePrice !== undefined ? service.basePrice : 0,
+    deliveries: service.deliveries || [],
+    task_templates: service.taskTemplates || [],
+    tags: service.tags || [],
+    observations: dbObservations,
     updated_at: Date.now()
   });
 
@@ -1346,7 +1377,7 @@ export const saveAgencyService = async (service: Partial<AgencyService>) => {
     console.error('Erro ao salvar serviço:', error);
     return { success: false, error };
   }
-  return { success: true };
+  return { success: true, serviceId };
 };
 
 /**
