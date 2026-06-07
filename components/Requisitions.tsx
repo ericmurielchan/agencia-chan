@@ -141,6 +141,38 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
       } else {
           setRequisitions(prev => [newReq, ...prev]);
       }
+
+      // Envia notificações para o financeiro e administradores
+      try {
+          await addNotification({
+              title: 'Nova Solicitação',
+              message: `${currentUser.name} enviou uma nova solicitação: "${newReq.title}" no valor de R$ ${newReq.estimatedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`,
+              type: 'INFO',
+              status: 'UNREAD',
+              priority: 'MEDIUM',
+              originModule: 'REQUISITIONS',
+              targetRole: 'FINANCE',
+              navToView: 'requisitions',
+              metadata: { referenceId: newReq.id, action: 'CREATE' },
+              timestamp: Date.now()
+          });
+
+          await addNotification({
+              title: 'Nova Solicitação',
+              message: `${currentUser.name} enviou uma nova solicitação: "${newReq.title}" no valor de R$ ${newReq.estimatedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`,
+              type: 'INFO',
+              status: 'UNREAD',
+              priority: 'MEDIUM',
+              originModule: 'REQUISITIONS',
+              targetRole: 'ADMIN',
+              navToView: 'requisitions',
+              metadata: { referenceId: newReq.id, action: 'CREATE' },
+              timestamp: Date.now()
+          });
+      } catch (err) {
+          console.error('Erro ao enviar notificações de criação:', err);
+      }
+
       setIsCreateModalOpen(false);
       setEditingReq({});
       setAttachments([]);
@@ -264,6 +296,27 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
           };
           setTransactions(prev => [newExpense, ...prev]);
       }
+
+      // Envia notificação para o solicitante
+      if (req.requesterId) {
+          try {
+              await addNotification({
+                  title: 'Solicitação Aprovada',
+                  message: `Sua solicitação de "${req.title}" foi aprovada por ${currentUser.name}.`,
+                  type: 'SUCCESS',
+                  status: 'UNREAD',
+                  priority: 'MEDIUM',
+                  originModule: 'REQUISITIONS',
+                  targetUserId: req.requesterId,
+                  navToView: 'requisitions',
+                  metadata: { referenceId: req.id, action: 'APPROVED' },
+                  timestamp: Date.now()
+              });
+          } catch (err) {
+              console.error('Erro ao enviar notificação de aprovação:', err);
+          }
+      }
+
       setProcessingId(null);
   };
 
@@ -283,6 +336,26 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
       
       if (selectedReq?.id === reqToReject.id) {
           setSelectedReq(updatedReq);
+      }
+
+      // Envia notificação para o solicitante
+      if (reqToReject.requesterId) {
+          try {
+              await addNotification({
+                  title: 'Solicitação Recusada',
+                  message: `Sua solicitação de "${reqToReject.title}" foi recusada por ${currentUser.name}. Motivo: ${rejectionReason}`,
+                  type: 'REJECTED',
+                  status: 'UNREAD',
+                  priority: 'HIGH',
+                  originModule: 'REQUISITIONS',
+                  targetUserId: reqToReject.requesterId,
+                  navToView: 'requisitions',
+                  metadata: { referenceId: reqToReject.id, action: 'REJECTED', reason: rejectionReason },
+                  timestamp: Date.now()
+              });
+          } catch (err) {
+              console.error('Erro ao enviar notificação de recusa:', err);
+          }
       }
       
       setProcessingId(null);
