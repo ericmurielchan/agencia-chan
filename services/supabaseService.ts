@@ -362,10 +362,18 @@ export const saveClient = async (client: Partial<Client>) => {
 
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
-    const uuid = mapUserId(id);
-    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
-      return uuid;
+    
+    // Se o ID bruto já existe no banco de dados, use o ID bruto!
+    if (existingUserIds.has(id)) {
+      return id;
     }
+    
+    // Se o ID mapeado como UUID ou short ID existe no banco de dados, use-o!
+    const mapped = mapUserId(id);
+    if (mapped && existingUserIds.has(mapped)) {
+      return mapped;
+    }
+    
     return null;
   };
 
@@ -449,15 +457,29 @@ export const saveLead = async (lead: Partial<Lead>) => {
 
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
-    const uuid = mapUserId(id);
-    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
-      return uuid;
+    
+    // Se o ID bruto já existe no banco de dados, use o ID bruto!
+    if (existingUserIds.has(id)) {
+      return id;
     }
+    
+    // Se o ID mapeado como UUID ou short ID existe no banco de dados, use-o!
+    const mapped = mapUserId(id);
+    if (mapped && existingUserIds.has(mapped)) {
+      return mapped;
+    }
+    
     return null;
   };
 
   const responsible_id = resolveDbUserId(lead.responsibleId);
-  const created_by = resolveDbUserId(lead.createdBy);
+  let created_by = resolveDbUserId(lead.createdBy);
+  
+  // No banco live, a coluna created_by é do tipo UUID, por isso não aceita strings de formato diferente (Ex: "user-...").
+  // Se o ID retornado do resolvedor for diferente de formato UUID padrão, definimos para nulo de forma segura a fim de evitar erros de sintaxe SQL 22P02.
+  if (created_by && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(created_by)) {
+    created_by = null;
+  }
   const stage_id = lead.stageId && existingStageIds.has(lead.stageId) ? lead.stageId : null;
   const loss_reason_id = lead.lossReasonId && existingLossReasonIds.has(lead.lossReasonId) ? lead.lossReasonId : null;
 
@@ -604,10 +626,18 @@ export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>)
 
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
-    const uuid = mapUserId(id);
-    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
-      return uuid;
+    
+    // Se o ID bruto já existe no banco de dados, use o ID bruto!
+    if (existingUserIds.has(id)) {
+      return id;
     }
+    
+    // Se o ID mapeado como UUID ou short ID existe no banco de dados, use-o!
+    const mapped = mapUserId(id);
+    if (mapped && existingUserIds.has(mapped)) {
+      return mapped;
+    }
+    
     return null;
   };
 
@@ -1063,10 +1093,18 @@ export const saveAsset = async (asset: Partial<Asset>) => {
 
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
-    const uuid = mapUserId(id);
-    if (uuid && (existingUserIds.has(uuid) || existingUserIds.has(id))) {
-      return uuid;
+    
+    // Se o ID bruto já existe no banco de dados, use o ID bruto!
+    if (existingUserIds.has(id)) {
+      return id;
     }
+    
+    // Se o ID mapeado como UUID ou short ID existe no banco de dados, use-o!
+    const mapped = mapUserId(id);
+    if (mapped && existingUserIds.has(mapped)) {
+      return mapped;
+    }
+    
     return null;
   };
 
