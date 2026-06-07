@@ -404,6 +404,7 @@ export interface Asset {
     responsibleId?: string;
     serialNumber?: string;
     description?: string;
+    lossJustification?: string;
 }
 
 export interface CashRegisterSession {

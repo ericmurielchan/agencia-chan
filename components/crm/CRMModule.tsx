@@ -61,7 +61,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
     const [financeDescription, setFinanceDescription] = useState('');
     const [financeAmount, setFinanceAmount] = useState(0);
     const [financeDate, setFinanceDate] = useState(new Date().toISOString().split('T')[0]);
-    const [financeStatus, setFinanceStatus] = useState<'PENDING' | 'COMPLETED'>('PENDING');
+    const [financeStatus, setFinanceStatus] = useState<'PENDING' | 'PAID'>('PENDING');
     const [selectedBankAccount, setSelectedBankAccount] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [isConverting, setIsConverting] = useState(false);
@@ -806,8 +806,13 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                                 onChange={(e) => setFinanceStatus(e.target.value as any)}
                                             >
                                                 <option value="PENDING">A Receber (Não Pago)</option>
-                                                <option value="COMPLETED">Recebido (Liquidado)</option>
+                                                <option value="PAID">Recebido (Liquidado)</option>
                                             </select>
+                                            <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-semibold">
+                                                {financeStatus === 'PAID' 
+                                                    ? '✓ Somará imediatamente ao saldo e aparecerá nos resumos e gráficos de Receita realizada.' 
+                                                    : 'ℹ Ficará registrado como título a receber. Não alterará o caixa ou gráficos de receita até que seja liquidado.'}
+                                            </p>
                                         </div>
                                         <div>
                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Conta de Destino / Caixa</label>

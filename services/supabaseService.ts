@@ -548,6 +548,19 @@ export const deleteLead = async (id: string) => {
  */
 export const fetchFinancialTransactions = async () => {
   try {
+    // Buscar mapeamento de usuário -> squad_id para preencher squadId dinamicamente
+    const { data: userData } = await supabase.from('users').select('id, squad_id');
+    const userSquadMap = new Map<string, string>();
+    if (userData) {
+      userData.forEach((u: any) => {
+        if (u.squad_id) {
+          userSquadMap.set(u.id, u.squad_id);
+          const mappedId = mapUserId(u.id);
+          if (mappedId) userSquadMap.set(mappedId, u.squad_id);
+        }
+      });
+    }
+
     // Tenta buscar com credit_card_id primeiro
     const { data, error } = await supabase
       .from('financial_transactions')
@@ -565,42 +578,50 @@ export const fetchFinancialTransactions = async () => {
           return [];
         }
 
-        return (dataNoCard || []).map(t => ({
-          id: t.id,
-          description: t.description,
-          amount: t.amount,
-          type: t.type,
-          date: t.date,
-          status: t.status,
-          categoryId: t.category_id,
-          bankAccountId: t.bank_account_id,
-          creditCardId: undefined,
-          clientId: t.client_id,
-          responsibleId: mapUserId(t.responsible_id),
-          installments: t.installments,
-          createdAt: t.created_at || Date.now()
-        }));
+        return (dataNoCard || []).map(t => {
+          const respId = mapUserId(t.responsible_id) || t.responsible_id;
+          return {
+            id: t.id,
+            description: t.description,
+            amount: t.amount,
+            type: t.type,
+            date: t.date,
+            status: t.status === 'COMPLETED' ? 'PAID' : t.status,
+            categoryId: t.category_id,
+            bankAccountId: t.bank_account_id,
+            creditCardId: undefined,
+            clientId: t.client_id,
+            responsibleId: respId || '',
+            squadId: userSquadMap.get(respId || '') || undefined,
+            installments: t.installments,
+            createdAt: t.created_at || Date.now()
+          };
+        });
       }
 
       console.error('Erro ao buscar transações:', error);
       return [];
     }
 
-    return (data || []).map(t => ({
-      id: t.id,
-      description: t.description,
-      amount: t.amount,
-      type: t.type,
-      date: t.date,
-      status: t.status,
-      categoryId: t.category_id,
-      bankAccountId: t.bank_account_id,
-      creditCardId: t.credit_card_id,
-      clientId: t.client_id,
-      responsibleId: mapUserId(t.responsible_id),
-      installments: t.installments,
-      createdAt: t.created_at || Date.now()
-    }));
+    return (data || []).map(t => {
+      const respId = mapUserId(t.responsible_id) || t.responsible_id;
+      return {
+        id: t.id,
+        description: t.description,
+        amount: t.amount,
+        type: t.type,
+        date: t.date,
+        status: t.status === 'COMPLETED' ? 'PAID' : t.status,
+        categoryId: t.category_id,
+        bankAccountId: t.bank_account_id,
+        creditCardId: t.credit_card_id,
+        clientId: t.client_id,
+        responsibleId: respId || '',
+        squadId: userSquadMap.get(respId || '') || undefined,
+        installments: t.installments,
+        createdAt: t.created_at || Date.now()
+      };
+    });
   } catch (err) {
     console.error('Erro inesperado ao buscar transações:', err);
     return [];
@@ -742,6 +763,18 @@ export const saveFinancialCategory = async (category: Partial<FinancialCategory>
 
   if (error) {
     console.error('Erro ao salvar categoria financeira:', error);
+    return { success: false, error };
+  }
+  return { success: true };
+};
+
+/**
+ * Exclui uma categoria financeira
+ */
+export const deleteFinancialCategory = async (id: string) => {
+  const { error } = await supabase.from('financial_categories').delete().eq('id', id);
+  if (error) {
+    console.error('Erro ao excluir categoria financeira:', error);
     return { success: false, error };
   }
   return { success: true };
@@ -1080,19 +1113,26 @@ export const fetchAssets = async () => {
     console.error('Erro ao buscar ativos:', error);
     return [];
   }
-  return (data || []).map(a => ({
-    id: a.id,
-    name: a.name,
-    category: a.category,
-    purchaseDate: a.purchase_date,
-    purchaseValue: a.purchase_value,
-    currentValue: a.current_value,
-    status: a.status,
-    location: a.location,
-    responsibleId: mapUserId(a.responsible_id),
-    serialNumber: a.serial_number,
-    description: a.description
-  }));
+  return (data || []).map(a => {
+    const desc = a.description || '';
+    const match = desc.match(/\| JUSTIFICATIVA: (.*)$/);
+    const cleanDescription = match ? desc.replace(/\| JUSTIFICATIVA: (.*)$/, '').trim() : desc;
+    const lossJustification = match ? match[1].trim() : undefined;
+    return {
+      id: a.id,
+      name: a.name,
+      category: a.category,
+      purchaseDate: a.purchase_date,
+      purchaseValue: a.purchase_value,
+      currentValue: a.current_value,
+      status: a.status,
+      location: a.location,
+      responsibleId: mapUserId(a.responsible_id),
+      serialNumber: a.serial_number,
+      description: cleanDescription,
+      lossJustification: lossJustification
+    };
+  });
 };
 
 /**
@@ -1122,6 +1162,10 @@ export const saveAsset = async (asset: Partial<Asset>) => {
 
   const responsible_id = resolveDbUserId(asset.responsibleId);
 
+  const serializedDescription = asset.lossJustification
+    ? `${asset.description || ''} | JUSTIFICATIVA: ${asset.lossJustification}`.trim()
+    : asset.description;
+
   const { error } = await supabase.from('assets').upsert({
     id: asset.id || undefined,
     name: asset.name,
@@ -1133,7 +1177,7 @@ export const saveAsset = async (asset: Partial<Asset>) => {
     location: asset.location,
     responsible_id: responsible_id,
     serial_number: asset.serialNumber,
-    description: asset.description
+    description: serializedDescription
   });
 
   if (error) {

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Modal } from './Modal';
 import { 
@@ -52,13 +51,25 @@ import {
     Truck,
     Smartphone,
     Wrench,
-    Trash2
+    Trash2,
+    Sparkles,
+    AlertTriangle,
+    PlusCircle,
+    SlidersHorizontal,
+    Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, Legend } from 'recharts';
+import { 
+    saveCreditCard, 
+    deleteCreditCard, 
+    saveBankAccount, 
+    deleteBankAccount,
+    saveFinancialCategory,
+    deleteFinancialCategory
+} from '../services/supabaseService';
 import { analyzeFinancialHealth } from '../services/aiService';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
-import { saveCreditCard, deleteCreditCard, saveBankAccount, deleteBankAccount } from '../services/supabaseService';
-import { FinancialReports } from './FinancialReports';
+import { CommissionDashboard } from './CommissionDashboard';
 
 interface FinancialsProps {
     bankAccounts: BankAccount[];
@@ -95,12 +106,10 @@ interface FinancialsProps {
     onDeleteStockItem?: (id: string) => Promise<void>;
     onSaveAsset?: (asset: Partial<Asset>) => Promise<void>;
     onDeleteAsset?: (id: string) => Promise<void>;
-    onSaveCashSession?: (session: Partial<CashRegisterSession>) => Promise<void>;
-    onSaveCashMovement?: (movement: Partial<CashMovement>) => Promise<void>;
     initialTab?: TabType;
 }
 
-type TabType = 'DASHBOARD' | 'ACCOUNTS' | 'CARDS' | 'TRANSACTIONS' | 'INVOICES' | 'STOCK' | 'ASSETS' | 'REPORTS';
+type TabType = 'DASHBOARD' | 'ACCOUNTS_RECEIVABLE' | 'ACCOUNTS_PAYABLE' | 'CASH_FLOW' | 'ASSETS' | 'STOCK' | 'COMMISSIONS' | 'ACCOUNTS_CARDS';
 
 export const Financials: React.FC<FinancialsProps> = ({
     bankAccounts,
@@ -115,10 +124,6 @@ export const Financials: React.FC<FinancialsProps> = ({
     setStock,
     assets,
     setAssets,
-    cashSessions,
-    setCashSessions,
-    cashMovements,
-    setCashMovements,
     categories,
     setCategories,
     currentUser,
@@ -137,1483 +142,1423 @@ export const Financials: React.FC<FinancialsProps> = ({
     onDeleteStockItem,
     onSaveAsset,
     onDeleteAsset,
-    onSaveCashSession,
-    onSaveCashMovement,
     initialTab
 }) => {
     const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'DASHBOARD');
-
-    useEffect(() => {
-        if (initialTab) {
-            setActiveTab(initialTab);
-        }
-    }, [initialTab]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [typeFilter, setTypeFilter] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
-    const [selectedPeriod, setSelectedPeriod] = useState<'TODAY' | '7DAYS' | '30DAYS' | '6MONTHS' | 'CUSTOM'>('30DAYS');
     
-    // Period Filter State
+    // Core Filters
+    const [searchTerm, setSearchTerm] = useState('');
+    const [datePreset, setDatePreset] = useState<'HOJE' | '7D' | '30D' | '90D' | 'FUTURE'>('30D');
+    const [responsibleFilter, setResponsibleFilter] = useState('ALL');
+    const [categoryFilter, setCategoryFilter] = useState('ALL');
+    const [clientFilter, setClientFilter] = useState('ALL');
+
+    // Date Bounds
     const [startDate, setStartDate] = useState(() => {
         const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+        const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+        return firstDay.toISOString().split('T')[0];
     });
     const [endDate, setEndDate] = useState(() => {
         const d = new Date();
-        return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        return lastDay.toISOString().split('T')[0];
     });
 
+    // Handle Custom datePreset changes
     useEffect(() => {
-        const now = new Date();
+        const today = new Date();
         let start = new Date();
         let end = new Date();
 
-        switch (selectedPeriod) {
-            case 'TODAY':
-                start.setHours(0, 0, 0, 0);
-                end.setHours(23, 59, 59, 999);
+        switch (datePreset) {
+            case 'HOJE':
                 break;
-            case '7DAYS':
-                start.setDate(now.getDate() - 7);
+            case '7D':
+                start.setDate(today.getDate() - 7);
                 break;
-            case '30DAYS':
-                start.setDate(now.getDate() - 30);
+            case '30D':
+                start.setDate(today.getDate() - 30);
                 break;
-            case '6MONTHS':
-                start.setMonth(now.getMonth() - 6);
+            case '90D':
+                start.setDate(today.getDate() - 90);
                 break;
-            case 'CUSTOM':
-                return; // Don't update automatically
+            case 'FUTURE':
+                start = new Date();
+                end.setDate(today.getDate() + 90); // Future 90 days forecast
+                break;
         }
+        setStartDate(start.toISOString().split('T')[0]);
+        setEndDate(end.toISOString().split('T')[0]);
+    }, [datePreset]);
 
-        if (selectedPeriod !== 'CUSTOM') {
-            setStartDate(start.toISOString().split('T')[0]);
-            setEndDate(end.toISOString().split('T')[0]);
-        }
-    }, [selectedPeriod]);
-
-    const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+    // Modals
+    const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+    const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+    const [isAssetLossModalOpen, setIsAssetLossModalOpen] = useState(false);
+    const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const [isCardModalOpen, setIsCardModalOpen] = useState(false);
-    const [isStockModalOpen, setIsStockModalOpen] = useState(false);
-    const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
-    const [isCashMovementModalOpen, setIsCashMovementModalOpen] = useState(false);
-    const [isAiAnalysisLoading, setIsAiAnalysisLoading] = useState(false);
+
+    // Editing selection
+    const [editingTx, setEditingTx] = useState<Partial<FinancialTransaction> | null>(null);
+    const [editingAsset, setEditingAsset] = useState<Partial<Asset> | null>(null);
+    const [assetForLoss, setAssetForLoss] = useState<Asset | null>(null);
+    const [lossJustificationText, setLossJustificationText] = useState('');
+    const [editingStock, setEditingStock] = useState<Partial<StockItem> | null>(null);
+    const [editingCategory, setEditingCategory] = useState<Partial<FinancialCategory> | null>(null);
+    const [editingAccount, setEditingAccount] = useState<Partial<BankAccount> | null>(null);
+    const [editingCard, setEditingCard] = useState<Partial<CreditCard> | null>(null);
+
+    // AI Analysis Cache
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+    const [isAiLoading, setIsAiLoading] = useState(false);
 
-    const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-    const [editingCardId, setEditingCardId] = useState<string | null>(null);
-    const [editingStockId, setEditingStockId] = useState<string | null>(null);
-    const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
-
+    // Clear direct selections from navigation
     useEffect(() => {
         if (selectedTransactionId) {
-            setActiveTab('TRANSACTIONS');
-            // We could also set a search term or highlight it
-            setSearchTerm(selectedTransactionId); 
+            setActiveTab('ACCOUNTS_RECEIVABLE');
+            setSearchTerm(selectedTransactionId);
             if (onClearSelectedTransaction) onClearSelectedTransaction();
         }
     }, [selectedTransactionId, onClearSelectedTransaction]);
 
     useEffect(() => {
         if (selectedInvoiceId) {
-            setActiveTab('INVOICES');
+            setActiveTab('CASH_FLOW');
             if (onClearSelectedInvoice) onClearSelectedInvoice();
         }
     }, [selectedInvoiceId, onClearSelectedInvoice]);
-    
-    // Form States
-    const [newTransaction, setNewTransaction] = useState<Partial<FinancialTransaction & { isRecurring?: boolean; recurrenceMonths?: number }>>({
-        type: 'EXPENSE',
-        status: 'PAID',
-        date: new Date().toISOString().split('T')[0],
-        isRecurring: false,
-        recurrenceMonths: 1
-    });
 
-    const [newAccount, setNewAccount] = useState<Partial<BankAccount>>({
-        type: 'CHECKING',
-        status: 'ACTIVE',
-        balance: 0,
-        color: '#3b82f6'
-    });
+    // Prepopulate system with default categories if empty
+    const ensureDefaultCategories = async () => {
+        const defaults: Omit<FinancialCategory, 'id'>[] = [
+            { name: 'Salários', type: 'EXPENSE', color: '#f43f5e' },
+            { name: 'Freelancers', type: 'EXPENSE', color: '#f97316' },
+            { name: 'Tráfego Pago', type: 'EXPENSE', color: '#3b82f6' },
+            { name: 'Assinaturas', type: 'EXPENSE', color: '#a855f7' },
+            { name: 'Impressões', type: 'EXPENSE', color: '#eab308' },
+            { name: 'Equipamentos', type: 'EXPENSE', color: '#06b6d4' },
+            { name: 'Impostos', type: 'EXPENSE', color: '#ec4899' },
+            { name: 'Honorários de Clientes', type: 'INCOME', color: '#10b981' }
+        ];
 
-    const [newCard, setNewCard] = useState<Partial<CreditCard>>({
-        status: 'ACTIVE',
-        limit: 0,
-        availableLimit: 0,
-        color: '#000000',
-        brand: 'Visa'
-    });
-
-    const [newStockItem, setNewStockItem] = useState<Partial<StockItem>>({
-        quantity: 0,
-        minQuantity: 0,
-        price: 0
-    });
-
-    const [newAsset, setNewAsset] = useState<Partial<Asset>>({
-        category: 'HARDWARE',
-        status: 'ACTIVE',
-        purchaseValue: 0,
-        currentValue: 0,
-        purchaseDate: new Date().toISOString().split('T')[0]
-    });
-
-    const [newCashMovement, setNewCashMovement] = useState<Partial<CashMovement>>({
-        type: 'IN',
-        amount: 0,
-        category: 'SALE'
-    });
-
-    // Access Control Filtering
-    const filteredTransactions = useMemo(() => {
-        let base = transactions;
-        
-        if (currentUser.role === 'MANAGER' || currentUser.role === 'COMMERCIAL') {
-            const userSquad = squads.find(s => s.members.includes(currentUser.id));
-            base = transactions.filter(t => 
-                t.responsibleId === currentUser.id || 
-                (userSquad && t.squadId === userSquad.id) ||
-                (currentUser.role === 'COMMERCIAL') // Commercial sees all for analysis as per request
-            );
-        } else if (currentUser.role === 'EMPLOYEE') {
-            return []; // Should not have access anyway
-        }
-
-        if (searchTerm) {
-            base = base.filter(t => 
-                t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                clients.find(c => c.id === t.clientId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        }
-
-        if (typeFilter !== 'ALL') {
-            base = base.filter(t => t.type === typeFilter);
-        }
-
-        // Period Filter
-        if (startDate && endDate) {
-            base = base.filter(t => t.date >= startDate && t.date <= endDate);
-        }
-
-        return base.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [transactions, currentUser, squads, searchTerm, clients, typeFilter, startDate, endDate]);
-
-    // Stats
-    const stats = useMemo(() => {
-        const totalBalance = bankAccounts.reduce((acc, curr) => acc + curr.balance, 0);
-        
-        const filteredTxs = transactions.filter(t => 
-            t.status === 'PAID' && 
-            t.date >= startDate && 
-            t.date <= endDate
-        );
-
-        const monthlyIncome = filteredTxs
-            .filter(t => t.type === 'INCOME')
-            .reduce((acc, curr) => acc + curr.amount, 0);
-            
-        const monthlyExpense = filteredTxs
-            .filter(t => t.type === 'EXPENSE')
-            .reduce((acc, curr) => acc + curr.amount, 0);
-            
-        const cardDebt = creditCards.reduce((acc, curr) => acc + (curr.limit - curr.availableLimit), 0);
-
-        const activeAssetsValue = assets
-            .filter(a => a.status === 'ACTIVE')
-            .reduce((acc, curr) => acc + (curr.currentValue || 0), 0);
-            
-        const disposedAssetsValue = assets
-            .filter(a => a.status === 'DISPOSED')
-            .reduce((acc, curr) => acc + (curr.currentValue || 0), 0);
-
-        return { totalBalance, monthlyIncome, monthlyExpense, cardDebt, activeAssetsValue, disposedAssetsValue };
-    }, [bankAccounts, transactions, creditCards, assets, startDate, endDate]);
-
-    const handleDownloadReport = () => {
-        const headers = ['Data', 'Descrição', 'Tipo', 'Valor', 'Status', 'Categoria'];
-        const rows = filteredTransactions.map(t => [
-            t.date.split('-').reverse().join('/'),
-            t.description,
-            t.type === 'INCOME' ? 'Receita' : 'Despesa',
-            t.amount.toString(),
-            t.status === 'PAID' ? 'Pago' : 'Pendente',
-            categories.find(c => c.id === t.categoryId)?.name || 'Outros'
-        ]);
-
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(r => r.join(','))
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `relatorio_financeiro_${startDate}_${endDate}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const filteredInvoices = useMemo(() => {
-        return cardInvoices
-            .filter(inv => inv.dueDate >= startDate && inv.dueDate <= endDate)
-            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-    }, [cardInvoices, startDate, endDate]);
-
-    const currentCashSession = useMemo(() => {
-        return cashSessions.find(s => s.status === 'OPEN');
-    }, [cashSessions]);
-
-    const sessionMovements = useMemo(() => {
-        if (!currentCashSession) return [];
-        return cashMovements.filter(m => m.sessionId === currentCashSession.id);
-    }, [cashMovements, currentCashSession]);
-
-    const handleAiAnalysis = async () => {
-        setIsAiAnalysisLoading(true);
-        try {
-            const analysis = await analyzeFinancialHealth(transactions);
-            setAiAnalysis(analysis);
-        } catch (err) {
-            console.error("Erro na análise da IA:", err);
-        } finally {
-            setIsAiAnalysisLoading(false);
-        }
-    };
-
-    const handleOpenCashRegister = async () => {
-        const initialAmount = parseFloat(prompt('Informe o valor inicial do caixa:', '0') || '0');
-        const newSession: CashRegisterSession = {
-            id: `cs-${Date.now()}`,
-            openedAt: new Date().toISOString(),
-            openedBy: currentUser.id,
-            initialAmount,
-            status: 'OPEN'
-        };
-        
-        if (onSaveCashSession) {
-            await onSaveCashSession(newSession);
-        } else {
-            setCashSessions(prev => [newSession, ...prev]);
-        }
-    };
-
-    const handleCloseCashRegister = async () => {
-        if (!currentCashSession) return;
-        
         const confirm = await openConfirm({
-            title: 'Fechar Caixa',
-            description: 'Tem certeza que deseja fechar o caixa agora?',
+            title: 'Configurar Categorias Padrão',
+            description: 'Deseja criar as categorias recomendadas (Salários, Freelancers, Tráfego Pago, Assinaturas, Impressões, Equipamentos, Impostos) no seu banco de dados financeiro?',
             variant: 'info'
         });
 
         if (confirm) {
-            const finalAmount = sessionMovements.reduce((acc, m) => m.type === 'IN' ? acc + m.amount : acc - m.amount, currentCashSession.initialAmount);
-            const updatedSession: CashRegisterSession = {
-                ...currentCashSession,
-                status: 'CLOSED',
-                closedAt: new Date().toISOString(),
-                closedBy: currentUser.id,
-                finalAmount,
-                expectedAmount: finalAmount
-            };
+            const list: FinancialCategory[] = [];
+            for (const item of defaults) {
+                // Check if already exists
+                const existing = categories.find(c => c.name.toLowerCase() === item.name.toLowerCase());
+                if (!existing) {
+                    const id = `cat-${Math.random().toString(36).substring(2, 9)}`;
+                    const newCat = { id, ...item };
+                    await saveFinancialCategory(newCat);
+                    list.push(newCat);
+                } else {
+                    list.push(existing);
+                }
+            }
+            setCategories(prev => {
+                const map = new Map(prev.map(c => [c.id, c]));
+                list.forEach(c => map.set(c.id, c));
+                return Array.from(map.values());
+            });
+        }
+    };
 
-            if (onSaveCashSession) {
-                await onSaveCashSession(updatedSession);
+    // Filtered lists
+    const filteredTxs = useMemo(() => {
+        return transactions.filter(t => {
+            const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (clients.find(c => c.id === t.clientId)?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesResponsible = responsibleFilter === 'ALL' || t.responsibleId === responsibleFilter;
+            const matchesCategory = categoryFilter === 'ALL' || t.categoryId === categoryFilter;
+            const matchesClient = clientFilter === 'ALL' || t.clientId === clientFilter;
+            const matchesDate = datePreset === 'FUTURE' ? (t.date >= startDate) : (t.date >= startDate && t.date <= endDate);
+
+            return matchesSearch && matchesResponsible && matchesCategory && matchesClient && matchesDate;
+        }).sort((a, b) => b.date.localeCompare(a.date));
+    }, [transactions, searchTerm, responsibleFilter, categoryFilter, clientFilter, startDate, endDate, datePreset, clients]);
+
+    // Derived Statistics
+    const stats = useMemo(() => {
+        const totalBalance = bankAccounts.reduce((sum, curr) => sum + curr.balance, 0);
+        
+        // Sum up from all transactions matching current filters
+        const inPeriodPaidIncome = transactions
+            .filter(t => t.type === 'INCOME' && t.status === 'PAID' && t.date >= startDate && t.date <= endDate)
+            .reduce((sum, t) => sum + t.amount, 0);
+
+        const inPeriodPaidExpense = transactions
+            .filter(t => t.type === 'EXPENSE' && t.status === 'PAID' && t.date >= startDate && t.date <= endDate)
+            .reduce((sum, t) => sum + t.amount, 0);
+
+        const periodProfit = inPeriodPaidIncome - inPeriodPaidExpense;
+
+        // Active vs Disposed Assets write-offs value
+        const activeAssetsWorth = assets
+            .filter(a => a.status === 'ACTIVE' || a.status === 'MAINTENANCE')
+            .reduce((sum, a) => sum + (a.currentValue || 0), 0);
+
+        const justifiedAssetLossesSum = assets
+            .filter(a => a.status === 'DISPOSED')
+            .reduce((sum, a) => sum + (a.purchaseValue || 0), 0);
+
+        // MRR Calculation
+        const recurringMRR = clients
+            .filter(c => c.status === 'ACTIVE' && c.isRecurring && c.monthlyValue)
+            .reduce((sum, c) => sum + (c.monthlyValue || 0), 0);
+
+        return {
+            totalBalance,
+            inPeriodPaidIncome,
+            inPeriodPaidExpense,
+            periodProfit,
+            activeAssetsWorth,
+            justifiedAssetLossesSum,
+            recurringMRR
+        };
+    }, [bankAccounts, transactions, assets, clients, startDate, endDate]);
+
+    // Handle quick AI analysis request
+    const handleTriggerAiAnalysis = async () => {
+        setIsAiLoading(true);
+        try {
+            const briefResult = await analyzeFinancialHealth(transactions);
+            setAiAnalysis(briefResult);
+        } catch (err) {
+            console.error(err);
+            setAiAnalysis('Não foi possível obter a análise da inteligência artificial neste momento.');
+        } finally {
+            setIsAiLoading(false);
+        }
+    };
+
+    // Recurrent clients integration calculations
+    const recurrentClients = useMemo(() => {
+        return clients.filter(c => c.status === 'ACTIVE' && c.isRecurring && (c.monthlyValue || 0) > 0);
+    }, [clients]);
+
+    // Future Projections Calculation (Requirement 3)
+    const forecastTimeline = useMemo(() => {
+        const months = 3;
+        const timeline: { monthName: string, expectedIncome: number, expectedExpense: number, netPos: number }[] = [];
+        const today = new Date();
+
+        for (let i = 0; i < months; i++) {
+            const d = new Date(today.getFullYear(), today.getMonth() + i, 15);
+            const yyyymm = d.toISOString().substring(0, 7);
+            const monthLabel = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+
+            // Future pending ledger items in this month
+            const ledgerIncome = transactions
+                .filter(t => t.type === 'INCOME' && t.status === 'PENDING' && t.date.substring(0, 7) === yyyymm)
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            const ledgerExpense = transactions
+                .filter(t => t.type === 'EXPENSE' && t.status === 'PENDING' && t.date.substring(0, 7) === yyyymm)
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            // Add client contract baseline recurring expectancies for this month (as secure projections)
+            const contractMonthlyIncome = recurrentClients.reduce((sum, c) => sum + (c.monthlyValue || 0), 0);
+
+            timeline.push({
+                monthName: monthLabel.toUpperCase(),
+                expectedIncome: ledgerIncome + contractMonthlyIncome,
+                expectedExpense: ledgerExpense,
+                netPos: (ledgerIncome + contractMonthlyIncome) - ledgerExpense
+            });
+        }
+        return timeline;
+    }, [transactions, recurrentClients]);
+
+    // Ledger Transaction Save/Toggle utilities
+    const handleSaveTransactionLocal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingTx?.description || !editingTx?.amount || !editingTx?.categoryId) return;
+
+        const txPayload: FinancialTransaction = {
+            id: editingTx.id || `tx-${Date.now()}`,
+            description: editingTx.description,
+            amount: Number(editingTx.amount),
+            type: editingTx.type || 'EXPENSE',
+            date: editingTx.date || new Date().toISOString().split('T')[0],
+            status: editingTx.status || 'PENDING',
+            categoryId: editingTx.categoryId,
+            bankAccountId: editingTx.bankAccountId || undefined,
+            clientId: editingTx.clientId || undefined,
+            responsibleId: editingTx.responsibleId || currentUser.id,
+            createdAt: editingTx.createdAt || Date.now()
+        };
+
+        if (onSaveTransaction) {
+            await onSaveTransaction(txPayload);
+        } else {
+            setTransactions(prev => [txPayload, ...prev.filter(x => x.id !== txPayload.id)]);
+        }
+
+        // Adjust Account balance if status switched to PAID inside this action modal
+        if (txPayload.status === 'PAID' && txPayload.bankAccountId) {
+            setBankAccounts(prev => prev.map(acc => {
+                if (acc.id === txPayload.bankAccountId) {
+                    const diff = txPayload.type === 'INCOME' ? txPayload.amount : -txPayload.amount;
+                    const updated = { ...acc, balance: acc.balance + diff };
+                    saveBankAccount(updated).catch(console.error);
+                    return updated;
+                }
+                return acc;
+            }));
+        }
+
+        setIsTxModalOpen(false);
+        setEditingTx(null);
+    };
+
+    const handleToggleTxStatus = async (tx: FinancialTransaction) => {
+        const nextStatus = tx.status === 'PAID' ? 'PENDING' : 'PAID';
+        const updated: FinancialTransaction = { ...tx, status: nextStatus };
+
+        if (onSaveTransaction) {
+            await onSaveTransaction(updated);
+        } else {
+            setTransactions(prev => prev.map(t => t.id === tx.id ? updated : t));
+        }
+
+        // Adjust bank account balance on payment toggle
+        if (tx.bankAccountId) {
+            setBankAccounts(prev => prev.map(acc => {
+                if (acc.id === tx.bankAccountId) {
+                    const val = tx.type === 'INCOME' ? tx.amount : -tx.amount;
+                    const factor = nextStatus === 'PAID' ? val : -val;
+                    const updatedAcc = { ...acc, balance: acc.balance + factor };
+                    saveBankAccount(updatedAcc).catch(console.error);
+                    return updatedAcc;
+                }
+                return acc;
+            }));
+        }
+    };
+
+    const handleDeleteTxLocal = async (id: string) => {
+        const confirm = await openConfirm({
+            title: 'Excluir Transação',
+            description: 'Tem certeza de que deseja expurgar permanentemente este registro financeiro?',
+            variant: 'danger'
+        });
+        if (confirm) {
+            const matched = transactions.find(t => t.id === id);
+            if (matched && matched.status === 'PAID' && matched.bankAccountId) {
+                // Revert account balance before deleting
+                setBankAccounts(prev => prev.map(acc => {
+                    if (acc.id === matched.bankAccountId) {
+                        const amt = matched.type === 'INCOME' ? -matched.amount : matched.amount;
+                        const updated = { ...acc, balance: acc.balance + amt };
+                        saveBankAccount(updated).catch(console.error);
+                        return updated;
+                    }
+                    return acc;
+                }));
+            }
+            if (onDeleteTransaction) {
+                await onDeleteTransaction(id);
             } else {
-                setCashSessions(prev => prev.map(s => s.id === currentCashSession.id ? updatedSession : s));
+                setTransactions(prev => prev.filter(t => t.id !== id));
             }
         }
     };
 
-    const handleAddCashMovement = async () => {
-        if (!currentCashSession || !newCashMovement.amount || !newCashMovement.description) return;
+    // Client Monthly Recurring Billing Trigger (Requirement 4)
+    const handleLaunchClientMonthlyFee = async (client: Client) => {
+        if (!client.monthlyValue) return;
 
-        const movement: CashMovement = {
-            id: `cm-${Date.now()}`,
-            sessionId: currentCashSession.id,
-            type: newCashMovement.type as 'IN' | 'OUT',
-            amount: newCashMovement.amount,
-            description: newCashMovement.description,
-            timestamp: new Date().toISOString(),
-            category: newCashMovement.category as any
+        const confirm = await openConfirm({
+            title: 'Lançar Faturamento Mensal',
+            description: `Deseja registrar o faturamento de R$ ${client.monthlyValue.toLocaleString('pt-BR')} do cliente ${client.name} para a competência de hoje?`,
+            variant: 'info'
+        });
+
+        if (confirm) {
+            // Find appropriate Income Category
+            const incCat = categories.find(c => c.type === 'INCOME' || c.type === 'BOTH') || categories[0];
+            const matchedBankAccount = bankAccounts[0]; // pick first default account if available
+
+            const billingTransaction: FinancialTransaction = {
+                id: `billing-${client.id}-${Date.now()}`,
+                description: `MENSALIDADE CONTRATUAL - ${client.name.toUpperCase()}`,
+                amount: client.monthlyValue,
+                type: 'INCOME',
+                date: new Date().toISOString().split('T')[0],
+                status: 'PENDING',
+                categoryId: incCat?.id || 'cat-income-default',
+                clientId: client.id,
+                bankAccountId: matchedBankAccount?.id || undefined,
+                responsibleId: client.responsibleId || currentUser.id,
+                createdAt: Date.now()
+            };
+
+            if (onSaveTransaction) {
+                await onSaveTransaction(billingTransaction);
+            } else {
+                setTransactions(prev => [billingTransaction, ...prev]);
+            }
+        }
+    };
+
+    // Editable Categories save/delete
+    const handleSaveCategoryLocal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingCategory?.name) return;
+
+        const catPayload: FinancialCategory = {
+            id: editingCategory.id || `cat-${Math.random().toString(36).substring(2, 9)}`,
+            name: editingCategory.name,
+            type: editingCategory.type || 'EXPENSE',
+            color: editingCategory.color || '#64748b'
         };
 
-        if (onSaveCashMovement) {
-            await onSaveCashMovement(movement);
-        } else {
-            setCashMovements(prev => [...prev, movement]);
+        const res = await saveFinancialCategory(catPayload);
+        if (res.success) {
+            setCategories(prev => {
+                const match = prev.find(x => x.id === catPayload.id);
+                if (match) return prev.map(x => x.id === catPayload.id ? catPayload : x);
+                return [...prev, catPayload];
+            });
+            setIsCategoryModalOpen(false);
+            setEditingCategory(null);
+        }
+    };
+
+    const handleDeleteCategoryLocal = async (id: string) => {
+        const isProtected = ['cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat7'].includes(id);
+        if (isProtected) {
+            alert('Esta categoria é do sistema original e protegida contra exclusão.');
+            return;
         }
 
-        // Also create a financial transaction to reflect in the main ledger
-        const transaction: FinancialTransaction = {
-            id: `ft-cm-${Date.now()}`,
-            description: `[CAIXA] ${movement.description}`,
-            amount: movement.amount,
-            type: movement.type === 'IN' ? 'INCOME' : 'EXPENSE',
+        const confirm = await openConfirm({
+            title: 'Remover Categoria',
+            description: 'Deseja excluir esta categoria? As transações vinculadas a ela não serão excluídas, mas ficarão sem categoria vinculada.',
+            variant: 'danger'
+        });
+
+        if (confirm) {
+            const res = await deleteFinancialCategory(id);
+            if (res.success) {
+                setCategories(prev => prev.filter(c => c.id !== id));
+            }
+        }
+    };
+
+    const handleSaveBankAccountLocal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingAccount?.name || !editingAccount?.bankName) return;
+
+        const accPayload: BankAccount = {
+            id: editingAccount.id || `ba-${Math.random().toString(36).substring(2, 9)}`,
+            name: editingAccount.name,
+            bankName: editingAccount.bankName,
+            type: editingAccount.type || 'CHECKING',
+            balance: editingAccount.balance !== undefined ? Number(editingAccount.balance) : 0,
+            color: editingAccount.color || '#10b981',
+            status: editingAccount.status || 'ACTIVE'
+        };
+
+        const res = await saveBankAccount(accPayload);
+        if (res.success) {
+            setBankAccounts(prev => {
+                const match = prev.find(x => x.id === accPayload.id);
+                if (match) return prev.map(x => x.id === accPayload.id ? accPayload : x);
+                return [...prev, accPayload];
+            });
+            setIsAccountModalOpen(false);
+            setEditingAccount(null);
+        } else {
+            alert('Erro ao salvar conta bancária no banco de dados.');
+        }
+    };
+
+    const handleDeleteBankAccountLocal = async (id: string) => {
+        const confirm = await openConfirm({
+            title: 'Excluir Conta Bancária',
+            description: 'Deseja excluir esta conta bancária? Todas as transações vinculadas a ela perderão o vínculo.',
+            variant: 'danger'
+        });
+
+        if (confirm) {
+            const res = await deleteBankAccount(id);
+            if (res.success) {
+                setBankAccounts(prev => prev.filter(c => c.id !== id));
+            } else {
+                alert('Erro ao excluir conta bancária do banco de dados.');
+            }
+        }
+    };
+
+    const handleSaveCreditCardLocal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingCard?.name || !editingCard?.brand) return;
+
+        const cardPayload: CreditCard = {
+            id: editingCard.id || `cc-${Math.random().toString(36).substring(2, 9)}`,
+            name: editingCard.name,
+            brand: editingCard.brand,
+            limit: editingCard.limit !== undefined ? Number(editingCard.limit) : 0,
+            availableLimit: editingCard.availableLimit !== undefined ? Number(editingCard.availableLimit) : 0,
+            closingDay: editingCard.closingDay || 10,
+            dueDate: editingCard.dueDate || 20,
+            color: editingCard.color || '#000000',
+            status: editingCard.status || 'ACTIVE'
+        };
+
+        const res = await saveCreditCard(cardPayload);
+        if (res.success) {
+            setCreditCards(prev => {
+                const match = prev.find(x => x.id === cardPayload.id);
+                if (match) return prev.map(x => x.id === cardPayload.id ? cardPayload : x);
+                return [...prev, cardPayload];
+            });
+            setIsCardModalOpen(false);
+            setEditingCard(null);
+        } else {
+            alert('Erro ao salvar cartão no banco de dados.');
+        }
+    };
+
+    const handleDeleteCreditCardLocal = async (id: string) => {
+        const confirm = await openConfirm({
+            title: 'Excluir Cartão de Crédito',
+            description: 'Deseja excluir este cartão de crédito? Todas as faturas e transações vinculadas a ele perderão o vínculo.',
+            variant: 'danger'
+        });
+
+        if (confirm) {
+            const res = await deleteCreditCard(id);
+            if (res.success) {
+                setCreditCards(prev => prev.filter(c => c.id !== id));
+            } else {
+                alert('Erro ao excluir cartão do banco de dados.');
+            }
+        }
+    };
+
+    // Assets Control with written loss justifications (Requirement 5)
+    const handleSaveAssetLocal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingAsset?.name || !editingAsset?.purchaseValue) return;
+
+        const payload: Asset = {
+            id: editingAsset.id || `as-${Date.now()}`,
+            name: editingAsset.name,
+            category: editingAsset.category || 'HARDWARE',
+            purchaseDate: editingAsset.purchaseDate || new Date().toISOString().split('T')[0],
+            purchaseValue: Number(editingAsset.purchaseValue),
+            currentValue: Number(editingAsset.currentValue || editingAsset.purchaseValue),
+            status: editingAsset.status || 'ACTIVE',
+            location: editingAsset.location || '',
+            responsibleId: editingAsset.responsibleId || undefined,
+            serialNumber: editingAsset.serialNumber || '',
+            description: editingAsset.description || '',
+            lossJustification: editingAsset.lossJustification || undefined
+        };
+
+        if (onSaveAsset) {
+            await onSaveAsset(payload);
+        } else {
+            setAssets(prev => [payload, ...prev.filter(x => x.id !== payload.id)]);
+        }
+        setIsAssetModalOpen(false);
+        setEditingAsset(null);
+    };
+
+    // Trigger explicit asset loss justification write-off
+    const handleInitiateAssetLoss = (asset: Asset) => {
+        setAssetForLoss(asset);
+        setLossJustificationText('');
+        setIsAssetLossModalOpen(true);
+    };
+
+    const handleConfirmAssetLoss = async () => {
+        if (!assetForLoss || !lossJustificationText.trim()) return;
+
+        const updated: Asset = {
+            ...assetForLoss,
+            status: 'DISPOSED',
+            currentValue: 0, // Valueless now
+            lossJustification: lossJustificationText.trim()
+        };
+
+        if (onSaveAsset) {
+            await onSaveAsset(updated);
+        } else {
+            setAssets(prev => prev.map(a => a.id === assetForLoss.id ? updated : a));
+        }
+
+        // Also optionally register a specific Expense transaction reflecting this loss
+        const lossCat = categories.find(c => c.name.toLowerCase().includes('equipamento') || c.name.toLowerCase().includes('imposto')) || categories[0];
+        const lossTransaction: FinancialTransaction = {
+            id: `assetloss-${updated.id}-${Date.now()}`,
+            description: `[PREJUÍZO ATIVO] BAIXA DE ${updated.name.toUpperCase()} - MOTIVO: ${lossJustificationText.toUpperCase()}`,
+            amount: updated.purchaseValue,
+            type: 'EXPENSE',
             date: new Date().toISOString().split('T')[0],
-            status: 'PAID',
-            categoryId: movement.type === 'IN' ? 'cat1' : 'cat5', // Default categories
+            status: 'PAID', // Book-keeper expense
+            categoryId: lossCat?.id || 'loss-cat',
             responsibleId: currentUser.id,
             createdAt: Date.now()
         };
 
         if (onSaveTransaction) {
-            await onSaveTransaction(transaction);
+            await onSaveTransaction(lossTransaction);
         } else {
-            setTransactions(prev => [transaction, ...prev]);
+            setTransactions(prev => [lossTransaction, ...prev]);
         }
 
-        setIsCashMovementModalOpen(false);
-        setNewCashMovement({ type: 'IN', amount: 0, category: 'SALE' });
+        setIsAssetLossModalOpen(false);
+        setAssetForLoss(null);
     };
 
-    const handleAddStockItem = async () => {
-        if (!newStockItem.name || !newStockItem.quantity) return;
+    // Inventory Controls (Requirement 6)
+    const handleSaveStockLocal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingStock?.name || editingStock.quantity === undefined) return;
 
-        if (editingStockId) {
-            const updatedItem = { ...newStockItem, id: editingStockId };
-            if (onSaveStockItem) {
-                await onSaveStockItem(updatedItem);
-            } else {
-                setStock(prev => prev.map(s => s.id === editingStockId ? updatedItem as StockItem : s));
-            }
-        } else {
-            const item: StockItem = {
-                id: `st-${Date.now()}`,
-                name: newStockItem.name,
-                category: newStockItem.category || 'Geral',
-                quantity: newStockItem.quantity,
-                minQuantity: newStockItem.minQuantity || 0,
-                unit: newStockItem.unit || 'un',
-                price: newStockItem.price || 0,
-                location: newStockItem.location
-            };
-            if (onSaveStockItem) {
-                await onSaveStockItem(item);
-            } else {
-                setStock(prev => [...prev, item]);
-            }
-        }
-
-        setIsStockModalOpen(false);
-        setEditingStockId(null);
-        setNewStockItem({ quantity: 0, minQuantity: 0, price: 0 });
-    };
-
-    const handleAddAsset = async () => {
-        if (!newAsset.name || !newAsset.purchaseValue) return;
-
-        if (editingAssetId) {
-            const updatedAsset = { ...newAsset, id: editingAssetId };
-            if (onSaveAsset) {
-                await onSaveAsset(updatedAsset);
-            } else {
-                setAssets(prev => prev.map(a => a.id === editingAssetId ? updatedAsset as Asset : a));
-            }
-        } else {
-            const asset: Asset = {
-                id: `as-${Date.now()}`,
-                name: newAsset.name,
-                category: newAsset.category as any,
-                purchaseDate: newAsset.purchaseDate || new Date().toISOString().split('T')[0],
-                purchaseValue: newAsset.purchaseValue,
-                currentValue: newAsset.currentValue || newAsset.purchaseValue,
-                status: newAsset.status as any,
-                responsibleId: newAsset.responsibleId,
-                serialNumber: newAsset.serialNumber,
-                description: newAsset.description
-            };
-            if (onSaveAsset) {
-                await onSaveAsset(asset);
-            } else {
-                setAssets(prev => [...prev, asset]);
-            }
-        }
-
-        setIsAssetModalOpen(false);
-        setEditingAssetId(null);
-        setNewAsset({ category: 'HARDWARE', status: 'ACTIVE', purchaseValue: 0, currentValue: 0, purchaseDate: new Date().toISOString().split('T')[0] });
-    };
-
-    const chartData = useMemo(() => {
-        // Simple data for the AreaChart
-        const days = 15;
-        const data = [];
-        const today = new Date();
-        
-        for (let i = days; i >= 0; i--) {
-            const date = new Date(today);
-            date.setDate(today.getDate() - i);
-            const dateStr = date.toISOString().split('T')[0];
-            
-            const income = transactions
-                .filter(t => t.date === dateStr && t.type === 'INCOME' && t.status === 'PAID')
-                .reduce((acc, t) => acc + t.amount, 0);
-            
-            const expense = transactions
-                .filter(t => t.date === dateStr && t.type === 'EXPENSE' && t.status === 'PAID')
-                .reduce((acc, t) => acc + t.amount, 0);
-            
-            data.push({
-                name: dateStr.split('-').reverse().slice(0, 2).join('/'),
-                receita: income,
-                despesa: expense
-            });
-        }
-        return data;
-    }, [transactions]);
-
-    const handleAddTransaction = async () => {
-        if (!newTransaction.description || !newTransaction.amount) return;
-        
-        const recurrenceId = newTransaction.isRecurring ? `rec-${Date.now()}` : undefined;
-        const months = newTransaction.isRecurring ? (newTransaction.recurrenceMonths || 1) : 1;
-        
-        const newTransactions: FinancialTransaction[] = [];
-        const baseDate = new Date(newTransaction.date || new Date().toISOString().split('T')[0]);
-
-        for (let i = 0; i < months; i++) {
-            const txDate = new Date(baseDate);
-            txDate.setMonth(baseDate.getMonth() + i);
-            
-            // Handle day overflow (e.g., Jan 31 -> Feb 28)
-            if (txDate.getDate() !== baseDate.getDate()) {
-                txDate.setDate(0);
-            }
-
-            const transaction: FinancialTransaction = {
-                id: `${Date.now()}-${i}`,
-                description: newTransaction.description,
-                amount: newTransaction.amount,
-                type: newTransaction.type as 'INCOME' | 'EXPENSE',
-                date: txDate.toISOString().split('T')[0],
-                status: i === 0 ? (newTransaction.status as 'PAID' | 'PENDING') : 'PENDING',
-                categoryId: newTransaction.categoryId || 'cat1',
-                bankAccountId: newTransaction.bankAccountId,
-                creditCardId: newTransaction.creditCardId,
-                clientId: newTransaction.clientId,
-                squadId: newTransaction.squadId,
-                responsibleId: currentUser.id,
-                recurrenceId,
-                createdAt: Date.now()
-            };
-            
-            if (onSaveTransaction) {
-                await onSaveTransaction(transaction);
-            }
-            newTransactions.push(transaction);
-        }
-
-        if (!onSaveTransaction) {
-            setTransactions(prev => [...newTransactions, ...prev]);
-        }
-
-        // Update Account Balance/Card Limit ONLY for the first transaction if PAID
-        const firstTx = newTransactions[0];
-        if (firstTx.status === 'PAID' && firstTx.bankAccountId) {
-            setBankAccounts(prev => prev.map(acc => {
-                if (acc.id === firstTx.bankAccountId) {
-                    return {
-                        ...acc,
-                        balance: firstTx.type === 'INCOME' ? acc.balance + firstTx.amount : acc.balance - firstTx.amount
-                    };
-                }
-                return acc;
-            }));
-        }
-
-        if (firstTx.type === 'EXPENSE' && firstTx.creditCardId) {
-            const currentMonth = firstTx.date.slice(0, 7); // YYYY-MM
-            
-            setCreditCards(prev => prev.map(card => {
-                if (card.id === firstTx.creditCardId) {
-                    return {
-                        ...card,
-                        availableLimit: card.availableLimit - firstTx.amount
-                    };
-                }
-                return card;
-            }));
-
-            setCardInvoices(prev => {
-                const invoiceIndex = prev.findIndex(inv => inv.creditCardId === firstTx.creditCardId && inv.month === currentMonth);
-                if (invoiceIndex >= 0) {
-                    const updatedInvoices = [...prev];
-                    updatedInvoices[invoiceIndex] = {
-                        ...updatedInvoices[invoiceIndex],
-                        amount: updatedInvoices[invoiceIndex].amount + firstTx.amount
-                    };
-                    return updatedInvoices;
-                } else {
-                    const card = creditCards.find(c => c.id === firstTx.creditCardId);
-                    const newInvoice: CardInvoice = {
-                        id: `inv-${Date.now()}`,
-                        creditCardId: firstTx.creditCardId!,
-                        month: currentMonth,
-                        amount: firstTx.amount,
-                        status: 'OPEN',
-                        dueDate: `${currentMonth}-${card?.dueDate.toString().padStart(2, '0') || '05'}`
-                    };
-                    return [...prev, newInvoice];
-                }
-            });
-        }
-
-        setIsTransactionModalOpen(false);
-        setNewTransaction({ 
-            type: 'EXPENSE', 
-            status: 'PAID', 
-            date: new Date().toISOString().split('T')[0],
-            isRecurring: false,
-            recurrenceMonths: 1
-        });
-    };
-
-    const handleAddAccount = async () => {
-        if (!newAccount.name || !newAccount.bankName) return;
-
-        try {
-            const accountToSave: BankAccount = {
-                id: editingAccountId || Date.now().toString(),
-                name: newAccount.name,
-                type: newAccount.type as any,
-                bankName: newAccount.bankName,
-                balance: newAccount.balance || 0,
-                color: newAccount.color || '#3b82f6',
-                status: 'ACTIVE'
-            };
-
-            const result = await saveBankAccount(accountToSave);
-            if (result.success) {
-                if (editingAccountId) {
-                    setBankAccounts(prev => prev.map(acc => acc.id === editingAccountId ? accountToSave : acc));
-                } else {
-                    setBankAccounts(prev => [...prev, accountToSave]);
-                }
-                setIsAccountModalOpen(false);
-                setEditingAccountId(null);
-                setNewAccount({ type: 'CHECKING', status: 'ACTIVE', balance: 0, color: '#3b82f6' });
-            } else {
-                alert('Erro ao salvar conta no banco de dados.');
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const handleDeleteAccount = async (id: string) => {
-        const confirm = await openConfirm({
-            title: 'Excluir Conta',
-            description: 'Tem certeza que deseja excluir esta conta? Todas as transações associadas a ela podem ser impactadas.',
-            variant: 'danger'
-        });
-
-        if (confirm) {
-            try {
-                const result = await deleteBankAccount(id);
-                if (result.success) {
-                    setBankAccounts(prev => prev.filter(acc => acc.id !== id));
-                } else {
-                    alert('Erro ao excluir conta do banco de dados.');
-                }
-            } catch (error) {
-                console.error(error);
-            }
-        }
-    };
-
-    const handleAddCard = async () => {
-        if (!newCard.name || !newCard.limit) return;
-
-        try {
-            const cardToSave: CreditCard = {
-                id: editingCardId || Date.now().toString(),
-                name: newCard.name,
-                brand: newCard.brand || 'Visa',
-                limit: newCard.limit,
-                availableLimit: editingCardId ? (newCard.availableLimit ?? newCard.limit) : newCard.limit,
-                closingDay: newCard.closingDay || 25,
-                dueDate: newCard.dueDate || 5,
-                color: newCard.color || '#000000',
-                status: 'ACTIVE'
-            };
-
-            const result = await saveCreditCard(cardToSave);
-            if (result.success) {
-                if (editingCardId) {
-                    setCreditCards(prev => prev.map(card => card.id === editingCardId ? cardToSave : card));
-                } else {
-                    setCreditCards(prev => [...prev, cardToSave]);
-                }
-                setIsCardModalOpen(false);
-                setEditingCardId(null);
-                setNewCard({ status: 'ACTIVE', limit: 0, availableLimit: 0, color: '#000000', brand: 'Visa' });
-            } else {
-                alert('Erro ao salvar cartão no banco de dados.');
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const handleDeleteCard = async (id: string) => {
-        const confirm = await openConfirm({
-            title: 'Excluir Cartão',
-            description: 'Tem certeza que deseja excluir este cartão? Todas as faturas associadas a ele podem ser impactadas.',
-            variant: 'danger'
-        });
-
-        if (confirm) {
-            try {
-                const result = await deleteCreditCard(id);
-                if (result.success) {
-                    setCreditCards(prev => prev.filter(c => c.id !== id));
-                    // Opcional: Limpar faturas associadas se necessário
-                } else {
-                    alert('Erro ao excluir cartão do banco de dados.');
-                }
-            } catch (error) {
-                console.error(error);
-            }
-        }
-    };
-
-    const startEditAccount = (acc: BankAccount) => {
-        setEditingAccountId(acc.id);
-        setNewAccount(acc);
-        setIsAccountModalOpen(true);
-    };
-
-    const startEditCard = (card: CreditCard) => {
-        setEditingCardId(card.id);
-        setNewCard(card);
-        setIsCardModalOpen(true);
-    };
-
-    const startEditStock = (item: StockItem) => {
-        setEditingStockId(item.id);
-        setNewStockItem(item);
-        setIsStockModalOpen(true);
-    };
-
-    const startEditAsset = (asset: Asset) => {
-        setEditingAssetId(asset.id);
-        setNewAsset(asset);
-        setIsAssetModalOpen(true);
-    };
-
-    const handleDeleteStock = async (id: string) => {
-        const confirm = await openConfirm({
-            title: 'Excluir Item de Estoque',
-            description: 'Tem certeza que deseja excluir este item do estoque?',
-            variant: 'danger'
-        });
-        if (confirm) {
-            if (onDeleteStockItem) {
-                await onDeleteStockItem(id);
-            } else {
-                setStock(prev => prev.filter(s => s.id !== id));
-            }
-        }
-    };
-
-    const handleDeleteAsset = async (id: string) => {
-        const confirm = await openConfirm({
-            title: 'Excluir Ativo',
-            description: 'Tem certeza que deseja excluir este ativo?',
-            variant: 'danger'
-        });
-        if (confirm) {
-            if (onDeleteAsset) {
-                await onDeleteAsset(id);
-            } else {
-                setAssets(prev => prev.filter(a => a.id !== id));
-            }
-        }
-    };
-
-    const toggleTransactionStatus = async (tx: FinancialTransaction) => {
-        const newStatus = tx.status === 'PAID' ? 'PENDING' : 'PAID';
-        const updatedTx = { ...tx, status: newStatus };
-
-        if (onSaveTransaction) {
-            await onSaveTransaction(updatedTx);
-        } else {
-            setTransactions(prev => prev.map(t => t.id === tx.id ? updatedTx : t));
-        }
-        
-        if (tx.bankAccountId) {
-            setBankAccounts(prev => prev.map(acc => {
-                if (acc.id === tx.bankAccountId) {
-                    const amount = tx.type === 'INCOME' ? tx.amount : -tx.amount;
-                    const diff = newStatus === 'PAID' ? amount : -amount;
-                    return { ...acc, balance: acc.balance + diff };
-                }
-                return acc;
-            }));
-        }
-
-        if (tx.type === 'EXPENSE' && tx.creditCardId) {
-            const currentMonth = tx.date.slice(0, 7);
-            setCreditCards(prev => prev.map(card => {
-                if (card.id === tx.creditCardId) {
-                    const diff = newStatus === 'PAID' ? -tx.amount : tx.amount;
-                    return { ...card, availableLimit: card.availableLimit + diff };
-                }
-                return card;
-            }));
-
-            setCardInvoices(prev => {
-                const invoiceIndex = prev.findIndex(inv => inv.creditCardId === tx.creditCardId && inv.month === currentMonth);
-                if (invoiceIndex >= 0) {
-                    const updatedInvoices = [...prev];
-                    const diff = newStatus === 'PAID' ? tx.amount : -tx.amount;
-                    updatedInvoices[invoiceIndex] = {
-                        ...updatedInvoices[invoiceIndex],
-                        amount: updatedInvoices[invoiceIndex].amount + diff
-                    };
-                    return updatedInvoices;
-                }
-                return prev;
-            });
-        }
-    };
-
-    const handleDeleteTransaction = async (tx: FinancialTransaction) => {
-        const revertBalance = (t: FinancialTransaction) => {
-            if (t.status !== 'PAID') return;
-            
-            if (t.bankAccountId) {
-                setBankAccounts(prev => prev.map(acc => {
-                    if (acc.id === t.bankAccountId) {
-                        const amount = t.type === 'INCOME' ? t.amount : -t.amount;
-                        return { ...acc, balance: acc.balance - amount };
-                    }
-                    return acc;
-                }));
-            }
-
-            if (t.type === 'EXPENSE' && t.creditCardId) {
-                const currentMonth = t.date.slice(0, 7);
-                setCreditCards(prev => prev.map(card => {
-                    if (card.id === t.creditCardId) {
-                        return { ...card, availableLimit: card.availableLimit + t.amount };
-                    }
-                    return card;
-                }));
-
-                setCardInvoices(prev => {
-                    const invoiceIndex = prev.findIndex(inv => inv.creditCardId === t.creditCardId && inv.month === currentMonth);
-                    if (invoiceIndex >= 0) {
-                        const updatedInvoices = [...prev];
-                        updatedInvoices[invoiceIndex] = {
-                            ...updatedInvoices[invoiceIndex],
-                            amount: updatedInvoices[invoiceIndex].amount - t.amount
-                        };
-                        return updatedInvoices;
-                    }
-                    return prev;
-                });
-            }
+        const payload: StockItem = {
+            id: editingStock.id || `st-${Date.now()}`,
+            name: editingStock.name,
+            category: editingStock.category || 'Geral',
+            quantity: Number(editingStock.quantity),
+            minQuantity: Number(editingStock.minQuantity || 0),
+            unit: editingStock.unit || 'un',
+            price: Number(editingStock.price || 0),
+            location: editingStock.location || ''
         };
 
-        if (tx.recurrenceId) {
-            const deleteType = await openConfirm({
-                title: 'Excluir Transação Recorrente',
-                description: 'Esta transação faz parte de uma recorrência. O que você deseja excluir?',
-                confirmText: 'Toda a Recorrência',
-                cancelText: 'Apenas Esta',
-                variant: 'danger'
-            });
-
-            if (deleteType === true) {
-                // Delete all with same recurrenceId
-                const toDelete = transactions.filter(t => t.recurrenceId === tx.recurrenceId);
-                toDelete.forEach(revertBalance);
-                
-                if (onDeleteTransaction) {
-                    for (const t of toDelete) {
-                        await onDeleteTransaction(t.id);
-                    }
-                } else {
-                    setTransactions(prev => prev.filter(t => t.recurrenceId !== tx.recurrenceId));
-                }
-            } else if (deleteType === false) {
-                // Delete only this one
-                revertBalance(tx);
-                if (onDeleteTransaction) {
-                    await onDeleteTransaction(tx.id);
-                } else {
-                    setTransactions(prev => prev.filter(t => t.id !== tx.id));
-                }
-            }
+        if (onSaveStockItem) {
+            await onSaveStockItem(payload);
         } else {
-            const confirm = await openConfirm({
-                title: 'Excluir Transação',
-                description: 'Tem certeza que deseja excluir esta transação?',
-                variant: 'danger'
-            });
-            if (confirm) {
-                revertBalance(tx);
-                if (onDeleteTransaction) {
-                    await onDeleteTransaction(tx.id);
-                } else {
-                    setTransactions(prev => prev.filter(t => t.id !== tx.id));
-                }
-            }
+            setStock(prev => [payload, ...prev.filter(x => x.id !== payload.id)]);
+        }
+        setIsStockModalOpen(false);
+        setEditingStock(null);
+    };
+
+    const handleAdjustQuantity = async (item: StockItem, delta: number) => {
+        const nextQty = Math.max(0, item.quantity + delta);
+        const updated = { ...item, quantity: nextQty };
+
+        if (onSaveStockItem) {
+            await onSaveStockItem(updated);
+        } else {
+            setStock(prev => prev.map(s => s.id === item.id ? updated : s));
         }
     };
 
     return (
         <div className="flex flex-col h-full space-y-6 animate-pop">
-            {/* Header with Tabs */}
-            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-4 md:p-6">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            
+            {/* Elegant Tabular & Preset Ribbon Header */}
+            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
                     <div className="flex items-center gap-4">
-                        <div className="p-3 bg-pink-50 text-pink-600 rounded-2xl">
+                        <div className="p-3 bg-pink-50 text-pink-500 rounded-2xl">
                             <DollarSign size={28} strokeWidth={2.5} />
                         </div>
                         <div>
                             <h2 className="text-2xl font-black tracking-tight text-slate-800">Financeiro</h2>
-                            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Gestão de Fluxo de Caixa</p>
+                            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Controle de Fluxo, Ativos & Metas</p>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-4">
-                        {/* Period Filter UI */}
-                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
-                            <div className="flex items-center gap-2 px-3 py-1.5">
-                                <Calendar size={14} className="text-slate-400" />
-                                <input 
-                                    type="date" 
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
-                                />
-                                <span className="text-slate-300 font-bold text-[10px]">ATÉ</span>
-                                <input 
-                                    type="date" 
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
-                                />
-                            </div>
+                    {/* Navigation Subtabs */}
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { id: 'DASHBOARD', label: 'Resumo', icon: PieChart },
+                            { id: 'ACCOUNTS_RECEIVABLE', label: 'A Receber', icon: ArrowUpCircle },
+                            { id: 'ACCOUNTS_PAYABLE', label: 'A Pagar', icon: ArrowDownCircle },
+                            { id: 'CASH_FLOW', label: 'Fluxo Diário', icon: History },
+                            { id: 'ACCOUNTS_CARDS', label: 'Contas & Cartões', icon: Wallet },
+                            { id: 'ASSETS', label: 'Ativos', icon: Box },
+                            { id: 'STOCK', label: 'Estoque', icon: Package },
+                            { id: 'COMMISSIONS', label: 'Comissões', icon: Calculator }
+                        ].map(sub => (
+                            <button
+                                key={sub.id}
+                                onClick={() => setActiveTab(sub.id as TabType)}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
+                                    activeTab === sub.id 
+                                        ? 'bg-slate-900 text-white shadow-lg' 
+                                        : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200'
+                                }`}
+                            >
+                                <sub.icon size={13} />
+                                {sub.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Subheader Filters Panel */}
+                <div className="mt-6 pt-6 border-t border-slate-100 flex flex-wrap gap-4 items-center justify-between">
+                    <div className="flex flex-wrap gap-3 items-center">
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                            {[
+                                { id: 'HOJE', text: 'Hoje' },
+                                { id: '7D', text: '7 dias' },
+                                { id: '30D', text: '30 dias' },
+                                { id: '90D', text: '90 dias' },
+                                { id: 'FUTURE', text: 'Prognóstico' }
+                            ].map(pre => (
+                                <button
+                                    key={pre.id}
+                                    onClick={() => setDatePreset(pre.id as any)}
+                                    className={`px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                        datePreset === pre.id 
+                                            ? 'bg-white text-slate-900 shadow-sm' 
+                                            : 'text-slate-500 hover:text-slate-900'
+                                    }`}
+                                >
+                                    {pre.text}
+                                </button>
+                            ))}
                         </div>
 
-                                <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
-                                    {[
-                                        { id: 'DASHBOARD', label: 'Resumo', icon: PieChart },
-                                        ...(currentUser.role !== 'COMMERCIAL' ? [
-                                          { id: 'ACCOUNTS', label: 'Contas', icon: Wallet },
-                                          { id: 'CARDS', label: 'Cartões', icon: CardIcon },
-                                        ] : []),
-                                        { id: 'TRANSACTIONS', label: 'Transações', icon: History },
-                                        { id: 'INVOICES', label: 'Faturas', icon: FileText },
-                                        ...(currentUser.role !== 'COMMERCIAL' ? [
-                                          { id: 'STOCK', label: 'Estoque', icon: Package },
-                                          { id: 'ASSETS', label: 'Ativos', icon: Box },
-                                        ] : []),
-                                        { id: 'REPORTS', label: 'Relatórios', icon: BarChart3 },
-                                    ].map(tab => (
-                                        <button
-                                            key={tab.id}
-                                            onClick={() => setActiveTab(tab.id as TabType)}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                                activeTab === tab.id 
-                                                ? 'bg-white shadow-md text-pink-600' 
-                                                : 'text-slate-400 hover:text-slate-600'
-                                            }`}
-                                        >
-                                            <tab.icon size={14} />
-                                            <span className="hidden sm:inline">{tab.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
+                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600">
+                            <Calendar size={13} className="text-slate-400" />
+                            <span>{startDate.split('-').reverse().join('/')} - {endDate.split('-').reverse().join('/')}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
+                        <div className="relative flex-1 lg:flex-initial">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                            <input
+                                type="text"
+                                placeholder="Procurar transação ou cliente..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-full lg:w-64 pl-9 pr-4 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-slate-400 focus:outline-none rounded-xl text-xs font-bold text-slate-700 transition"
+                            />
+                        </div>
+
+                        <button
+                            onClick={() => {
+                                setEditingTx({
+                                    type: activeTab === 'ACCOUNTS_PAYABLE' ? 'EXPENSE' : 'INCOME',
+                                    status: 'PENDING',
+                                    date: new Date().toISOString().split('T')[0],
+                                    responsibleId: currentUser.id
+                                });
+                                setIsTxModalOpen(true);
+                            }}
+                            className="bg-pink-500 hover:bg-pink-600 text-white font-black text-[10px] uppercase tracking-wider py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-lg shadow-pink-500/10 transition"
+                        >
+                            <Plus size={14} /> Nova Transação
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Main Content Area */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {/* Main view router */}
+            <div className="flex-1 overflow-y-auto min-h-0">
                 <AnimatePresence mode="wait">
+                    
+                    {/* 0. DASHBOARD Tab */}
                     {activeTab === 'DASHBOARD' && (
-                        <motion.div 
+                        <motion.div
                             key="dashboard"
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 15 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
+                            exit={{ opacity: 0 }}
                             className="space-y-6"
                         >
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
-                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Wallet size={80} className="text-blue-500" /></div>
-                                    <p className="text-blue-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Saldo em Contas</p>
-                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {(stats.totalBalance || 0).toLocaleString('pt-BR')}</h3>
-                                    <div className="mt-4 h-1 w-12 bg-blue-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                            {/* Key Performance Indicators Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-10 text-emerald-500"><Wallet size={64} /></div>
+                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Saldo total em caixa</p>
+                                    <h3 className="text-2xl font-black text-slate-800 tracking-tight mt-1">R$ {(stats.totalBalance || 0).toLocaleString('pt-BR')}</h3>
+                                    <p className="text-[10px] text-slate-400 mt-2 font-semibold">Consolidado contas correntes</p>
                                 </div>
 
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
-                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingUp size={80} className="text-emerald-500" /></div>
-                                    <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Receita no Período</p>
-                                    <h3 className="text-3xl font-black text-emerald-600 tracking-tighter">R$ {(stats.monthlyIncome || 0).toLocaleString('pt-BR')}</h3>
-                                    <div className="mt-4 h-1 w-12 bg-emerald-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-10 text-blue-500"><TrendingUp size={64} /></div>
+                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Entradas Liquidada (Período)</p>
+                                    <h3 className="text-2xl font-black text-emerald-600 tracking-tight mt-1">R$ {(stats.inPeriodPaidIncome || 0).toLocaleString('pt-BR')}</h3>
+                                    <p className="text-[10px] text-emerald-500 mt-2 font-bold flex items-center gap-1">🟢 Total receitas pagas</p>
                                 </div>
 
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
-                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingDown size={80} className="text-red-500" /></div>
-                                    <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Despesa no Período</p>
-                                    <h3 className="text-3xl font-black text-red-600 tracking-tighter">R$ {(stats.monthlyExpense || 0).toLocaleString('pt-BR')}</h3>
-                                    <div className="mt-4 h-1 w-12 bg-red-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-10 text-red-500"><TrendingDown size={64} /></div>
+                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Saídas Liquidada (Período)</p>
+                                    <h3 className="text-2xl font-black text-red-600 tracking-tight mt-1">R$ {(stats.inPeriodPaidExpense || 0).toLocaleString('pt-BR')}</h3>
+                                    <p className="text-[10px] text-red-500 mt-2 font-bold flex items-center gap-1">🔴 Total despesas pagas</p>
                                 </div>
 
-                                <div className="bg-slate-900 p-6 rounded-[32px] border border-slate-800 shadow-xl relative overflow-hidden group text-white">
-                                    <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><CardIcon size={80} className="text-pink-400" /></div>
-                                    <p className="text-pink-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Dívida Cartões</p>
-                                    <h3 className="text-3xl font-black tracking-tighter">R$ {(stats.cardDebt || 0).toLocaleString('pt-BR')}</h3>
-                                    <div className="mt-4 h-1 w-12 bg-pink-400 rounded-full opacity-40 group-hover:w-full transition-all duration-500" />
-                                </div>
-
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
-                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Box size={80} className="text-purple-500" /></div>
-                                    <p className="text-purple-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Saldo de Ativos</p>
-                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {(stats.activeAssetsValue || 0).toLocaleString('pt-BR')}</h3>
-                                    <div className="mt-4 h-1 w-12 bg-purple-500 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
-                                </div>
-
-                                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden group">
-                                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Trash2 size={80} className="text-slate-400" /></div>
-                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Ativo Cancelado</p>
-                                    <h3 className="text-3xl font-black text-slate-800 tracking-tighter">R$ {(stats.disposedAssetsValue || 0).toLocaleString('pt-BR')}</h3>
-                                    <div className="mt-4 h-1 w-12 bg-slate-400 rounded-full opacity-20 group-hover:w-full transition-all duration-500" />
+                                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-premium relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 p-4 opacity-10 text-purple-500"><Building2 size={64} /></div>
+                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Margem Operacional (Período)</p>
+                                    <h3 className={`text-2xl font-black tracking-tight mt-1 ${stats.periodProfit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                        R$ {(stats.periodProfit || 0).toLocaleString('pt-BR')}
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 mt-2 font-semibold">Lucro líquido no intervalo</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
-                                    <div className="flex items-center justify-between mb-8">
-                                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                            <Wallet size={18} className="text-blue-500" /> Contas Bancárias
-                                        </h3>
-                                        <button onClick={() => setActiveTab('ACCOUNTS')} className="text-[10px] font-black text-pink-600 uppercase tracking-widest hover:underline">Ver todas</button>
+                            {/* Secondary KPIs: MRR, Assets summary, Alerts */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                
+                                {/* Chart Panel */}
+                                <div className="lg:col-span-2 bg-white p-6 sm:p-8 rounded-[36px] border border-slate-100 shadow-premium">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Evolução do Fluxo de Caixa</h3>
+                                            <p className="text-slate-400 text-[10px] font-semibold">Entradas e saídas de recursos</p>
+                                        </div>
                                     </div>
-                                    <div className="space-y-4">
-                                        {bankAccounts.slice(0, 3).map(acc => (
-                                            <div key={acc.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: acc.color }}>
-                                                        <Building2 size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-black text-slate-800">{acc.name}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{acc.bankName}</p>
-                                                    </div>
-                                                </div>
-                                                <p className="text-sm font-black text-slate-700">R$ {(acc.balance || 0).toLocaleString('pt-BR')}</p>
-                                            </div>
-                                        ))}
+                                    <div className="h-64 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={forecastTimeline}>
+                                                <defs>
+                                                    <linearGradient id="incomeCol" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                    <linearGradient id="expenseCol" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                                                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                <XAxis dataKey="monthName" tick={{ fontSize: 9, fontWeight: 'bold' }} stroke="#cbd5e1" />
+                                                <YAxis tick={{ fontSize: 9, fontWeight: 'bold' }} stroke="#cbd5e1" />
+                                                <Tooltip />
+                                                <Legend wrapperStyle={{ fontSize: 10, fontWeight: 'bold' }} />
+                                                <Area type="monotone" name="Receita Projetada (Contratos + Pendentes)" dataKey="expectedIncome" stroke="#10b981" fillOpacity={1} fill="url(#incomeCol)" />
+                                                <Area type="monotone" name="Saída Projetada (Pendentes)" dataKey="expectedExpense" stroke="#ef4444" fillOpacity={1} fill="url(#expenseCol)" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
                                     </div>
                                 </div>
 
-                                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium">
-                                    <div className="flex items-center justify-between mb-8">
-                                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                            <History size={18} className="text-emerald-500" /> Últimas Transações
-                                        </h3>
-                                        <button onClick={() => setActiveTab('TRANSACTIONS')} className="text-[10px] font-black text-pink-600 uppercase tracking-widest hover:underline">Ver todas</button>
+                                {/* MRR, Asset Prejuízo Accumulated & Action Box */}
+                                <div className="space-y-6">
+                                    <div className="bg-slate-900 text-white p-6 rounded-[32px] border border-slate-800 shadow-2xl relative overflow-hidden">
+                                        <div className="absolute right-0 bottom-0 p-6 translate-x-4 translate-y-4 opacity-5 text-indigo-400"><TrendingUp size={128} /></div>
+                                        <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Mensalidades Recorrentes Ativas (MRR)</p>
+                                        <h4 className="text-3xl font-black text-indigo-400 tracking-tight mt-1">R$ {(stats?.recurringMRR ?? 0).toLocaleString('pt-BR')}</h4>
+                                        <p className="text-[10px] text-slate-300 mt-2 leading-relaxed font-semibold">
+                                            Valor garantido contratualmente com os {recurrentClients.length} clientes ativos sob assinatura.
+                                        </p>
+                                        <button
+                                            onClick={() => setActiveTab('ACCOUNTS_RECEIVABLE')}
+                                            className="mt-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[9px] font-black uppercase tracking-wider py-2 px-4 rounded-xl transition"
+                                        >
+                                            Verificar Lista Recorrente
+                                        </button>
                                     </div>
-                                    <div className="space-y-4">
-                                        {filteredTransactions.slice(0, 5).map(tx => (
-                                            <div key={tx.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    <button 
-                                                        onClick={() => toggleTransactionStatus(tx)}
-                                                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110 active:scale-90 ${
-                                                            tx.status === 'PAID' 
-                                                            ? (tx.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600') 
-                                                            : 'bg-amber-50 text-amber-600'
-                                                        }`}
-                                                        title={tx.status === 'PAID' ? 'Marcar como Pendente' : 'Marcar como Pago'}
-                                                    >
-                                                        {tx.status === 'PAID' ? (tx.type === 'INCOME' ? <TrendingUp size={16} /> : <TrendingDown size={16} />) : <AlertCircle size={16} />}
-                                                    </button>
-                                                    <div>
-                                                        <p className="text-xs font-black text-slate-800 truncate max-w-[150px]">{tx.description}</p>
-                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">{tx.date.split('-').reverse().join('/')}</p>
-                                                    </div>
-                                                </div>
-                                                <p className={`text-xs font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {(tx.amount || 0).toLocaleString('pt-BR')}
-                                                </p>
-                                            </div>
-                                        ))}
+
+                                    <div className="bg-[#fffefe] p-6 rounded-[32px] border border-slate-100 shadow-premium relative overflow-hidden">
+                                        <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Indice de Perda e Baixa de Ativos</p>
+                                        <h4 className="text-2xl font-black text-rose-500 tracking-tight mt-1">R$ {(stats?.justifiedAssetLossesSum ?? 0).toLocaleString('pt-BR')}</h4>
+                                        <p className="text-[10px] text-slate-500 mt-2 leading-relaxed font-semibold">
+                                            Custo original total de ativos inutilizados ou descartados com justificativa escrita.
+                                        </p>
+                                        <button
+                                            onClick={() => setActiveTab('ASSETS')}
+                                            className="mt-4 bg-slate-50 hover:bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-wider py-2 px-4 rounded-xl border border-slate-200 transition"
+                                        >
+                                            Auditar Prejuízos
+                                        </button>
                                     </div>
                                 </div>
                             </div>
-                        </motion.div>
-                    )}
 
-                    {activeTab === 'ACCOUNTS' && (
-                        <motion.div 
-                            key="accounts"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Suas Contas</h3>
-                                <button 
-                                    onClick={() => setIsAccountModalOpen(true)}
-                                    className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+                            {/* Intelligent AI Prompt Area */}
+                            <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-[36px] border border-indigo-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                <div className="space-y-1">
+                                    <h4 className="text-xs font-black uppercase tracking-wider text-indigo-700 flex items-center gap-2">
+                                        <Sparkles size={16} /> Análise Preditiva e Diagnóstico de IA
+                                    </h4>
+                                    <p className="text-slate-600 text-xs leading-relaxed font-semibold">
+                                        Clique no botão de inteligência analítica para rodar um diagnóstico preditivo automatizado com base no seu histórico real de entradas e saídas.
+                                    </p>
+                                    {aiAnalysis && (
+                                        <div className="mt-4 p-4 bg-white rounded-2xl border border-indigo-100/50 text-xs leading-relaxed text-slate-700 shadow-sm whitespace-pre-line font-medium max-h-60 overflow-y-auto">
+                                            {aiAnalysis}
+                                        </div>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={handleTriggerAiAnalysis}
+                                    disabled={isAiLoading}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-widest py-3 px-6 rounded-2xl shrink-0 shadow-lg shadow-indigo-600/15 disabled:opacity-50 transition"
                                 >
-                                    <Plus size={16} /> Nova Conta
+                                    {isAiLoading ? 'Processando...' : 'Diagnosticar Caixa'}
                                 </button>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {bankAccounts.map(acc => (
-                                    <div key={acc.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium hover:shadow-premium-hover transition-all group">
-                                        <div className="flex justify-between items-start mb-6">
-                                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: acc.color }}>
-                                                <Building2 size={28} />
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button 
-                                                    onClick={() => startEditAccount(acc)}
-                                                    className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
-                                                    title="Editar"
-                                                >
-                                                    <Edit2 size={14} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDeleteAccount(acc.id)}
-                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                                    title="Excluir"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${acc.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                    {acc.status === 'ACTIVE' ? 'Ativa' : 'Inativa'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <h4 className="text-xl font-black text-slate-800 mb-1">{acc.name}</h4>
-                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-6">{acc.bankName}</p>
-                                        <div className="pt-6 border-t border-slate-50">
-                                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Saldo Atual</p>
-                                            <p className="text-2xl font-black text-slate-800">R$ {(acc.balance || 0).toLocaleString('pt-BR')}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
                         </motion.div>
                     )}
 
-                    {activeTab === 'CARDS' && (
-                        <motion.div 
-                            key="cards"
-                            initial={{ opacity: 0, x: 20 }}
+                    {/* 1. ACCOUNTS_RECEIVABLE Tab (Contas a Receber) */}
+                    {activeTab === 'ACCOUNTS_RECEIVABLE' && (
+                        <motion.div
+                            key="accounts_receivable"
+                            initial={{ opacity: 0, x: 15 }}
                             animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
+                            exit={{ opacity: 0 }}
+                            className="grid grid-cols-1 xl:grid-cols-3 gap-6"
                         >
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Cartões de Crédito</h3>
-                                <button 
-                                    onClick={() => setIsCardModalOpen(true)}
-                                    className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-                                >
-                                    <Plus size={16} /> Novo Cartão
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {creditCards.map(card => (
-                                    <div key={card.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium hover:shadow-premium-hover transition-all relative overflow-hidden group">
-                                        <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -mr-16 -mt-16 opacity-50 group-hover:scale-110 transition-transform" />
-                                        <div className="flex justify-between items-start mb-8 relative">
-                                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md" style={{ backgroundColor: card.color }}>
-                                                <CardIcon size={24} />
-                                            </div>
-                                            <div className="flex gap-3 items-start">
-                                                <button 
-                                                    onClick={() => startEditCard(card)}
-                                                    className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
-                                                    title="Editar"
-                                                >
-                                                    <Edit2 size={14} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDeleteCard(card.id)}
-                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                                    title="Excluir"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                                <div className="text-right ml-2">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</p>
-                                                    <p className="text-sm font-black text-slate-800">Dia {card.dueDate}</p>
-                                                </div>
-                                            </div>
+                            {/* Receivables Table & Controls */}
+                            <div className="xl:col-span-2 space-y-6">
+                                <div className="bg-white rounded-[32px] border border-slate-100 shadow-premium overflow-hidden">
+                                    <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Contas a Receber</h3>
+                                            <p className="text-xs font-bold text-slate-800 mt-1">Fluxos de faturamento cadastrados</p>
                                         </div>
-                                        <h4 className="text-2xl font-black text-slate-800 mb-1">{card.name}</h4>
-                                        <p className="text-xs font-bold text-slate-400 mb-8">{card.brand} •••• 4582</p>
-                                        
-                                        <div className="space-y-4">
-                                            <div>
-                                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2">
-                                                    <span className="text-slate-400">Limite Utilizado</span>
-                                                    <span className="text-slate-800">R$ {((card.limit || 0) - (card.availableLimit || 0)).toLocaleString('pt-BR')}</span>
-                                                </div>
-                                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                    <div 
-                                                        className="h-full bg-pink-500 rounded-full transition-all duration-1000" 
-                                                        style={{ width: `${((card.limit - card.availableLimit) / card.limit) * 100}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="flex justify-between pt-4 border-t border-slate-50">
-                                                <div>
-                                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Disponível</p>
-                                                    <p className="text-lg font-black text-emerald-600">R$ {(card.availableLimit || 0).toLocaleString('pt-BR')}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">Limite Total</p>
-                                                    <p className="text-lg font-black text-slate-800">R$ {(card.limit || 0).toLocaleString('pt-BR')}</p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <span className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                                            {filteredTxs.filter(t => t.type === 'INCOME').length} Registros
+                                        </span>
                                     </div>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
 
-                    {activeTab === 'TRANSACTIONS' && (
-                        <motion.div 
-                            key="transactions"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                                    <input 
-                                        type="text" 
-                                        placeholder="Buscar por descrição, cliente..." 
-                                        value={searchTerm}
-                                        onChange={e => setSearchTerm(e.target.value)}
-                                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-transparent focus:bg-white focus:border-pink-200 rounded-2xl text-sm font-bold outline-none transition-all"
-                                    />
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
-                                        {[
-                                            { id: 'ALL', label: 'Todas' },
-                                            { id: 'INCOME', label: 'Receitas' },
-                                            { id: 'EXPENSE', label: 'Despesas' },
-                                        ].map(type => (
-                                            <button
-                                                key={type.id}
-                                                onClick={() => setTypeFilter(type.id as any)}
-                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
-                                                    typeFilter === type.id 
-                                                    ? 'bg-white shadow-sm text-pink-600' 
-                                                    : 'text-slate-400 hover:text-slate-600'
-                                                }`}
-                                            >
-                                                {type.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <button 
-                                        onClick={() => setIsTransactionModalOpen(true)}
-                                        className="flex items-center gap-2 px-6 py-3 bg-pink-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-pink-700 transition-all shadow-xl shadow-pink-200"
-                                    >
-                                        <Plus size={16} /> Nova Transação
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="bg-slate-50/50">
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Origem/Destino</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {filteredTransactions.map(tx => {
-                                                const category = categories.find(c => c.id === tx.categoryId);
-                                                const account = bankAccounts.find(a => a.id === tx.bankAccountId);
-                                                const card = creditCards.find(c => c.id === tx.creditCardId);
-                                                
-                                                return (
-                                                    <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors group">
-                                                        <td className="px-6 py-4">
-                                                            <p className="text-xs font-black text-slate-800">{tx.date.split('-').reverse().join('/')}</p>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse min-w-[650px]">
+                                            <thead>
+                                                <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                                    <th className="px-6 py-4">Data</th>
+                                                    <th className="px-6 py-4">Descrição</th>
+                                                    <th className="px-6 py-4">Faturamento</th>
+                                                    <th className="px-6 py-4">Categoria</th>
+                                                    <th className="px-6 py-4 text-center">Situação</th>
+                                                    <th className="px-6 py-4 text-right">Ação</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50 text-xs font-medium text-slate-700">
+                                                {filteredTxs.filter(t => t.type === 'INCOME').map(t => (
+                                                    <tr key={t.id} className="hover:bg-slate-50/50 transition">
+                                                        <td className="px-6 py-4 font-mono text-[11px] whitespace-nowrap">
+                                                            {t.date.split('-').reverse().join('/')}
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="text-xs font-black text-slate-800">{tx.description}</p>
-                                                                {tx.recurrenceId && (
-                                                                    <div className="p-1 bg-blue-50 text-blue-500 rounded-lg" title="Transação Recorrente">
-                                                                        <Repeat size={10} />
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            {tx.clientId && (
-                                                                <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
-                                                                    <Building2 size={10} /> {clients.find(c => c.id === tx.clientId)?.name}
-                                                                </p>
+                                                            <div className="font-bold text-slate-800">{t.description}</div>
+                                                            {t.clientId && (
+                                                                <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                                                                    Cliente: {clients.find(c => c.id === t.clientId)?.name || 'Desconhecido'}
+                                                                </div>
                                                             )}
                                                         </td>
+                                                        <td className="px-6 py-4 font-black text-emerald-600 whitespace-nowrap">
+                                                            R$ {(t?.amount ?? 0).toLocaleString('pt-BR')}
+                                                        </td>
                                                         <td className="px-6 py-4">
-                                                            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border" style={{ color: category?.color, borderColor: category?.color + '40', backgroundColor: category?.color + '10' }}>
-                                                                {category?.name}
+                                                            <span className="text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase" style={{
+                                                                backgroundColor: (categories.find(c => c.id === t.categoryId)?.color || '#94a3b8') + '15',
+                                                                color: (categories.find(c => c.id === t.categoryId)?.color || '#475569')
+                                                            }}>
+                                                                {categories.find(c => c.id === t.categoryId)?.name || 'Geral'}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex items-center gap-2">
-                                                                {account ? (
-                                                                    <>
-                                                                        <Wallet size={12} className="text-slate-400" />
-                                                                        <span className="text-[10px] font-bold text-slate-600">{account.name}</span>
-                                                                    </>
-                                                                ) : card ? (
-                                                                    <>
-                                                                        <CardIcon size={12} className="text-slate-400" />
-                                                                        <span className="text-[10px] font-bold text-slate-600">{card.name}</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <span className="text-[10px] font-bold text-slate-300">N/A</span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <button 
-                                                                onClick={() => toggleTransactionStatus(tx)}
-                                                                className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 ${
-                                                                    tx.status === 'PAID' 
-                                                                    ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' 
-                                                                    : 'bg-amber-50 text-amber-600 hover:bg-amber-100'
+                                                        <td className="px-6 py-4 text-center">
+                                                            <button
+                                                                onClick={() => handleToggleTxStatus(t)}
+                                                                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border leading-none transition ${
+                                                                    t.status === 'PAID'
+                                                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100/50'
+                                                                        : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100/50'
                                                                 }`}
-                                                                title={tx.status === 'PAID' ? 'Marcar como Pendente' : 'Marcar como Pago'}
                                                             >
-                                                                {tx.status === 'PAID' ? 'Pago' : 'Pendente'}
+                                                                {t.status === 'PAID' ? 'RECEBIDO 🟢' : 'A RECEBER 🟡'}
                                                             </button>
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
-                                                            <div className="flex items-center justify-end gap-3">
-                                                                <p className={`text-sm font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                                    {tx.type === 'INCOME' ? '+' : '-'} R$ {(tx.amount || 0).toLocaleString('pt-BR')}
-                                                                </p>
-                                                                <button 
-                                                                    onClick={() => handleDeleteTransaction(tx)}
-                                                                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                                            <div className="flex justify-end gap-1">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingTx(t);
+                                                                        setIsTxModalOpen(true);
+                                                                    }}
+                                                                    className="p-1 px-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition"
                                                                 >
-                                                                    <X size={14} />
+                                                                    <Edit2 size={12} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteTxLocal(t.id)}
+                                                                    className="p-1 px-2 bg-slate-50 border border-transparent hover:border-red-100 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                                                                >
+                                                                    <Trash2 size={12} />
                                                                 </button>
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                                ))}
+                                                {filteredTxs.filter(t => t.type === 'INCOME').length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={6} className="text-center py-10 font-semibold text-slate-400">
+                                                            Nenhuma conta a receber localizada para os filtros definidos.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Requirement 4: Active Clients Monthly recurrence generator */}
+                            <div className="space-y-6">
+                                <div className="bg-[#fafbfc] border border-slate-200 rounded-[32px] p-6">
+                                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">Mensalistas Recorrentes (CRM)</h3>
+                                    <p className="text-xs text-slate-400 leading-relaxed font-semibold mb-6">
+                                        Identifique ativos comerciais com contratos fechados, de acordo com o módulo de CRM, e lance sua respectiva mensalidade em fluxo com apenas um clique.
+                                    </p>
+
+                                    <div className="space-y-3 max-h-[460px] overflow-y-auto">
+                                        {recurrentClients.map(c => {
+                                            // Check if already has any billing transaction on this calendar month
+                                            const thisMonth = new Date().toISOString().substring(0, 7);
+                                            const hasTriggeredThisMonth = transactions.some(t => t.clientId === c.id && t.date.substring(0, 7) === thisMonth);
+
+                                            return (
+                                                <div key={c.id} className="bg-white p-4 rounded-2xl border border-slate-200/60 shadow-sm flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-black uppercase">
+                                                            Contrato Ativo
+                                                        </span>
+                                                        <h4 className="text-xs font-black text-slate-800 mt-1 tracking-tight">{c.name}</h4>
+                                                        <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                                                            Mensal: <strong className="text-emerald-500">R$ {(c.monthlyValue || 0).toLocaleString('pt-BR')}</strong>
+                                                        </div>
+                                                        {c.contractStartDate && (
+                                                            <div className="text-[9px] text-slate-400 mt-0.5">Vencimento: dia {c.contractStartDate.split('-')[2] || '10'}</div>
+                                                        )}
+                                                    </div>
+
+                                                    <button
+                                                        onClick={() => handleLaunchClientMonthlyFee(c)}
+                                                        disabled={hasTriggeredThisMonth}
+                                                        className={`font-black text-[9px] uppercase tracking-wider py-2 px-3 rounded-lg border transition ${
+                                                            hasTriggeredThisMonth
+                                                                ? 'bg-slate-50 text-slate-400 border-slate-100 cursor-not-allowed'
+                                                                : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm border-transparent'
+                                                        }`}
+                                                    >
+                                                        {hasTriggeredThisMonth ? '✓ Gerado Mês' : 'Lançar'}
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                        {recurrentClients.length === 0 && (
+                                            <div className="text-center py-8 font-semibold text-slate-400 text-xs">
+                                                Nenhum cliente recorrente ativo cadastrado no CRM.
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </motion.div>
                     )}
 
-                    {activeTab === 'INVOICES' && (
-                        <motion.div 
-                            key="invoices"
-                            initial={{ opacity: 0, x: 20 }}
+                    {/* 2. ACCOUNTS_PAYABLE Tab (Contas a Pagar) */}
+                    {activeTab === 'ACCOUNTS_PAYABLE' && (
+                        <motion.div
+                            key="accounts_payable"
+                            initial={{ opacity: 0, x: -15 }}
                             animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
+                            exit={{ opacity: 0 }}
+                            className="grid grid-cols-1 xl:grid-cols-3 gap-6"
                         >
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {filteredInvoices.map(inv => {
-                                    const card = creditCards.find(c => c.id === inv.creditCardId);
+                            {/* Payables Ledger Table */}
+                            <div className="xl:col-span-2 space-y-6">
+                                <div className="bg-white rounded-[32px] border border-slate-100 shadow-premium overflow-hidden">
+                                    <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Contas a Pagar</h3>
+                                            <p className="text-xs font-bold text-slate-800 mt-1">Registros de saídas e despesas</p>
+                                        </div>
+                                        <span className="bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border border-rose-100">
+                                            {filteredTxs.filter(t => t.type === 'EXPENSE').length} Contas
+                                        </span>
+                                    </div>
+
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse min-w-[650px]">
+                                            <thead>
+                                                <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                                    <th className="px-6 py-4">Vencimento</th>
+                                                    <th className="px-6 py-4">Descrição</th>
+                                                    <th className="px-6 py-4">Valor</th>
+                                                    <th className="px-6 py-4">Categoria / Destino</th>
+                                                    <th className="px-6 py-4 text-center">Esforço</th>
+                                                    <th className="px-6 py-4 text-right">Ação</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50 text-xs font-medium text-slate-700">
+                                                {filteredTxs.filter(t => t.type === 'EXPENSE').map(t => (
+                                                    <tr key={t.id} className="hover:bg-slate-50/50 transition">
+                                                        <td className="px-6 py-4 font-mono text-[11px] whitespace-nowrap">
+                                                            {t.date.split('-').reverse().join('/')}
+                                                        </td>
+                                                        <td className="px-6 py-4 font-bold text-slate-800">
+                                                            {t.description}
+                                                            {t.bankAccountId && (
+                                                                <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                                                                    Banco: {bankAccounts.find(ba => ba.id === t.bankAccountId)?.name || 'Conta Geral'}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 font-black text-rose-600 whitespace-nowrap">
+                                                            R$ {(t?.amount ?? 0).toLocaleString('pt-BR')}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase" style={{
+                                                                backgroundColor: (categories.find(c => c.id === t.categoryId)?.color || '#94a3b8') + '15',
+                                                                color: (categories.find(c => c.id === t.categoryId)?.color || '#475569')
+                                                            }}>
+                                                                {categories.find(c => c.id === t.categoryId)?.name || 'Operacional'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <button
+                                                                onClick={() => handleToggleTxStatus(t)}
+                                                                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border leading-none transition ${
+                                                                    t.status === 'PAID'
+                                                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100/50'
+                                                                        : 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100/50'
+                                                                }`}
+                                                            >
+                                                                {t.status === 'PAID' ? 'PAGO 🟢' : 'A PAGAR 🔴'}
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex justify-end gap-1">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingTx(t);
+                                                                        setIsTxModalOpen(true);
+                                                                    }}
+                                                                    className="p-1 px-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition"
+                                                                >
+                                                                    <Edit2 size={12} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteTxLocal(t.id)}
+                                                                    className="p-1 px-2 bg-slate-50 border border-transparent hover:border-red-100 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                                                                >
+                                                                    <Trash2 size={12} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {filteredTxs.filter(t => t.type === 'EXPENSE').length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={6} className="text-center py-10 font-semibold text-slate-400">
+                                                            Nenhuma despesa cadastrada nos parâmetros pesquisados.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Categorias Editáveis Segment (Salários, Freelancers, etc) */}
+                            <div className="space-y-6">
+                                <div className="bg-white border border-slate-200 shadow-sm rounded-[32px] p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Gestão de Categorias</h3>
+                                        <button
+                                            onClick={() => ensureDefaultCategories()}
+                                            className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
+                                        >
+                                            Resetar Padrão
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-slate-400 leading-relaxed font-semibold mb-6">
+                                        Cria e edite categorias operacionais (como Salários, Assinaturas, Impostos) de acordo com o fluxo interno.
+                                    </p>
+
+                                    <div className="space-y-2.5 max-h-[365px] overflow-y-auto mb-4">
+                                        {categories.map(cat => (
+                                            <div key={cat.id} className="flex items-center justify-between p-3.5 bg-slate-50/50 rounded-xl border border-slate-100">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="w-3 h-3 rounded-full shadow-sm shrink-0" style={{ backgroundColor: cat.color }} />
+                                                    <span className="text-xs font-bold text-slate-700">{cat.name}</span>
+                                                    <span className="text-[9px] font-black uppercase text-slate-400">
+                                                        ({cat.type === 'EXPENSE' ? 'Saída' : cat.type === 'INCOME' ? 'Entrada' : 'Ambos'})
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingCategory(cat);
+                                                            setIsCategoryModalOpen(true);
+                                                        }}
+                                                        className="text-[10px] text-slate-400 hover:text-slate-700 font-bold px-1.5 py-0.5 rounded transition"
+                                                    >
+                                                        Editar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteCategoryLocal(cat.id)}
+                                                        className="text-[10px] text-slate-400 hover:text-rose-600 font-bold px-1.5 py-0.5 rounded transition"
+                                                    >
+                                                        Excluir
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        onClick={() => {
+                                            setEditingCategory({
+                                                type: 'EXPENSE',
+                                                color: '#10b981'
+                                            });
+                                            setIsCategoryModalOpen(true);
+                                        }}
+                                        className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-600 text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition"
+                                    >
+                                        <Plus size={14} /> Novo Categoria
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* 3. CASH_FLOW Tab (Fluxo Diário / Forecast) */}
+                    {activeTab === 'CASH_FLOW' && (
+                        <motion.div
+                            key="cash_flow"
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="bg-white rounded-[32px] border border-slate-100 shadow-premium p-6 sm:p-8 space-y-6"
+                        >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+                                <div>
+                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Fluxo de Caixa Diário</h3>
+                                    <p className="text-slate-400 text-[10px] font-semibold">Agrupamento consolidado das entradas e saídas físicas do caixa</p>
+                                </div>
+                                <span className="bg-slate-100 text-slate-700 font-mono text-[10px] font-bold py-1 px-3 rounded-full">
+                                    Histórico agrupado por dia
+                                </span>
+                            </div>
+
+                            {/* Aggregating transactions daily */}
+                            {(() => {
+                                const dailyMap: Record<string, { income: number; expense: number; items: FinancialTransaction[] }> = {};
+                                filteredTxs.forEach(t => {
+                                    if (!dailyMap[t.date]) {
+                                        dailyMap[t.date] = { income: 0, expense: 0, items: [] };
+                                    }
+                                    if (t.status === 'PAID') {
+                                        if (t.type === 'INCOME') dailyMap[t.date].income += t.amount;
+                                        else dailyMap[t.date].expense += t.amount;
+                                    }
+                                    dailyMap[t.date].items.push(t);
+                                });
+
+                                const dailyDates = Object.keys(dailyMap).sort((a, b) => b.localeCompare(a));
+
+                                if (dailyDates.length === 0) {
                                     return (
-                                        <div key={inv.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-premium flex items-center justify-between group">
-                                            <div className="flex items-center gap-6">
-                                                <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-pink-50 group-hover:text-pink-600 transition-colors">
-                                                    <FileText size={32} />
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-lg font-black text-slate-800">{inv.month}</h4>
-                                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{card?.name || 'Cartão Desconhecido'}</p>
-                                                    <div className="flex items-center gap-3 mt-2">
-                                                        <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                                                            inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-600' : 
-                                                            inv.status === 'OPEN' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'
-                                                        }`}>
-                                                            {inv.status === 'PAID' ? 'Paga' : inv.status === 'OPEN' ? 'Aberta' : 'Vencida'}
-                                                        </span>
-                                                        <span className="text-[10px] text-slate-400 font-bold">Vence em {inv.dueDate.split('-').reverse().join('/')}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Valor</p>
-                                                <p className="text-xl font-black text-slate-800">R$ {(inv.amount || 0).toLocaleString('pt-BR')}</p>
-                                            </div>
+                                        <div className="text-center py-16 text-slate-400 font-semibold">
+                                            Nenhum movimento registrado no período selecionado.
                                         </div>
                                     );
-                                })}
-                                {filteredInvoices.length === 0 && (
-                                    <div className="col-span-full py-20 text-center bg-white rounded-[40px] border border-slate-100">
-                                        <FileText size={48} className="mx-auto text-slate-200 mb-4" />
-                                        <p className="text-slate-400 font-black uppercase tracking-widest text-xs">Nenhuma fatura encontrada para este período</p>
+                                }
+
+                                return (
+                                    <div className="space-y-6">
+                                        {dailyDates.map(date => {
+                                            const dayData = dailyMap[date];
+                                            const dLabel = new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', {
+                                                weekday: 'long',
+                                                day: 'numeric',
+                                                month: 'long'
+                                            });
+
+                                            return (
+                                                <div key={date} className="border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
+                                                    <div className="bg-slate-50/70 p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                        <span className="text-xs font-black text-slate-700 capitalize flex items-center gap-2">
+                                                            <Calendar size={13} className="text-slate-400" /> {dLabel} ({date.split('-').reverse().join('/')})
+                                                        </span>
+                                                        <div className="flex gap-4 text-[11px] font-bold">
+                                                            <span className="text-emerald-600">Entrada: R$ {dayData.income.toLocaleString('pt-BR')}</span>
+                                                            <span className="text-rose-600">Saída: R$ {dayData.expense.toLocaleString('pt-BR')}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="divide-y divide-slate-100 bg-white">
+                                                        {dayData.items.map(it => (
+                                                            <div key={it.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-medium hover:bg-slate-50/50 transition">
+                                                                <div className="space-y-1">
+                                                                    <div className="font-bold text-slate-800 flex items-center gap-2">
+                                                                        {it.type === 'INCOME' ? '🟢' : '🔴'} {it.description}
+                                                                    </div>
+                                                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">
+                                                                        Categoria: {categories.find(c => c.id === it.categoryId)?.name || 'Geral'} | 
+                                                                        Resp: {users.find(u => u.id === it.responsibleId)?.name || 'Admin'}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex items-center gap-6 justify-between sm:justify-end">
+                                                                    <div className={`font-black text-sm ${it.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                                        {it.type === 'INCOME' ? '+' : '-'} R$ {it.amount.toLocaleString('pt-BR')}
+                                                                    </div>
+                                                                    <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-xl leading-none border ${
+                                                                        it.status === 'PAID'
+                                                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                                            : 'bg-amber-50 text-amber-600 border-amber-100'
+                                                                    }`}>
+                                                                        {it.status === 'PAID' ? 'Liquidado' : 'Aberto'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                )}
-                            </div>
+                                );
+                            })()}
                         </motion.div>
                     )}
 
-                    {activeTab === 'STOCK' && (
-                        <motion.div 
-                            key="stock"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
+                    {/* 4. ASSETS Tab (Controle de Ativos com Baixa Justificada) */}
+                    {activeTab === 'ASSETS' && (
+                        <motion.div
+                            key="assets"
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
                             className="space-y-6"
                         >
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Controle de Estoque</h3>
-                                <button 
-                                    onClick={() => {
-                                        setEditingStockId(null);
-                                        setNewStockItem({ quantity: 0, minQuantity: 0, price: 0 });
-                                        setIsStockModalOpen(true);
-                                    }}
-                                    className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-                                >
-                                    <Plus size={16} /> Novo Item
-                                </button>
-                            </div>
-
-                            <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="bg-slate-50/50">
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Item</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-                                                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ações</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {stock.map(item => (
-                                                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-xs font-black text-slate-800">{item.name}</p>
-                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">{item.location}</p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest">{item.category}</span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-xs font-black text-slate-800">{item.quantity} {item.unit}</p>
-                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">Mín: {item.minQuantity}</p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        {item.quantity <= item.minQuantity ? (
-                                                            <span className="px-3 py-1 bg-red-50 text-red-600 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 w-fit">
-                                                                <AlertCircle size={10} /> Crítico
-                                                            </span>
-                                                        ) : (
-                                                            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 w-fit">
-                                                                <CheckCircle2 size={10} /> Ok
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => startEditStock(item)} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={14} /></button>
-                                                            <button onClick={() => handleDeleteStock(item.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={14} /></button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                            <div className="bg-white rounded-[32px] border border-slate-100 p-6 sm:p-8 shadow-premium flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="space-y-1">
+                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Controle e Ativos da Agência</h3>
+                                    <p className="text-slate-400 text-[10px] font-semibold">Hardware, licenças de software, mobiliário e veículos operacionais</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <div className="bg-rose-50 text-rose-700 px-4 py-2.5 rounded-2xl border border-rose-100 text-[10px] font-black uppercase tracking-wider">
+                                        Prejuízo Unidades Baixadas: R$ {(stats?.justifiedAssetLossesSum ?? 0).toLocaleString('pt-BR')}
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setEditingAsset({
+                                                category: 'HARDWARE',
+                                                status: 'ACTIVE',
+                                                purchaseDate: new Date().toISOString().split('T')[0],
+                                                purchaseValue: 0,
+                                                currentValue: 0
+                                            });
+                                            setIsAssetModalOpen(true);
+                                        }}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-wider py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-md transition"
+                                    >
+                                        <Plus size={14} /> Novo Ativo
+                                    </button>
                                 </div>
                             </div>
-                        </motion.div>
-                    )}
 
-                    {activeTab === 'ASSETS' && (
-                        <motion.div 
-                            key="assets"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Gestão de Ativos</h3>
-                                <button 
-                                    onClick={() => {
-                                        setEditingAssetId(null);
-                                        setNewAsset({ category: 'HARDWARE', status: 'ACTIVE', purchaseValue: 0, currentValue: 0, purchaseDate: new Date().toISOString().split('T')[0] });
-                                        setIsAssetModalOpen(true);
-                                    }}
-                                    className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-                                >
-                                    <Plus size={16} /> Novo Ativo
-                                </button>
-                            </div>
-
+                            {/* Assets Listing Grid */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {assets.map(asset => (
-                                    <div key={asset.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium group relative overflow-hidden">
-                                        <div className="flex justify-between items-start mb-6">
-                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
-                                                asset.category === 'HARDWARE' ? 'bg-blue-500' : 
-                                                asset.category === 'SOFTWARE' ? 'bg-purple-500' : 
-                                                asset.category === 'VEHICLE' ? 'bg-orange-500' : 'bg-slate-500'
-                                            }`}>
-                                                {asset.category === 'HARDWARE' ? <Monitor size={24} /> : 
-                                                 asset.category === 'SOFTWARE' ? <Cpu size={24} /> : 
-                                                 asset.category === 'VEHICLE' ? <Truck size={24} /> : <Box size={24} />}
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => startEditAsset(asset)} className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={14} /></button>
-                                                <button onClick={() => handleDeleteAsset(asset.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={14} /></button>
-                                            </div>
-                                        </div>
-                                        <h4 className="text-lg font-black text-slate-800 mb-1">{asset.name}</h4>
-                                        <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-4">{asset.serialNumber || 'Sem Serial'}</p>
-                                        
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
-                                            <div>
-                                                <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Valor Compra</p>
-                                                <p className="text-xs font-black text-slate-800">R$ {(asset.purchaseValue || 0).toLocaleString('pt-BR')}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Status</p>
-                                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                                                    asset.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 
-                                                    asset.status === 'MAINTENANCE' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-400'
+                                {assets.map(a => (
+                                    <div key={a.id} className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-premium flex flex-col justify-between space-y-4">
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-xl leading-none border ${
+                                                    a.category === 'HARDWARE' ? 'bg-cyan-50 text-cyan-700 border-cyan-100' :
+                                                    a.category === 'SOFTWARE' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                                    'bg-amber-50 text-amber-700 border-amber-100'
                                                 }`}>
-                                                    {asset.status === 'ACTIVE' ? 'Ativo' : asset.status === 'MAINTENANCE' ? 'Manutenção' : 'Baixado'}
+                                                    {a.category}
                                                 </span>
+
+                                                <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-xl leading-none border ${
+                                                    a.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                                    a.status === 'MAINTENANCE' ? 'bg-orange-50 text-orange-700 border-orange-100' :
+                                                    'bg-rose-50 text-rose-700 border-rose-100' // DISPOSED
+                                                }`}>
+                                                    {a.status === 'DISPOSED' ? 'BAIXADO/PREJUÍZO' : a.status}
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="text-sm font-black text-slate-800 tracking-tight">{a.name}</h4>
+                                                {a.serialNumber && <p className="text-[10px] text-slate-400 font-mono mt-0.5">S/N: {a.serialNumber}</p>}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-2xl text-[11px] font-bold text-slate-600">
+                                                <div>
+                                                    <span className="text-[9px] text-slate-400 block font-semibold leading-none">Compra:</span>
+                                                    R$ {a.purchaseValue.toLocaleString('pt-BR')}
+                                                </div>
+                                                <div>
+                                                    <span className="text-[9px] text-slate-400 block font-semibold leading-none">Atual:</span>
+                                                    R$ {a.status === 'DISPOSED' ? '0' : (a.currentValue || 0).toLocaleString('pt-BR')}
+                                                </div>
+                                            </div>
+
+                                            {/* Detailed write-off written justifications status display (Requirement 5) */}
+                                            {a.status === 'DISPOSED' && a.lossJustification && (
+                                                <div className="bg-red-50/50 p-3.5 rounded-2xl border border-red-100 text-[10px] text-red-700 leading-relaxed font-bold">
+                                                    💔 JUSTIFICATIVA DO PREJUÍZO:<br />
+                                                    <span className="text-slate-600 font-medium italic">"{a.lossJustification}"</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-2 pt-2 border-t border-slate-50 justify-between items-center">
+                                            {a.status !== 'DISPOSED' ? (
+                                                <button
+                                                    onClick={() => handleInitiateAssetLoss(a)}
+                                                    className="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 border border-red-150 font-black uppercase tracking-wider px-3 py-2 rounded-xl transition"
+                                                >
+                                                    Dar Baixa (Prejuízo)
+                                                </button>
+                                            ) : (
+                                                <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Unidade Baixada</span>
+                                            )}
+
+                                            <div className="flex gap-1">
+                                                {a.status !== 'DISPOSED' && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingAsset(a);
+                                                            setIsAssetModalOpen(true);
+                                                        }}
+                                                        className="p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-500 transition"
+                                                    >
+                                                        <Edit2 size={12} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={async () => {
+                                                        const confirm = await openConfirm({
+                                                            title: 'Excluir Ativo',
+                                                            description: 'Tem certeza que deseja deletar este cadastro de Ativo?',
+                                                            variant: 'danger'
+                                                        });
+                                                        if (confirm) {
+                                                            if (onDeleteAsset) await onDeleteAsset(a.id);
+                                                            else setAssets(prev => prev.filter(x => x.id !== a.id));
+                                                        }
+                                                    }}
+                                                    className="p-2 text-slate-400 hover:text-red-500 transition"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -1622,644 +1567,878 @@ export const Financials: React.FC<FinancialsProps> = ({
                         </motion.div>
                     )}
 
-                    {activeTab === 'REPORTS' && (
-                        <motion.div 
-                            key="reports"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
+                    {/* 5. STOCK Tab (Inventário / Estoque) */}
+                    {activeTab === 'STOCK' && (
+                        <motion.div
+                            key="stock"
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="bg-white rounded-[32px] border border-slate-100 shadow-premium p-6 sm:p-8 space-y-6"
                         >
-                            <FinancialReports 
-                                transactions={transactions}
-                                leads={leads}
-                                cardInvoices={cardInvoices}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+                                <div>
+                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Estoque e Insumos Físicos</h3>
+                                    <p className="text-slate-400 text-[10px] font-semibold">Gerencie suprimentos, itens de escritório e brindes promocionais</p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setEditingStock({
+                                            quantity: 0,
+                                            minQuantity: 1,
+                                            price: 0,
+                                            unit: 'un'
+                                        });
+                                        setIsStockModalOpen(true);
+                                    }}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-wider py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-md transition"
+                                >
+                                    <Plus size={14} /> Novo Item
+                                </button>
+                            </div>
+
+                            {/* Inventory Table (Requirement 6) */}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse min-w-[700px]">
+                                    <thead>
+                                        <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                            <th className="px-6 py-4">Item</th>
+                                            <th className="px-6 py-4">Categoria</th>
+                                            <th className="px-6 py-4">Preço Unitário</th>
+                                            <th className="px-6 py-4 text-center">Quantidade Atual / Mínima</th>
+                                            <th className="px-6 py-4 text-center">Controles rápidos</th>
+                                            <th className="px-6 py-4 text-right">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                                        {stock.map(item => {
+                                            const isLow = item.quantity <= item.minQuantity;
+
+                                            return (
+                                                <tr key={item.id} className="hover:bg-slate-50/20 transition">
+                                                    <td className="px-6 py-4">
+                                                        <div className="font-bold text-slate-800">{item.name}</div>
+                                                        {item.location && <div className="text-[10px] text-slate-400 font-medium">Local: {item.location}</div>}
+                                                    </td>
+                                                    <td className="px-6 py-4 font-normal text-slate-600">{item.category}</td>
+                                                    <td className="px-6 py-4 text-slate-800 font-bold">R$ {item.price.toLocaleString('pt-BR')}</td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <div className="flex flex-col items-center">
+                                                            <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase ${
+                                                                isLow 
+                                                                    ? 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse' 
+                                                                    : 'bg-slate-100 text-slate-700'
+                                                            }`}>
+                                                                {item.quantity} {item.unit} / Mín: {item.minQuantity} {item.unit}
+                                                            </span>
+                                                            {isLow && (
+                                                                <span className="text-[9px] text-rose-500 font-black uppercase tracking-widest mt-1 flex items-center gap-1">
+                                                                    ⚠️ Compra Urgente
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex justify-center gap-2">
+                                                            <button
+                                                                onClick={() => handleAdjustQuantity(item, -1)}
+                                                                className="w-7 h-7 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg flex items-center justify-center font-bold text-slate-600 transition"
+                                                            >
+                                                                -
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleAdjustQuantity(item, 1)}
+                                                                className="w-7 h-7 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg flex items-center justify-center font-bold text-slate-600 transition"
+                                                            >
+                                                                +
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex justify-end gap-1">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingStock(item);
+                                                                    setIsStockModalOpen(true);
+                                                                }}
+                                                                className="p-1 px-2 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-lg transition"
+                                                            >
+                                                                Editar
+                                                            </button>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    const confirm = await openConfirm({
+                                                                        title: 'Remover suprimento',
+                                                                        description: `Tem certeza que deseja apagar o registro de estoque ${item.name}?`,
+                                                                        variant: 'danger'
+                                                                    });
+                                                                    if (confirm) {
+                                                                        if (onDeleteStockItem) await onDeleteStockItem(item.id);
+                                                                        else setStock(prev => prev.filter(x => x.id !== item.id));
+                                                                    }
+                                                                }}
+                                                                className="p-1 px-2 text-slate-400 hover:text-red-500 rounded-lg transition"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {stock.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="text-center py-10 font-semibold text-slate-400">
+                                                    Nenhum insumo de estoque cadastrado.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* 6. COMMISSIONS Tab (Requirement 7) */}
+                    {activeTab === 'COMMISSIONS' && (
+                        <motion.div
+                            key="commissions"
+                            initial={{ opacity: 0, x: 15 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0 }}
+                        >
+                            {/* Renders commission module seamlessly */}
+                            <CommissionDashboard 
                                 users={users}
-                                clients={clients}
-                                squads={squads}
+                                leads={leads}
+                                bankAccounts={bankAccounts}
                                 categories={categories}
+                                currentUser={currentUser}
+                                startDate={startDate}
+                                endDate={endDate}
+                                onSaveTransaction={onSaveTransaction}
+                                setTransactions={setTransactions}
+                                setBankAccounts={setBankAccounts}
                             />
                         </motion.div>
                     )}
+
+                    {/* 7. ACCOUNTS_CARDS Tab */}
+                    {activeTab === 'ACCOUNTS_CARDS' && (
+                        <motion.div
+                            key="accounts_cards"
+                            initial={{ opacity: 0, x: 15 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="space-y-8"
+                        >
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+                                <div className="bg-gradient-to-br from-slate-800 to-slate-950 text-white p-6 rounded-[28px] border border-slate-700 shadow-xl flex items-center justify-between">
+                                    <div>
+                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Saldo Total em Contas</p>
+                                        <h3 className="text-3xl font-black mt-1">R$ {bankAccounts?.reduce((sum, b) => sum + (b?.status === 'ACTIVE' ? (b?.balance ?? 0) : 0), 0)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) ?? '0,00'}</h3>
+                                        <p className="text-[10px] text-slate-400 mt-2 font-medium">Consolidado de todas as contas corporativas ativas</p>
+                                    </div>
+                                    <div className="bg-slate-800 p-4 rounded-2xl text-emerald-400"><Wallet size={24} /></div>
+                                </div>
+
+                                <div className="bg-gradient-to-br from-[#fc4a1a] to-[#f7b733] text-white p-6 rounded-[28px] shadow-xl flex items-center justify-between">
+                                    <div>
+                                        <p className="text-white/80 text-[10px] font-black uppercase tracking-wider">Limite Total de Cartões</p>
+                                        <h3 className="text-3xl font-black mt-1">R$ {creditCards?.reduce((sum, c) => sum + (c?.status === 'ACTIVE' ? (c?.limit ?? 0) : 0), 0)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) ?? '0,00'}</h3>
+                                        <p className="text-[10px] text-white/90 mt-2 font-medium">Limite consolidado ativo disponível para despesas</p>
+                                    </div>
+                                    <div className="bg-white/10 p-4 rounded-2xl text-white"><CardIcon size={24} /></div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                {/* Left Side: Bank Accounts */}
+                                <div className="bg-white p-6 sm:p-8 rounded-[36px] border border-slate-100 shadow-premium space-y-6">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Contas Bancárias</h3>
+                                            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Controle e conciliação de saldo</p>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                setEditingAccount({
+                                                    name: '',
+                                                    bankName: '',
+                                                    type: 'CHECKING',
+                                                    balance: 0,
+                                                    color: '#10b981',
+                                                    status: 'ACTIVE'
+                                                });
+                                                setIsAccountModalOpen(true);
+                                            }}
+                                            className="bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                                        >
+                                            <Plus size={14} /> Nova Conta
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                                        {bankAccounts.length === 0 ? (
+                                            <p className="text-xs text-slate-400 text-center py-12 font-medium">Nenhuma conta cadastrada.</p>
+                                        ) : (
+                                            bankAccounts.map(account => (
+                                                <div 
+                                                    key={account.id} 
+                                                    className="p-5 rounded-[22px] border border-slate-100 shadow-sm hover:shadow-md transition-all flex justify-between items-center relative overflow-hidden"
+                                                >
+                                                    {/* Color stripe */}
+                                                    <div className="absolute left-0 top-0 bottom-0 w-2" style={{ backgroundColor: account.color || '#cbd5e1' }} />
+                                                    
+                                                    <div className="pl-3 space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="font-bold text-slate-800 text-sm">{account.name}</h4>
+                                                            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${account.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
+                                                                {account.status === 'ACTIVE' ? 'Ativa' : 'Inativa'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex gap-2 text-[10px] text-slate-500 font-semibold items-center">
+                                                            <span>{account.bankName}</span>
+                                                            <span>•</span>
+                                                            <span className="uppercase text-[9px] font-black tracking-wider text-slate-400">
+                                                                {account.type === 'CHECKING' ? 'Conta Corrente' : account.type === 'SAVINGS' ? 'Poupança' : account.type === 'CASH' ? 'Dinheiro/Caixa' : 'Investimento'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="text-right">
+                                                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Saldo Atual</p>
+                                                            <p className="text-base font-black text-slate-800">
+                                                                R$ {(account?.balance ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex gap-1.5">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setEditingAccount(account);
+                                                                    setIsAccountModalOpen(true);
+                                                                }}
+                                                                className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-50 rounded-xl transition cursor-pointer"
+                                                            >
+                                                                <Edit2 size={13} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteBankAccountLocal(account.id)}
+                                                                className="p-2 text-red-400 hover:text-red-650 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Right Side: Credit / Debit Cards */}
+                                <div className="bg-white p-6 sm:p-8 rounded-[36px] border border-slate-100 shadow-premium space-y-6">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Cartões de Crédito e Débito</h3>
+                                            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Limites de gastos corporativos</p>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                setEditingCard({
+                                                    name: '',
+                                                    brand: 'Visa',
+                                                    limit: 10000,
+                                                    availableLimit: 10000,
+                                                    closingDay: 10,
+                                                    dueDate: 20,
+                                                    color: '#0f172a',
+                                                    status: 'ACTIVE'
+                                                });
+                                                setIsCardModalOpen(true);
+                                            }}
+                                            className="bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                                        >
+                                            <Plus size={14} /> Novo Cartão
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-1">
+                                        {creditCards.length === 0 ? (
+                                            <div className="md:col-span-2 text-center py-12">
+                                                <p className="text-xs text-slate-400 font-medium">Nenhum cartão cadastrado.</p>
+                                            </div>
+                                        ) : (
+                                            creditCards.map(card => {
+                                                const isDebit = card.limit === 0;
+                                                return (
+                                                    <div 
+                                                        key={card.id} 
+                                                        className="relative p-5 rounded-[24px] text-slate-100 flex flex-col justify-between h-52 shadow-lg transition-transform hover:scale-[1.02]"
+                                                        style={{ background: `linear-gradient(135deg, ${card.color || '#1e3a8a'}df, ${card.color || '#1e3a8a'}ff)` }}
+                                                    >
+                                                        {/* Chip effect & brand logo */}
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="space-y-1">
+                                                                <h4 className="text-xs font-black uppercase tracking-wider text-white/90">{card.name}</h4>
+                                                                <p className="text-[10px] text-white/75 font-semibold uppercase">{card.brand}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-lg text-[8px] font-black tracking-wider uppercase border border-white/5">
+                                                                {isDebit ? 'DÉBITO' : 'CRÉDITO'}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Card Body Numbers */}
+                                                        <div>
+                                                            <p className="text-xs font-mono tracking-widest text-slate-200">
+                                                                ••••   ••••   ••••   {card.id.length > 4 ? card.id.substring(card.id.length - 4) : '2489'}
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Limits and Bottom actions */}
+                                                        <div className="border-t border-white/10 pt-3 mt-1 flex justify-between items-end">
+                                                            <div className="space-y-0.5">
+                                                                {isDebit ? (
+                                                                    <>
+                                                                        <span className="text-[8px] uppercase font-black text-white/50 tracking-wider">Limite Associado</span>
+                                                                        <p className="text-xs font-bold text-white">Saldo em Conta</p>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <span className="text-[8px] uppercase font-black text-white/50 tracking-wider">Disponível / Limite</span>
+                                                                        <p className="text-xs font-bold text-white">
+                                                                            R$ {(card?.availableLimit ?? 0).toLocaleString('pt-BR')} <span className="text-white/50 font-normal">/ {(card?.limit ?? 0).toLocaleString('pt-BR')}</span>
+                                                                        </p>
+                                                                    </>
+                                                                )}
+                                                                <div className="flex gap-2 text-[8px] text-white/60 font-semibold uppercase tracking-wider mt-0.5">
+                                                                    <span>Fech: {card.closingDay}</span>
+                                                                    <span>Venc: {card.dueDate}</span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex gap-1.5 bg-black/15 p-1 rounded-xl border border-white/5 shrink-0">
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        setEditingCard(card);
+                                                                        setIsCardModalOpen(true);
+                                                                    }}
+                                                                    className="p-1.5 hover:bg-white/10 rounded-lg text-white/80 hover:text-white transition cursor-pointer"
+                                                                >
+                                                                    <Edit2 size={11} />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => handleDeleteCreditCardLocal(card.id)}
+                                                                    className="p-1.5 hover:bg-red-500/10 rounded-lg text-red-350 hover:text-red-200 transition cursor-pointer"
+                                                                >
+                                                                    <Trash2 size={11} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
                 </AnimatePresence>
             </div>
 
-            {/* Stock Modal */}
-            {isStockModalOpen && (
-                <Modal 
-                    isOpen={isStockModalOpen} 
-                    onClose={() => { setIsStockModalOpen(false); setEditingStockId(null); }}
+            {/* Modal for creating/editing transactions */}
+            {isTxModalOpen && editingTx && (
+                <Modal
+                    isOpen={isTxModalOpen}
+                    onClose={() => { setIsTxModalOpen(false); setEditingTx(null); }}
+                    title={editingTx.id ? 'Alterar Movimentação Financeira' : 'Adicionar Movimentação Financeira'}
                     maxWidth="500px"
-                    hideHeader={true}
-                    noPadding={true}
-                    scrollable={false}
                 >
-                    <div className="flex flex-col flex-1 min-h-0">
-                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingStockId ? 'Editar Item' : 'Novo Item de Estoque'}</h3>
-                            <button onClick={() => { setIsStockModalOpen(false); setEditingStockId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
+                    <form onSubmit={handleSaveTransactionLocal} className="space-y-4 p-1 text-slate-800 font-semibold text-xs">
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Descrição</label>
+                            <input
+                                type="text"
+                                required
+                                value={editingTx.description || ''}
+                                onChange={e => setEditingTx({ ...editingTx, description: e.target.value })}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-white rounded-xl outline-none transition"
+                                placeholder="E.g., Pagamento de Imposto Federal simples"
+                            />
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome do Item</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: Papel A4"
-                                    value={newStockItem.name || ''}
-                                    onChange={e => setNewStockItem({...newStockItem, name: e.target.value})}
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Categoria</label>
-                                    <input 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        placeholder="Ex: Escritório"
-                                        value={newStockItem.category || ''}
-                                        onChange={e => setNewStockItem({...newStockItem, category: e.target.value})}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Unidade</label>
-                                    <input 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        placeholder="Ex: Pacote, kg, un"
-                                        value={newStockItem.unit || ''}
-                                        onChange={e => setNewStockItem({...newStockItem, unit: e.target.value})}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Quantidade Atual</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newStockItem.quantity || ''}
-                                        onChange={e => setNewStockItem({...newStockItem, quantity: parseInt(e.target.value)})}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Quantidade Mínima</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newStockItem.minQuantity || ''}
-                                        onChange={e => setNewStockItem({...newStockItem, minQuantity: parseInt(e.target.value)})}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Localização</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: Prateleira A1"
-                                    value={newStockItem.location || ''}
-                                    onChange={e => setNewStockItem({...newStockItem, location: e.target.value})}
-                                />
-                            </div>
-                        </div>
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 z-20">
-                            <button onClick={() => { setIsStockModalOpen(false); setEditingStockId(null); }} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
-                            <button onClick={handleAddStockItem} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">{editingStockId ? 'Salvar Alterações' : 'Adicionar ao Estoque'}</button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
 
-            {/* Asset Modal */}
-            {isAssetModalOpen && (
-                <Modal 
-                    isOpen={isAssetModalOpen} 
-                    onClose={() => { setIsAssetModalOpen(false); setEditingAssetId(null); }}
-                    maxWidth="500px"
-                    hideHeader={true}
-                    noPadding={true}
-                    scrollable={false}
-                >
-                    <div className="flex flex-col flex-1 min-h-0">
-                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingAssetId ? 'Editar Ativo' : 'Novo Ativo'}</h3>
-                            <button onClick={() => { setIsAssetModalOpen(false); setEditingAssetId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
-                        </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome do Ativo</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: MacBook Pro M3"
-                                    value={newAsset.name || ''}
-                                    onChange={e => setNewAsset({...newAsset, name: e.target.value})}
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Valor (R$)</label>
+                                <input
+                                    type="number"
+                                    required
+                                    min="0.01"
+                                    step="0.01"
+                                    value={editingTx.amount || ''}
+                                    onChange={e => setEditingTx({ ...editingTx, amount: Number(e.target.value) })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none transition"
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Categoria</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newAsset.category}
-                                        onChange={e => setNewAsset({...newAsset, category: e.target.value as any})}
-                                    >
-                                        <option value="HARDWARE">Hardware</option>
-                                        <option value="SOFTWARE">Software</option>
-                                        <option value="FURNITURE">Móveis</option>
-                                        <option value="VEHICLE">Veículo</option>
-                                        <option value="OTHER">Outro</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Status</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newAsset.status}
-                                        onChange={e => setNewAsset({...newAsset, status: e.target.value as any})}
-                                    >
-                                        <option value="ACTIVE">Ativo</option>
-                                        <option value="MAINTENANCE">Manutenção</option>
-                                        <option value="DISPOSED">Baixado</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Data de Compra</label>
-                                    <input 
-                                        type="date"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newAsset.purchaseDate || ''}
-                                        onChange={e => setNewAsset({...newAsset, purchaseDate: e.target.value})}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Valor de Compra</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newAsset.purchaseValue || ''}
-                                        onChange={e => setNewAsset({...newAsset, purchaseValue: parseFloat(e.target.value)})}
-                                    />
-                                </div>
-                            </div>
                             <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Responsável</label>
-                                <select 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    value={newAsset.responsibleId || ''}
-                                    onChange={e => setNewAsset({...newAsset, responsibleId: e.target.value})}
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Data</label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={editingTx.date || ''}
+                                    onChange={e => setEditingTx({ ...editingTx, date: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none transition"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Opereta</label>
+                                <select
+                                    value={editingTx.type || 'EXPENSE'}
+                                    onChange={e => setEditingTx({ ...editingTx, type: e.target.value as any })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none transition"
                                 >
-                                    <option value="">Sem Responsável</option>
-                                    {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                    <option value="EXPENSE">🔴 Saída (Despesa)</option>
+                                    <option value="INCOME">🟢 Entrada (Receita)</option>
                                 </select>
                             </div>
-                        </div>
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 z-20">
-                            <button onClick={() => { setIsAssetModalOpen(false); setEditingAssetId(null); }} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
-                            <button onClick={handleAddAsset} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">{editingAssetId ? 'Salvar Alterações' : 'Cadastrar Ativo'}</button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
-            {/* Cash Movement Modal */}
-            {isCashMovementModalOpen && (
-                <Modal 
-                    isOpen={isCashMovementModalOpen} 
-                    onClose={() => setIsCashMovementModalOpen(false)}
-                    maxWidth="400px"
-                    hideHeader={true}
-                    noPadding={true}
-                    scrollable={false}
-                >
-                    <div className="flex flex-col flex-1 min-h-0">
-                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Nova Movimentação</h3>
-                            <button onClick={() => setIsCashMovementModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
-                        </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-                            <div className="flex p-1 bg-slate-100 rounded-2xl">
-                                <button 
-                                    onClick={() => setNewCashMovement({...newCashMovement, type: 'IN'})}
-                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newCashMovement.type === 'IN' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Categoria</label>
+                                <select
+                                    required
+                                    value={editingTx.categoryId || ''}
+                                    onChange={e => setEditingTx({ ...editingTx, categoryId: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none transition"
                                 >
-                                    Entrada
-                                </button>
-                                <button 
-                                    onClick={() => setNewCashMovement({...newCashMovement, type: 'OUT'})}
-                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newCashMovement.type === 'OUT' ? 'bg-red-500 text-white shadow-lg' : 'text-slate-400'}`}
-                                >
-                                    Saída
-                                </button>
-                            </div>
-
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Valor (R$)</label>
-                                <input 
-                                    type="number" 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xl font-black outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="0,00"
-                                    value={newCashMovement.amount || ''}
-                                    onChange={e => setNewCashMovement({...newCashMovement, amount: parseFloat(e.target.value)})}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Descrição</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: Venda de Café"
-                                    value={newCashMovement.description || ''}
-                                    onChange={e => setNewCashMovement({...newCashMovement, description: e.target.value})}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Categoria</label>
-                                <select 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    value={newCashMovement.category}
-                                    onChange={e => setNewCashMovement({...newCashMovement, category: e.target.value as any})}
-                                >
-                                    <option value="SALE">Venda</option>
-                                    <option value="SUPPLY">Suprimento</option>
-                                    <option value="WITHDRAWAL">Sangria / Retirada</option>
-                                    <option value="EXPENSE">Despesa</option>
-                                    <option value="OTHER">Outro</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 z-20">
-                            <button onClick={() => setIsCashMovementModalOpen(false)} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
-                            <button onClick={handleAddCashMovement} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">Confirmar</button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
-            {/* Transaction Modal */}
-            {isTransactionModalOpen && (
-                <Modal 
-                    isOpen={isTransactionModalOpen} 
-                    onClose={() => setIsTransactionModalOpen(false)}
-                    maxWidth="500px"
-                    hideHeader={true}
-                    noPadding={true}
-                    scrollable={false}
-                >
-                    <div className="flex flex-col flex-1 min-h-0">
-                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Nova Transação</h3>
-                            <button onClick={() => setIsTransactionModalOpen(false)} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
-                        </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-                            <div className="flex p-1 bg-slate-100 rounded-2xl">
-                                <button 
-                                    onClick={() => setNewTransaction({...newTransaction, type: 'INCOME'})}
-                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newTransaction.type === 'INCOME' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}
-                                >
-                                    Receita
-                                </button>
-                                <button 
-                                    onClick={() => setNewTransaction({...newTransaction, type: 'EXPENSE'})}
-                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newTransaction.type === 'EXPENSE' ? 'bg-red-500 text-white shadow-lg' : 'text-slate-400'}`}
-                                >
-                                    Despesa
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Valor (R$)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-xl font-black outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        placeholder="0,00"
-                                        value={newTransaction.amount || ''}
-                                        onChange={e => setNewTransaction({...newTransaction, amount: parseFloat(e.target.value)})}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Data</label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newTransaction.date || ''}
-                                        onChange={e => setNewTransaction({...newTransaction, date: e.target.value})}
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Descrição</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: Pagamento Fornecedor X"
-                                    value={newTransaction.description || ''}
-                                    onChange={e => setNewTransaction({...newTransaction, description: e.target.value})}
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Categoria</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newTransaction.categoryId}
-                                        onChange={e => setNewTransaction({...newTransaction, categoryId: e.target.value})}
-                                    >
-                                        {categories.filter(c => c.type === 'BOTH' || c.type === newTransaction.type).map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Status</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newTransaction.status}
-                                        onChange={e => setNewTransaction({...newTransaction, status: e.target.value as any})}
-                                    >
-                                        <option value="PAID">Pago / Recebido</option>
-                                        <option value="PENDING">Pendente</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">
-                                    {newTransaction.type === 'INCOME' ? 'Conta de Destino' : 'Forma de Pagamento'}
-                                </label>
-                                <select 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    value={newTransaction.bankAccountId || newTransaction.creditCardId || ''}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        if (val.startsWith('ba-')) {
-                                            setNewTransaction({...newTransaction, bankAccountId: val.replace('ba-', ''), creditCardId: undefined});
-                                        } else if (val.startsWith('cc-')) {
-                                            setNewTransaction({...newTransaction, creditCardId: val.replace('cc-', ''), bankAccountId: undefined});
-                                        } else {
-                                            setNewTransaction({...newTransaction, bankAccountId: undefined, creditCardId: undefined});
-                                        }
-                                    }}
-                                >
-                                    <option value="">Nenhum</option>
-                                    <optgroup label="Contas Bancárias">
-                                        {bankAccounts.map(acc => <option key={acc.id} value={`ba-${acc.id}`}>{acc.name}</option>)}
-                                    </optgroup>
-                                    {newTransaction.type === 'EXPENSE' && (
-                                        <optgroup label="Cartões de Crédito">
-                                            {creditCards.map(card => <option key={card.id} value={`cc-${card.id}`}>{card.name}</option>)}
-                                        </optgroup>
-                                    )}
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Cliente (Opcional)</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newTransaction.clientId || ''}
-                                        onChange={e => setNewTransaction({...newTransaction, clientId: e.target.value})}
-                                    >
-                                        <option value="">Sem Cliente</option>
-                                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Squad (Opcional)</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newTransaction.squadId || ''}
-                                        onChange={e => setNewTransaction({...newTransaction, squadId: e.target.value})}
-                                    >
-                                        <option value="">Sem Squad</option>
-                                        {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Recurrence Section */}
-                            <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-white rounded-xl text-blue-500 shadow-sm">
-                                            <Repeat size={16} />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Transação Recorrente</p>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase">Repetir mensalmente</p>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => setNewTransaction({...newTransaction, isRecurring: !newTransaction.isRecurring})}
-                                        className={`w-12 h-6 rounded-full transition-all relative ${newTransaction.isRecurring ? 'bg-blue-500' : 'bg-slate-200'}`}
-                                    >
-                                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${newTransaction.isRecurring ? 'left-7' : 'left-1'}`} />
-                                    </button>
-                                </div>
-
-                                {newTransaction.isRecurring && (
-                                    <motion.div 
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: 'auto', opacity: 1 }}
-                                        className="pt-4 border-t border-slate-200"
-                                    >
-                                        <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Quantidade de meses</label>
-                                        <div className="flex items-center gap-4">
-                                            <input 
-                                                type="range" 
-                                                min="2" 
-                                                max="24" 
-                                                value={newTransaction.recurrenceMonths || 2}
-                                                onChange={e => setNewTransaction({...newTransaction, recurrenceMonths: parseInt(e.target.value)})}
-                                                className="flex-1 accent-blue-500"
-                                            />
-                                            <span className="w-12 text-center text-sm font-black text-slate-800 bg-white px-2 py-1 rounded-lg border border-slate-200">
-                                                {newTransaction.recurrenceMonths || 2}
-                                            </span>
-                                        </div>
-                                        <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 italic">
-                                            Serão criadas {newTransaction.recurrenceMonths || 2} transações idênticas.
-                                        </p>
-                                    </motion.div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 sticky bottom-0 z-20 flex justify-end gap-3">
-                            <button onClick={() => setIsTransactionModalOpen(false)} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
-                            <button onClick={handleAddTransaction} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">Salvar Transação</button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
-            {/* Account Modal */}
-            {isAccountModalOpen && (
-                <Modal 
-                    isOpen={isAccountModalOpen} 
-                    onClose={() => {
-                        setIsAccountModalOpen(false);
-                        setEditingAccountId(null);
-                    }}
-                    maxWidth="500px"
-                    hideHeader={true}
-                    noPadding={true}
-                    scrollable={false}
-                >
-                    <div className="flex flex-col flex-1 min-h-0">
-                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingAccountId ? 'Editar Conta' : 'Nova Conta'}</h3>
-                            <button onClick={() => { setIsAccountModalOpen(false); setEditingAccountId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
-                        </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome da Conta</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: Itaú Empresa"
-                                    value={newAccount.name || ''}
-                                    onChange={e => setNewAccount({...newAccount, name: e.target.value})}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Banco / Instituição</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: Banco Itaú"
-                                    value={newAccount.bankName || ''}
-                                    onChange={e => setNewAccount({...newAccount, bankName: e.target.value})}
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Tipo</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newAccount.type}
-                                        onChange={e => setNewAccount({...newAccount, type: e.target.value as any})}
-                                    >
-                                        <option value="CHECKING">Corrente</option>
-                                        <option value="SAVINGS">Poupança</option>
-                                        <option value="CASH">Dinheiro</option>
-                                        <option value="INVESTMENT">Investimento</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Saldo Inicial</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        placeholder="0,00"
-                                        value={newAccount.balance || ''}
-                                        onChange={e => setNewAccount({...newAccount, balance: parseFloat(e.target.value)})}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Cor de Identificação</label>
-                                <div className="flex gap-3">
-                                    {['#3b82f6', '#ec6608', '#8a05be', '#10b981', '#ef4444', '#000000'].map(color => (
-                                        <button 
-                                            key={color}
-                                            onClick={() => setNewAccount({...newAccount, color})}
-                                            className={`w-10 h-10 rounded-xl border-4 transition-all ${newAccount.color === color ? 'border-pink-200 scale-110 shadow-lg' : 'border-transparent'}`}
-                                            style={{ backgroundColor: color }}
-                                        />
+                                    <option value="">Selecione categoria</option>
+                                    {categories.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
                                     ))}
-                                </div>
+                                </select>
                             </div>
                         </div>
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 sticky bottom-0 z-20 flex justify-end gap-3">
-                            <button onClick={() => { setIsAccountModalOpen(false); setEditingAccountId(null); }} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
-                            <button onClick={handleAddAccount} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">{editingAccountId ? 'Salvar Alterações' : 'Criar Conta'}</button>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Banco / Destino</label>
+                                <select
+                                    value={editingTx.bankAccountId || ''}
+                                    onChange={e => setEditingTx({ ...editingTx, bankAccountId: e.target.value || undefined })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none transition"
+                                >
+                                    <option value="">Nenhum / Dinheiro vivo</option>
+                                    {bankAccounts?.map(ba => (
+                                        <option key={ba.id} value={ba.id}>{ba.name} (Saldo R$ {(ba?.balance ?? 0).toLocaleString('pt-BR')})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Situação de pagamento</label>
+                                <select
+                                    value={editingTx.status || 'PENDING'}
+                                    onChange={e => setEditingTx({ ...editingTx, status: e.target.value as any })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none transition"
+                                >
+                                    <option value="PENDING">Aberto / Agendado</option>
+                                    <option value="PAID">Liquidado / Pago</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-1">Cliente Vinculado</label>
+                            <select
+                                value={editingTx.clientId || ''}
+                                onChange={e => setEditingTx({ ...editingTx, clientId: e.target.value || undefined })}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none transition"
+                            >
+                                <option value="">Sem vínculo comercial</option>
+                                {clients.map(cl => (
+                                    <option key={cl.id} value={cl.id}>{cl.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="pt-4 flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => { setIsTxModalOpen(false); setEditingTx(null); }}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-500 font-black text-[10px] uppercase tracking-wider"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-5 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl font-black text-[10px] uppercase tracking-wider shadow-lg shadow-pink-500/10"
+                            >
+                                Confirmar Lançamento
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {/* Modal for creating/editing categories */}
+            {isCategoryModalOpen && editingCategory && (
+                <Modal
+                    isOpen={isCategoryModalOpen}
+                    onClose={() => { setIsCategoryModalOpen(false); setEditingCategory(null); }}
+                    title={editingCategory.id ? 'Editar Categoria' : 'Nova Categoria'}
+                    maxWidth="400px"
+                >
+                    <form onSubmit={handleSaveCategoryLocal} className="space-y-4 p-1 text-slate-800 font-semibold text-xs animate-fade-in">
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Nome</label>
+                            <input
+                                type="text"
+                                required
+                                value={editingCategory.name || ''}
+                                onChange={e => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                placeholder="E.g., Freelancers"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Tipo de vínculo</label>
+                            <select
+                                value={editingCategory.type || 'EXPENSE'}
+                                onChange={e => setEditingCategory({ ...editingCategory, type: e.target.value as any })}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                            >
+                                <option value="EXPENSE">Despesa (Débito)</option>
+                                <option value="INCOME">Receita (Crédito)</option>
+                                <option value="BOTH">Ambos</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Cor Visual</label>
+                            <input
+                                type="color"
+                                value={editingCategory.color || '#64748b'}
+                                onChange={e => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                                className="w-full h-10 p-1 bg-slate-50 border border-slate-200 rounded-xl outline-none cursor-pointer"
+                            />
+                        </div>
+
+                        <div className="pt-4 flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => { setIsCategoryModalOpen(false); setEditingCategory(null); }}
+                                className="px-4 py-2 bg-slate-100 rounded-xl text-slate-500 font-black text-[10px] uppercase tracking-wider"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-[10px] uppercase tracking-wider"
+                            >
+                                Salvar Categoria
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {/* Modal for creating/editing Assets */}
+            {isAssetModalOpen && editingAsset && (
+                <Modal
+                    isOpen={isAssetModalOpen}
+                    onClose={() => { setIsAssetModalOpen(false); setEditingAsset(null); }}
+                    title={editingAsset.id ? 'Editar Ativo' : 'Novo Ativo'}
+                    maxWidth="450px"
+                >
+                    <form onSubmit={handleSaveAssetLocal} className="space-y-4 p-1 text-slate-800 font-semibold text-xs">
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Nome do Ativo</label>
+                            <input
+                                type="text"
+                                required
+                                value={editingAsset.name || ''}
+                                onChange={e => setEditingAsset({ ...editingAsset, name: e.target.value })}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                placeholder="MacBook Pro M2 - Desenvolvedor"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Categoria</label>
+                                <select
+                                    value={editingAsset.category || 'HARDWARE'}
+                                    onChange={e => setEditingAsset({ ...editingAsset, category: e.target.value as any })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                >
+                                    <option value="HARDWARE">💻 Hardware</option>
+                                    <option value="SOFTWARE">🔌 Software / Licenças</option>
+                                    <option value="FURNITURE">🪑 Mobiliário</option>
+                                    <option value="VEHICLE">🚗 Veículos</option>
+                                    <option value="OTHER">📦 Outros</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Situação física</label>
+                                <select
+                                    value={editingAsset.status || 'ACTIVE'}
+                                    onChange={e => setEditingAsset({ ...editingAsset, status: e.target.value as any })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                >
+                                    <option value="ACTIVE">Ativo / Operante</option>
+                                    <option value="MAINTENANCE">Manutenção / Reparo</option>
+                                    <option value="DISPOSED">Baixado / Fora de uso</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Valor Original (R$)</label>
+                                <input
+                                    type="number"
+                                    required
+                                    min="0"
+                                    value={editingAsset.purchaseValue || ''}
+                                    onChange={e => setEditingAsset({ ...editingAsset, purchaseValue: Number(e.target.value) })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Data Gasto</label>
+                                <input
+                                    type="date"
+                                    value={editingAsset.purchaseDate || ''}
+                                    onChange={e => setEditingAsset({ ...editingAsset, purchaseDate: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">S/N de Licença</label>
+                                <input
+                                    type="text"
+                                    value={editingAsset.serialNumber || ''}
+                                    onChange={e => setEditingAsset({ ...editingAsset, serialNumber: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                    placeholder="Ex: C02DFHGJKD"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Localização física</label>
+                                <input
+                                    type="text"
+                                    value={editingAsset.location || ''}
+                                    onChange={e => setEditingAsset({ ...editingAsset, location: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                    placeholder="Prateleira A / Remoto"
+                                />
+                            </div>
+                        </div>
+
+                        {editingAsset.status === 'DISPOSED' && (
+                            <div>
+                                <label className="text-[9px] font-black text-rose-500 uppercase block mb-1">Justificativa da Perda / Baixa</label>
+                                <textarea
+                                    value={editingAsset.lossJustification || ''}
+                                    onChange={e => setEditingAsset({ ...editingAsset, lossJustification: e.target.value })}
+                                    className="w-full p-2.5 bg-rose-50/50 border border-rose-200 hover:border-rose-300 focus:bg-white rounded-xl outline-none"
+                                    rows={2}
+                                    placeholder="Escreva a justificativa de descarte do ativo."
+                                />
+                            </div>
+                        )}
+
+                        <div className="pt-4 flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => { setIsAssetModalOpen(false); setEditingAsset(null); }}
+                                className="px-4 py-2 bg-slate-100 rounded-xl text-slate-500 font-black text-[10px] uppercase tracking-wider"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-wider shadow-md"
+                            >
+                                Salvar Ativo
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {/* Requirement 5 Asset Loss Justification explicit modal */}
+            {isAssetLossModalOpen && assetForLoss && (
+                <Modal
+                    isOpen={isAssetLossModalOpen}
+                    onClose={() => { setIsAssetLossModalOpen(false); setAssetForLoss(null); }}
+                    title="Justificativa de Prejuízo de Ativo"
+                    maxWidth="450px"
+                >
+                    <div className="space-y-4 text-slate-800 font-semibold text-xs leading-relaxed p-1">
+                        <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100 flex items-start gap-3">
+                            <AlertTriangle className="text-rose-500 shrink-0 mt-0.5" size={18} />
+                            <div>
+                                <h4 className="font-black text-rose-700">Atenção ao registrar descarte</h4>
+                                <p className="text-[10px] text-slate-600 mt-1">
+                                    Ao confirmar a baixa, este ativo ({assetForLoss.name}) terá seu valor atual reduzido a zero, e seu prejuízo de aquisição será computado no consolidado financeiro do sistema.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase block mb-1.5">Escreva o motivo detalhado do descarte ou prejuízo:</label>
+                            <textarea
+                                required
+                                value={lossJustificationText}
+                                onChange={e => setLossJustificationText(e.target.value)}
+                                className="w-full p-3 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-white rounded-xl outline-none"
+                                rows={3}
+                                placeholder="E.g., Derramamento de café na placa mãe sem possibilidade de conserto."
+                            />
+                        </div>
+
+                        <div className="pt-4 flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => { setIsAssetLossModalOpen(false); setAssetForLoss(null); }}
+                                className="px-4 py-2 bg-slate-100 rounded-xl text-slate-500 font-black text-[10px] uppercase tracking-wider"
+                            >
+                                Voltar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!lossJustificationText.trim()}
+                                onClick={handleConfirmAssetLoss}
+                                className="px-5 py-2 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white rounded-xl font-black text-[10px] uppercase tracking-wider shadow-lg shadow-rose-500/10"
+                            >
+                                Confirmar Baixa com Justificativa
+                            </button>
                         </div>
                     </div>
                 </Modal>
             )}
 
-            {/* Card Modal */}
-            {isCardModalOpen && (
-                <Modal 
-                    isOpen={isCardModalOpen} 
-                    onClose={() => {
-                        setIsCardModalOpen(false);
-                        setEditingCardId(null);
-                    }}
-                    maxWidth="500px"
-                    hideHeader={true}
-                    noPadding={true}
-                    scrollable={false}
+            {/* Modal for creating/editing Inventory items (Stock) */}
+            {isStockModalOpen && editingStock && (
+                <Modal
+                    isOpen={isStockModalOpen}
+                    onClose={() => { setIsStockModalOpen(false); setEditingStock(null); }}
+                    title={editingStock.id ? 'Alterar Insumo' : 'Novo Insumo em Estoque'}
+                    maxWidth="400px"
                 >
-                    <div className="flex flex-col flex-1 min-h-0">
-                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-20">
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingCardId ? 'Editar Cartão' : 'Novo Cartão'}</h3>
-                            <button onClick={() => { setIsCardModalOpen(false); setEditingCardId(null); }} className="p-2 text-slate-300 hover:bg-slate-50 rounded-full transition-colors"><X size={20}/></button>
+                    <form onSubmit={handleSaveStockLocal} className="space-y-4 p-1 text-slate-800 font-semibold text-xs">
+                        <div>
+                            <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Nome do Item</label>
+                            <input
+                                type="text"
+                                required
+                                value={editingStock.name || ''}
+                                onChange={e => setEditingStock({ ...editingStock, name: e.target.value })}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                placeholder="Caneca Personalizada Agência"
+                            />
                         </div>
-                        <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
+
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Nome do Cartão</label>
-                                <input 
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                    placeholder="Ex: Visa Platinum Business"
-                                    value={newCard.name || ''}
-                                    onChange={e => setNewCard({...newCard, name: e.target.value})}
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Categoria</label>
+                                <input
+                                    type="text"
+                                    value={editingStock.category || ''}
+                                    onChange={e => setEditingStock({ ...editingStock, category: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                    placeholder="Marketing / Papelaria"
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Bandeira</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        value={newCard.brand}
-                                        onChange={e => setNewCard({...newCard, brand: e.target.value})}
-                                    >
-                                        <option value="Visa">Visa</option>
-                                        <option value="Mastercard">Mastercard</option>
-                                        <option value="Amex">American Express</option>
-                                        <option value="Elo">Elo</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Limite Total</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        placeholder="0,00"
-                                        value={newCard.limit || ''}
-                                        onChange={e => setNewCard({...newCard, limit: parseFloat(e.target.value)})}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Dia Fechamento</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        placeholder="25"
-                                        value={newCard.closingDay || ''}
-                                        onChange={e => setNewCard({...newCard, closingDay: parseInt(e.target.value)})}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-widest ml-1">Dia Vencimento</label>
-                                    <input 
-                                        type="number"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:bg-white focus:border-pink-500 transition-all"
-                                        placeholder="5"
-                                        value={newCard.dueDate || ''}
-                                        onChange={e => setNewCard({...newCard, dueDate: parseInt(e.target.value)})}
-                                    />
-                                </div>
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Unidade (E.g. un, cx)</label>
+                                <input
+                                    type="text"
+                                    value={editingStock.unit || ''}
+                                    onChange={e => setEditingStock({ ...editingStock, unit: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                />
                             </div>
                         </div>
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 sticky bottom-0 z-20">
-                            <button onClick={() => { setIsCardModalOpen(false); setEditingCardId(null); }} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
-                            <button onClick={handleAddCard} className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-slate-200 hover:bg-slate-800">{editingCardId ? 'Salvar Alterações' : 'Criar Cartão'}</button>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Quantidade atual</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    required
+                                    value={editingStock.quantity === undefined ? '' : editingStock.quantity}
+                                    onChange={e => setEditingStock({ ...editingStock, quantity: Number(e.target.value) })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Quantidade Mínima</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    required
+                                    value={editingStock.minQuantity === undefined ? '' : editingStock.minQuantity}
+                                    onChange={e => setEditingStock({ ...editingStock, minQuantity: Number(e.target.value) })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                />
+                            </div>
                         </div>
-                    </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Preço unitário (R$)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    required
+                                    value={editingStock.price || ''}
+                                    onChange={e => setEditingStock({ ...editingStock, price: Number(e.target.value) })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Localização no depósito</label>
+                                <input
+                                    type="text"
+                                    value={editingStock.location || ''}
+                                    onChange={e => setEditingStock({ ...editingStock, location: e.target.value })}
+                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                                    placeholder="Armário 2 / Prato"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-4 flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => { setIsStockModalOpen(false); setEditingStock(null); }}
+                                className="px-4 py-2 bg-slate-100 rounded-xl text-slate-500 font-black text-[10px] uppercase tracking-wider"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-[10px] uppercase tracking-wider shadow-md"
+                            >
+                                Salvar Estoque
+                            </button>
+                        </div>
+                    </form>
                 </Modal>
             )}
+
         </div>
     );
 };

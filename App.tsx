@@ -78,7 +78,8 @@ import {
   deleteAgencyService,
   fetchFinancialCategories,
   saveFinancialCategory,
-  deleteUser
+  deleteUser,
+  saveBankAccount
 } from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements, initialCategories } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, Client, Notification, SystemModule, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement, FinancialCategory } from './types';
@@ -855,6 +856,22 @@ const App: React.FC = () => {
                     const res = await saveFinancialTransaction(t);
                     if (res.success) {
                         setFinancialTransactions(prev => [t as FinancialTransaction, ...prev.filter(x => x.id !== t.id)]);
+                        if (t.status === 'PAID' && t.bankAccountId) {
+                            setBankAccounts(prev => {
+                                const matched = prev.find(acc => acc.id === t.bankAccountId);
+                                if (matched) {
+                                    const updatedBalance = t.type === 'INCOME' 
+                                        ? matched.balance + t.amount 
+                                        : matched.balance - t.amount;
+                                    const updatedAcc = { ...matched, balance: updatedBalance };
+                                    saveBankAccount(updatedAcc).catch(err => {
+                                        console.error('Erro ao atualizar saldo da conta bancaria:', err);
+                                    });
+                                    return prev.map(acc => acc.id === t.bankAccountId ? updatedAcc : acc);
+                                }
+                                return prev;
+                            });
+                        }
                     } else {
                         const errorDetails = res.error ? (res.error.message || JSON.stringify(res.error)) : 'Desconhecido';
                         throw new Error(`Erro no banco de dados ao salvar transação: ${errorDetails}`);

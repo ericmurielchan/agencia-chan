@@ -211,6 +211,40 @@ export const initialClients: Client[] = [
         monthlyValue: 12000,
         contractStartDate: '2024-02-01',
         contacts: []
+    },
+    {
+        id: 'client_l3_carol',
+        name: 'Carol FH',
+        legalName: 'Carol FH Vestuário EIRELI',
+        document: '22.333.444/0001-55',
+        status: 'ACTIVE',
+        serviceIds: ['s1'],
+        entryDate: '2024-03-15',
+        responsibleId: 'u1',
+        classification: 'A',
+        tags: ['Outbound', 'Moda', 'Design'],
+        internalNotes: 'Cliente originado do CRM por conversão da venda de Carol FH.',
+        contact: {
+            name: 'Carol FH',
+            email: 'carol.fh@googlemail.com',
+            phone: '11966665555',
+            whatsapp: '11966665555'
+        },
+        financialContact: {
+            name: 'Carol FH',
+            email: 'carol.fh@googlemail.com',
+            phone: '11966665555'
+        },
+        passwords: [],
+        documentationLinks: [],
+        isRecurring: true,
+        level: 'INTERMEDIATE',
+        summary: 'Carol FH - Projeto e Gestão de presença digital.',
+        contractUrl: '',
+        assetsFolderUrl: '',
+        monthlyValue: 12500,
+        contractStartDate: '2024-03-15',
+        contacts: []
     }
 ];
 
@@ -248,6 +282,7 @@ export const initialFinancialTransactions: FinancialTransaction[] = [
     { id: 'ft1', description: 'Mensalidade TechStart', amount: 8500, type: 'INCOME', date: '2024-03-10', status: 'PAID', categoryId: 'cat1', bankAccountId: 'ba1', clientId: 'c1', responsibleId: 'u1', createdAt: Date.now() },
     { id: 'ft2', description: 'Servidores AWS', amount: 450, type: 'EXPENSE', date: '2024-03-20', status: 'PAID', categoryId: 'cat2', creditCardId: 'cc1', responsibleId: 'u3', createdAt: Date.now() },
     { id: 'ft3', description: 'Assinatura Adobe Creative', amount: 220, type: 'EXPENSE', date: '2024-03-22', status: 'PAID', categoryId: 'cat2', creditCardId: 'cc1', responsibleId: 'u3', createdAt: Date.now() },
+    { id: 'ft_carol', description: 'Fechamento CRM - Carol FH', amount: 12500, type: 'INCOME', date: '2024-03-15', status: 'PAID', categoryId: 'cat1', bankAccountId: 'ba1', clientId: 'client_l3_carol', responsibleId: 'u1', createdAt: Date.now() - 86400000 * 3 },
     { id: 'ft4', description: 'Aluguel Escritório', amount: 4500, type: 'EXPENSE', date: '2024-04-05', status: 'PENDING', categoryId: 'cat5', bankAccountId: 'ba1', responsibleId: 'u3', createdAt: Date.now() }
 ];
 
@@ -425,6 +460,30 @@ export const initialLeads: Lead[] = [
         createdAt: Date.now() - 86400000 * 2,
         updatedAt: Date.now(),
         history: [],
+        tasks: []
+    },
+    {
+        id: 'l3_carol',
+        name: 'Carol FH',
+        company: 'Carol FH',
+        value: 12500,
+        stageId: 'WON',
+        status: 'WON',
+        email: 'carol.fh@googlemail.com',
+        phone: '11966665555',
+        lastContact: new Date().toISOString(),
+        source: 'Outbound',
+        rating: 5,
+        responsibleId: 'u1',
+        priority: 'HIGH',
+        temperature: 'HOT',
+        createdAt: Date.now() - 86400000 * 10,
+        updatedAt: Date.now(),
+        history: [
+            { id: 'lh1', action: 'Lead criado', timestamp: Date.now() - 86400000 * 10, userId: 'u1' },
+            { id: 'lh2', action: 'Proposta enviada', timestamp: Date.now() - 86400000 * 7, userId: 'u1' },
+            { id: 'lh3', action: 'Lead convertido em cliente e venda registrada', timestamp: Date.now() - 86400000 * 3, userId: 'u1' }
+        ],
         tasks: []
     }
 ];
