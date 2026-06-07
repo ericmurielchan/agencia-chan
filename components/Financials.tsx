@@ -109,7 +109,7 @@ interface FinancialsProps {
     initialTab?: TabType;
 }
 
-type TabType = 'DASHBOARD' | 'ACCOUNTS_RECEIVABLE' | 'ACCOUNTS_PAYABLE' | 'CASH_FLOW' | 'ASSETS' | 'STOCK' | 'COMMISSIONS' | 'ACCOUNTS_CARDS';
+type TabType = 'DASHBOARD' | 'ACCOUNTS_RECEIVABLE' | 'ACCOUNTS_PAYABLE' | 'CASH_FLOW' | 'ASSETS' | 'STOCK' | 'COMMISSIONS' | 'ACCOUNTS_CARDS' | 'REPORTS';
 
 export const Financials: React.FC<FinancialsProps> = ({
     bankAccounts,
@@ -152,6 +152,17 @@ export const Financials: React.FC<FinancialsProps> = ({
     const [responsibleFilter, setResponsibleFilter] = useState('ALL');
     const [categoryFilter, setCategoryFilter] = useState('ALL');
     const [clientFilter, setClientFilter] = useState('ALL');
+
+    // Reports Custom Filters
+    const [reportType, setReportType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
+    const [reportStatus, setReportStatus] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
+    const [reportBankAccountId, setReportBankAccountId] = useState('ALL');
+    const [reportCreditCardId, setReportCreditCardId] = useState('ALL');
+    const [reportCategoryId, setReportCategoryId] = useState('ALL');
+    const [reportResponsibleId, setReportResponsibleId] = useState('ALL');
+    const [reportClientId, setReportClientId] = useState('ALL');
+    const [reportMinAmount, setReportMinAmount] = useState('');
+    const [reportMaxAmount, setReportMaxAmount] = useState('');
 
     // Date Bounds
     const [startDate, setStartDate] = useState(() => {
@@ -285,6 +296,60 @@ export const Financials: React.FC<FinancialsProps> = ({
             return matchesSearch && matchesResponsible && matchesCategory && matchesClient && matchesDate;
         }).sort((a, b) => b.date.localeCompare(a.date));
     }, [transactions, searchTerm, responsibleFilter, categoryFilter, clientFilter, startDate, endDate, datePreset, clients]);
+
+    // Relatórios Memo
+    const reportTransactions = useMemo(() => {
+        return transactions.filter(t => {
+            if (reportType !== 'ALL' && t.type !== reportType) return false;
+            if (reportStatus !== 'ALL' && t.status !== reportStatus) return false;
+            
+            if (reportBankAccountId !== 'ALL' && t.bankAccountId !== reportBankAccountId) return false;
+            if (reportCreditCardId !== 'ALL' && t.creditCardId !== reportCreditCardId) return false;
+            if (reportCategoryId !== 'ALL' && t.categoryId !== reportCategoryId) return false;
+            if (reportResponsibleId !== 'ALL' && t.responsibleId !== reportResponsibleId) return false;
+            if (reportClientId !== 'ALL' && t.clientId !== reportClientId) return false;
+            
+            if (startDate && t.date < startDate) return false;
+            if (endDate && t.date > endDate) return false;
+            
+            const minAmt = reportMinAmount ? parseFloat(reportMinAmount) : null;
+            const maxAmt = reportMaxAmount ? parseFloat(reportMaxAmount) : null;
+            if (minAmt !== null && t.amount < minAmt) return false;
+            if (maxAmt !== null && t.amount > maxAmt) return false;
+            
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                const descMatch = t.description.toLowerCase().includes(term);
+                const clientMatch = (clients.find(c => c.id === t.clientId)?.name || '').toLowerCase().includes(term);
+                if (!descMatch && !clientMatch) return false;
+            }
+            
+            return true;
+        }).sort((a, b) => b.date.localeCompare(a.date));
+    }, [
+        transactions, reportType, reportStatus, reportBankAccountId, reportCreditCardId,
+        reportCategoryId, reportResponsibleId, reportClientId, reportMinAmount, reportMaxAmount,
+        startDate, endDate, searchTerm, clients
+    ]);
+
+    // Relatórios Stats
+    const reportStats = useMemo(() => {
+        const income = reportTransactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
+        const expense = reportTransactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+        const balance = income - expense;
+        const totalCount = reportTransactions.length;
+        const paidCount = reportTransactions.filter(t => t.status === 'PAID').length;
+        const pendingCount = totalCount - paidCount;
+
+        const categoryGroups: { [key: string]: number } = {};
+        reportTransactions.forEach(t => {
+            const cat = categories.find(c => c.id === t.categoryId)?.name || 'Geral';
+            categoryGroups[cat] = (categoryGroups[cat] || 0) + t.amount;
+        });
+        const categoryData = Object.entries(categoryGroups).map(([name, val]) => ({ name, value: val })).sort((a,b)=> b.value - a.value);
+
+        return { income, expense, balance, totalCount, paidCount, pendingCount, categoryData };
+    }, [reportTransactions, categories]);
 
     // Derived Statistics
     const stats = useMemo(() => {
@@ -785,7 +850,8 @@ export const Financials: React.FC<FinancialsProps> = ({
                             { id: 'ACCOUNTS_CARDS', label: 'Contas & Cartões', icon: Wallet },
                             { id: 'ASSETS', label: 'Ativos', icon: Box },
                             { id: 'STOCK', label: 'Estoque', icon: Package },
-                            { id: 'COMMISSIONS', label: 'Comissões', icon: Calculator }
+                            { id: 'COMMISSIONS', label: 'Comissões', icon: Calculator },
+                            { id: 'REPORTS', label: 'Relatórios', icon: FileText }
                         ].map(sub => (
                             <button
                                 key={sub.id}
@@ -979,29 +1045,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                 </div>
                             </div>
 
-                            {/* Intelligent AI Prompt Area */}
-                            <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-[36px] border border-indigo-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                                <div className="space-y-1">
-                                    <h4 className="text-xs font-black uppercase tracking-wider text-indigo-700 flex items-center gap-2">
-                                        <Sparkles size={16} /> Análise Preditiva e Diagnóstico de IA
-                                    </h4>
-                                    <p className="text-slate-600 text-xs leading-relaxed font-semibold">
-                                        Clique no botão de inteligência analítica para rodar um diagnóstico preditivo automatizado com base no seu histórico real de entradas e saídas.
-                                    </p>
-                                    {aiAnalysis && (
-                                        <div className="mt-4 p-4 bg-white rounded-2xl border border-indigo-100/50 text-xs leading-relaxed text-slate-700 shadow-sm whitespace-pre-line font-medium max-h-60 overflow-y-auto">
-                                            {aiAnalysis}
-                                        </div>
-                                    )}
-                                </div>
-                                <button
-                                    onClick={handleTriggerAiAnalysis}
-                                    disabled={isAiLoading}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-widest py-3 px-6 rounded-2xl shrink-0 shadow-lg shadow-indigo-600/15 disabled:opacity-50 transition"
-                                >
-                                    {isAiLoading ? 'Processando...' : 'Diagnosticar Caixa'}
-                                </button>
-                            </div>
+                            {/* Inteligência Analítica desativada pelo usuário */}
                         </motion.div>
                     )}
 
@@ -1723,6 +1767,354 @@ export const Financials: React.FC<FinancialsProps> = ({
                         </motion.div>
                     )}
 
+                    {/* 8. REPORTS Tab */}
+                    {activeTab === 'REPORTS' && (
+                        <motion.div
+                            key="reports"
+                            initial={{ opacity: 0, x: 15 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="space-y-6"
+                        >
+                            {/* Filtros Customizados do Relatório */}
+                            <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-200 shadow-sm space-y-6">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Filtros Avançados de Relatório</h3>
+                                        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Refine detalhadamente as transações listadas</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setReportType('ALL');
+                                            setReportStatus('ALL');
+                                            setReportBankAccountId('ALL');
+                                            setReportCreditCardId('ALL');
+                                            setReportCategoryId('ALL');
+                                            setReportResponsibleId('ALL');
+                                            setReportClientId('ALL');
+                                            setReportMinAmount('');
+                                            setReportMaxAmount('');
+                                            setSearchTerm('');
+                                        }}
+                                        className="text-rose-500 hover:text-rose-700 font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl border border-rose-100 hover:bg-rose-50 transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                        <X size={12} /> Limpar Filtros
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                                    {/* Tipo */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tipo de Lançamento</label>
+                                        <select
+                                            value={reportType}
+                                            onChange={e => setReportType(e.target.value as any)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        >
+                                            <option value="ALL">Todos os Tipos</option>
+                                            <option value="INCOME">Receitas (Entradas)</option>
+                                            <option value="EXPENSE">Despesas (Saídas)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Situação */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Situação</label>
+                                        <select
+                                            value={reportStatus}
+                                            onChange={e => setReportStatus(e.target.value as any)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        >
+                                            <option value="ALL">Todas as Situações</option>
+                                            <option value="PAID">Conciliado / Pago 🟢</option>
+                                            <option value="PENDING">Pendente 🟡</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Conta Bancária */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Conta Bancária</label>
+                                        <select
+                                            value={reportBankAccountId}
+                                            onChange={e => setReportBankAccountId(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        >
+                                            <option value="ALL">Todas as Contas</option>
+                                            {bankAccounts.map(b => (
+                                                <option key={b.id} value={b.id}>{b.name} ({b.bankName})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Cartão de Crédito */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Cartão de Crédito</label>
+                                        <select
+                                            value={reportCreditCardId}
+                                            onChange={e => setReportCreditCardId(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        >
+                                            <option value="ALL">Todos / Nenhum Cartão</option>
+                                            {creditCards.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name} ({c.brand})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Categoria */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Categoria Financeira</label>
+                                        <select
+                                            value={reportCategoryId}
+                                            onChange={e => setReportCategoryId(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        >
+                                            <option value="ALL">Todas as Categorias</option>
+                                            {categories.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Pessoa Responsável */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Membro Responsável</label>
+                                        <select
+                                            value={reportResponsibleId}
+                                            onChange={e => setReportResponsibleId(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        >
+                                            <option value="ALL">Membros no Time</option>
+                                            {users.map(u => (
+                                                <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Cliente */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Cliente Relacionado</label>
+                                        <select
+                                            value={reportClientId}
+                                            onChange={e => setReportClientId(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        >
+                                            <option value="ALL">Todos os Clientes</option>
+                                            {clients.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Faixa de Valor */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Mín. (R$)</label>
+                                            <input
+                                                type="number"
+                                                placeholder="0"
+                                                value={reportMinAmount}
+                                                onChange={e => setReportMinAmount(e.target.value)}
+                                                className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Máx. (R$)</label>
+                                            <input
+                                                type="number"
+                                                placeholder="999k"
+                                                value={reportMaxAmount}
+                                                onChange={e => setReportMaxAmount(e.target.value)}
+                                                className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Resumo Consolidado do Filtro */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-slate-800">
+                                <div className="bg-white p-6 rounded-[28px] border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Total Entradas (Receitas)</p>
+                                        <h3 className="text-2xl font-black mt-1 text-emerald-600">R$ {reportStats.income.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                                    </div>
+                                    <div className="bg-emerald-50 text-emerald-600 p-3 rounded-2xl"><ArrowUpCircle size={20} /></div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[28px] border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Total Saídas (Despesas)</p>
+                                        <h3 className="text-2xl font-black mt-1 text-rose-600">R$ {reportStats.expense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                                    </div>
+                                    <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl"><ArrowDownCircle size={20} /></div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[28px] border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Resultado Líquido</p>
+                                        <h3 className={`text-2xl font-black mt-1 ${reportStats.balance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                            R$ {reportStats.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        </h3>
+                                    </div>
+                                    <div className={`p-3 rounded-2xl ${reportStats.balance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}><Wallet size={20} /></div>
+                                </div>
+
+                                <div className="bg-slate-900 p-6 rounded-[28px] border border-slate-800 shadow-sm flex items-center justify-between text-white">
+                                    <div>
+                                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Lançamentos Filtrados</p>
+                                        <h3 className="text-2xl font-black mt-1">{reportStats.totalCount} registros</h3>
+                                        <p className="text-[9px] text-slate-400 font-semibold">{reportStats.paidCount} pagos • {reportStats.pendingCount} pendentes</p>
+                                    </div>
+                                    <div className="bg-slate-800 text-white p-3 rounded-2xl"><FileText size={20} /></div>
+                                </div>
+                            </div>
+
+                            {/* Charts & Graphs Panel */}
+                            {reportStats.totalCount > 0 && (
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    {/* Gráfico do Relatório */}
+                                    <div className="lg:col-span-2 bg-white p-6 rounded-[32px] border border-slate-100 shadow-premium">
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6">Comparativo de Distribuição por Categoria</h4>
+                                        <div className="h-64">
+                                            {reportStats.categoryData.length > 0 ? (
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={reportStats.categoryData} layout="vertical">
+                                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                                        <XAxis type="number" fontSize={10} stroke="#94a3b8" />
+                                                        <YAxis dataKey="name" type="category" width={100} fontSize={9} stroke="#94a3b8" />
+                                                        <Tooltip formatter={(value: any) => `R$ ${value.toLocaleString('pt-BR')}`} />
+                                                        <Bar dataKey="value" name="Volume Total">
+                                                            {reportStats.categoryData.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#10b981' : '#f59e0b'} />
+                                                            ))}
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            ) : (
+                                                <div className="flex h-full items-center justify-center text-xs text-slate-400">Nenhum dado agregado disponível.</div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Breakdown Info */}
+                                    <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex flex-col justify-between">
+                                        <div className="space-y-4">
+                                            <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Maiores Concentrações</h4>
+                                            <div className="space-y-3">
+                                                {reportStats.categoryData.slice(0, 5).map((cat, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center text-xs border-b border-slate-50 pb-2">
+                                                        <span className="font-bold text-slate-600">{cat.name}</span>
+                                                        <span className="font-black text-slate-800">R$ {cat.value.toLocaleString('pt-BR')}</span>
+                                                    </div>
+                                                ))}
+                                                {reportStats.categoryData.length === 0 && (
+                                                    <div className="text-xs text-slate-400 py-10 text-center">Nenhum dado por categoria.</div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={() => window.print()}
+                                            className="w-full mt-4 bg-slate-900 hover:bg-slate-850 text-white font-black text-[10px] uppercase tracking-wider py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer"
+                                        >
+                                            <Download size={14} /> Imprimir / Salvar PDF
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tabela de Resultados do Relatório */}
+                            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Lançamentos Filtrados</h3>
+                                        <p className="text-xs font-bold text-slate-800 mt-1">Registros correspondentes aos seus critérios</p>
+                                    </div>
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse min-w-[750px]">
+                                        <thead>
+                                            <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                                <th className="px-6 py-4">Data</th>
+                                                <th className="px-6 py-4">Descrição</th>
+                                                <th className="px-6 py-4">Tipo</th>
+                                                <th className="px-6 py-4">Conta / Cartão</th>
+                                                <th className="px-6 py-4">Categoria</th>
+                                                <th className="px-6 py-4">Situação</th>
+                                                <th className="px-6 py-4 text-right">Valor</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50 text-xs font-medium text-slate-700">
+                                            {reportTransactions.map(t => {
+                                                const catObj = categories.find(c => c.id === t.categoryId);
+                                                const bankObj = bankAccounts.find(b => b.id === t.bankAccountId);
+                                                const cardObj = creditCards.find(c => c.id === t.creditCardId);
+                                                return (
+                                                    <tr key={t.id} className="hover:bg-slate-50/40 transition">
+                                                        <td className="px-6 py-4 font-mono text-[11px] whitespace-nowrap">
+                                                            {t.date.split('-').reverse().join('/')}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="font-bold text-slate-800">{t.description}</div>
+                                                            {t.clientId && (
+                                                                <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                                                                    Cliente: {clients.find(c => c.id === t.clientId)?.name || 'Desconhecido'}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            {t.type === 'INCOME' ? (
+                                                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                                                    Receita 🟢
+                                                                </span>
+                                                            ) : (
+                                                                <span className="bg-rose-50 text-rose-700 border border-rose-100 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                                                    Despesa 🔴
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-500 font-bold whitespace-nowrap">
+                                                            {bankObj ? bankObj.name : cardObj ? `${cardObj.name} (Cartão)` : 'Geral'}
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <span className="text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase" style={{
+                                                                backgroundColor: (catObj?.color || '#94a3b8') + '15',
+                                                                color: (catObj?.color || '#475569')
+                                                            }}>
+                                                                {catObj?.name || 'Geral'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <span className={`px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider border leading-none ${
+                                                                t.status === 'PAID'
+                                                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                                                    : 'bg-amber-50 text-amber-600 border-amber-200'
+                                                            }`}>
+                                                                {t.status === 'PAID' ? 'LIQUIDADO' : 'PENDENTE'}
+                                                            </span>
+                                                        </td>
+                                                        <td className={`px-6 py-4 text-right font-black whitespace-nowrap text-sm ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {t.type === 'INCOME' ? '+' : '-'} R$ {(t?.amount ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {reportTransactions.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={7} className="text-center py-12 text-slate-400 font-semibold">
+                                                        Nenhuma transação corresponde aos filtros informados.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
                     {/* 7. ACCOUNTS_CARDS Tab */}
                     {activeTab === 'ACCOUNTS_CARDS' && (
                         <motion.div
@@ -1734,7 +2126,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                         >
                             {/* Summary Cards */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-                                <div className="bg-gradient-to-br from-slate-800 to-slate-950 text-white p-6 rounded-[28px] border border-slate-700 shadow-xl flex items-center justify-between">
+                                <div className="bg-[#0f172a] text-white p-6 rounded-[28px] border border-slate-800 shadow-xl flex items-center justify-between">
                                     <div>
                                         <p className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Saldo Total em Contas</p>
                                         <h3 className="text-3xl font-black mt-1">R$ {bankAccounts?.reduce((sum, b) => sum + (b?.status === 'ACTIVE' ? (b?.balance ?? 0) : 0), 0)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) ?? '0,00'}</h3>
@@ -1743,7 +2135,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                     <div className="bg-slate-800 p-4 rounded-2xl text-emerald-400"><Wallet size={24} /></div>
                                 </div>
 
-                                <div className="bg-gradient-to-br from-[#fc4a1a] to-[#f7b733] text-white p-6 rounded-[28px] shadow-xl flex items-center justify-between">
+                                <div className="bg-[#e0531c] text-white p-6 rounded-[28px] border border-[#c44312] shadow-xl flex items-center justify-between">
                                     <div>
                                         <p className="text-white/80 text-[10px] font-black uppercase tracking-wider">Limite Total de Cartões</p>
                                         <h3 className="text-3xl font-black mt-1">R$ {creditCards?.reduce((sum, c) => sum + (c?.status === 'ACTIVE' ? (c?.limit ?? 0) : 0), 0)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) ?? '0,00'}</h3>
