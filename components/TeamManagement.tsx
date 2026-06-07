@@ -68,7 +68,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       try {
           const userToSave = {
               ...editingUser,
-              id: editingUser.id || `user-${Date.now()}`,
+              id: editingUser.id || (typeof window !== 'undefined' && window.crypto && typeof window.crypto.randomUUID === 'function' 
+                  ? window.crypto.randomUUID() 
+                  : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                      const r = Math.random() * 16 | 0;
+                      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                      return v.toString(16);
+                    })),
               avatar: editingUser.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${editingUser.name}`,
               role: editingUser.role || 'EMPLOYEE',
               hasSystemAccess: !!editingUser.hasSystemAccess,

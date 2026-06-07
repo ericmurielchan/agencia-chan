@@ -1182,13 +1182,65 @@ export const fetchAllMovements = async () => {
 
 export const mapUserId = (id: string | null | undefined): string | null => {
   if (!id) return null;
-  if (id === 'u1') return '00000000-0000-0000-0000-000000000001';
-  if (id === 'u2') return '00000000-0000-0000-0000-000000000002';
-  if (id === 'u3') return '00000000-0000-0000-0000-000000000003';
-  if (id === '00000000-0000-0000-0000-000000000001') return 'u1';
-  if (id === '00000000-0000-0000-0000-000000000002') return 'u2';
-  if (id === '00000000-0000-0000-0000-000000000003') return 'u3';
-  return id;
+
+  // 1. Check if it's already a valid UUID
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (isUuid) {
+    // Legacy hardcoded matches for safety
+    if (id === '00000000-0000-0000-0000-000000000001') return 'u1';
+    if (id === '00000000-0000-0000-0000-000000000002') return 'u2';
+    if (id === '00000000-0000-0000-0000-000000000003') return 'u3';
+
+    // Decode 'user-timestamp' deterministic UUIDs
+    if (/^deadeade-0000-4000-8000-[0-9a-f]{12}$/i.test(id)) {
+      const hexPart = id.substring(36 - 12);
+      const parsedNum = parseInt(hexPart, 16);
+      if (!isNaN(parsedNum)) {
+        return `user-${parsedNum}`;
+      }
+    }
+
+    // Decode 'uX' deterministic UUIDs
+    if (/^00000000-0000-0000-0000-[0-9a-f]{12}$/i.test(id)) {
+      const hexPart = id.substring(36 - 12);
+      const parsedNum = parseInt(hexPart, 16);
+      if (!isNaN(parsedNum) && parsedNum > 0 && parsedNum < 100) {
+        return `u${parsedNum}`;
+      }
+    }
+
+    return id;
+  }
+
+  // 2. Map original mock 'uX' short IDs to deterministic UUIDs
+  if (/^u[0-9]+$/i.test(id)) {
+    const numPart = id.substring(1);
+    const parsedNum = parseInt(numPart, 10);
+    if (!isNaN(parsedNum)) {
+      const hex = parsedNum.toString(16).padStart(12, '0');
+      return `00000000-0000-0000-0000-${hex}`;
+    }
+  }
+
+  // 3. Map original 'user-timestamp' short IDs to deterministic UUIDs
+  if (id.startsWith('user-')) {
+    const numberStr = id.replace('user-', '');
+    const parsedNum = parseInt(numberStr, 10);
+    if (!isNaN(parsedNum)) {
+      const hex = parsedNum.toString(16).padStart(12, '0');
+      return `deadeade-0000-4000-8000-${hex}`;
+    }
+  }
+
+  // 4. Fallback: Map any other non-UUID text string to a deterministic UUID
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash << 5) - hash + id.charCodeAt(i);
+    hash |= 0;
+  }
+  const absHash = Math.abs(hash);
+  const hex = absHash.toString(16).padStart(12, '0');
+  return `deadeade-0000-4000-9000-${hex}`;
 };
 
 /**
