@@ -816,7 +816,7 @@ const App: React.FC = () => {
                 lossReasons={lossReasons}
                 setLossReasons={setLossReasons}
                 users={users}
-                currentUser={currentUser}
+                currentUser={currentUser!}
                 clients={clients}
                 setClients={setClients}
                 notifications={notifications}
@@ -847,6 +847,17 @@ const App: React.FC = () => {
                     const result = await deleteLead(id);
                     if (result.success) {
                         setLeads(prev => prev.filter(l => l.id !== id));
+                    }
+                }}
+                bankAccounts={bankAccounts}
+                categories={categories}
+                onSaveTransaction={async (t) => {
+                    const res = await saveFinancialTransaction(t);
+                    if (res.success) {
+                        setFinancialTransactions(prev => [t as FinancialTransaction, ...prev.filter(x => x.id !== t.id)]);
+                    } else {
+                        const errorDetails = res.error ? (res.error.message || JSON.stringify(res.error)) : 'Desconhecido';
+                        throw new Error(`Erro no banco de dados ao salvar transação: ${errorDetails}`);
                     }
                 }}
               />

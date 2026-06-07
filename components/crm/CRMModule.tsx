@@ -1,16 +1,18 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Lead, PipelineStage, User, ConfirmOptions, LossReason, Client, Notification } from '../../types';
+import { Lead, PipelineStage, User, ConfirmOptions, LossReason, Client, Notification, BankAccount, FinancialCategory, FinancialTransaction } from '../../types';
 import { 
     LayoutDashboard, Kanban, List, FileText, Settings, 
     Plus, Search, Filter, Download, Bell, 
     TrendingUp, Target, Users, DollarSign,
     ChevronRight, MoreVertical, Star, CheckCircle2,
-    XCircle, AlertCircle, Clock, Calendar
+    XCircle, AlertCircle, Clock, Calendar, Shield, HelpCircle, Save
 } from 'lucide-react';
 import { CRMDashboard } from './CRMDashboard';
 import { CRMPipeline } from './CRMPipeline';
 import { LeadModal } from './LeadModal';
+import { Modal } from '../Modal';
+import { saveClient, saveFinancialTransaction } from '../../services/supabaseService';
 
 interface CRMModuleProps {
     leads: Lead[];
@@ -30,18 +32,168 @@ interface CRMModuleProps {
     onClearSelectedLead?: () => void;
     onSaveLead?: (lead: Lead) => Promise<void>;
     onDeleteLead?: (id: string) => Promise<void>;
+    bankAccounts?: BankAccount[];
+    categories?: FinancialCategory[];
+    onSaveTransaction?: (transaction: FinancialTransaction) => Promise<void>;
 }
 
 export const CRMModule: React.FC<CRMModuleProps> = ({ 
     leads, setLeads, stages, setStages, lossReasons, setLossReasons, 
     users, currentUser, clients, setClients, notifications, addNotification, openConfirm,
-    selectedLeadId, onClearSelectedLead, onSaveLead, onDeleteLead
+    selectedLeadId, onClearSelectedLead, onSaveLead, onDeleteLead,
+    bankAccounts = [], categories = [], onSaveTransaction
 }) => {
     const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PIPELINE' | 'LIST' | 'REPORTS'>('PIPELINE');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState<Partial<Lead> | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [pipelineSearchTerm, setPipelineSearchTerm] = useState('');
+
+    // Conversion states
+    const [conversionLead, setConversionLead] = useState<Lead | null>(null);
+    const [createClient, setCreateClient] = useState(true);
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [contractValue, setContractValue] = useState(0);
+    const [contractStartDate, setContractStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [clientLevel, setClientLevel] = useState<'BASIC' | 'INTERMEDIATE' | 'ADVANCED'>('BASIC');
+    
+    const [createFinance, setCreateFinance] = useState(true);
+    const [financeDescription, setFinanceDescription] = useState('');
+    const [financeAmount, setFinanceAmount] = useState(0);
+    const [financeDate, setFinanceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [financeStatus, setFinanceStatus] = useState<'PENDING' | 'COMPLETED'>('PENDING');
+    const [selectedBankAccount, setSelectedBankAccount] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
+    const [isConverting, setIsConverting] = useState(false);
+    const [conversionError, setConversionError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (conversionLead) {
+            setCreateClient(true);
+            setIsRecurring(false);
+            setContractValue(conversionLead.value || 0);
+            setContractStartDate(new Date().toISOString().split('T')[0]);
+            setClientLevel('BASIC');
+            
+            setCreateFinance((conversionLead.value || 0) > 0);
+            setFinanceDescription(`Fechamento CRM - ${conversionLead.company || conversionLead.name}`);
+            setFinanceAmount(conversionLead.value || 0);
+            setFinanceDate(new Date().toISOString().split('T')[0]);
+            setFinanceStatus('PENDING');
+            
+            if (bankAccounts && bankAccounts.length > 0) {
+                setSelectedBankAccount(bankAccounts[0].id);
+            } else {
+                setSelectedBankAccount('');
+            }
+            
+            if (categories && categories.length > 0) {
+                const incomeCat = categories.find(c => c.type === 'INCOME' || c.type === 'BOTH');
+                setSelectedCategory(incomeCat ? incomeCat.id : categories[0].id);
+            } else {
+                setSelectedCategory('');
+            }
+            setConversionError(null);
+        }
+    }, [conversionLead, bankAccounts, categories]);
+
+    const handleExecuteConversion = async () => {
+        if (!conversionLead) return;
+        setIsConverting(true);
+        setConversionError(null);
+        
+        try {
+            let clientData: Client | null = null;
+            
+            // 1. Create and Save Client
+            if (createClient) {
+                const clientId = `client_${conversionLead.id}`;
+                clientData = {
+                    id: clientId,
+                    name: conversionLead.company || conversionLead.name,
+                    status: 'ACTIVE',
+                    entryDate: contractStartDate,
+                    responsibleId: conversionLead.responsibleId,
+                    contact: {
+                        name: conversionLead.name,
+                        email: conversionLead.email || '',
+                        phone: conversionLead.phone || '',
+                        whatsapp: conversionLead.phone || ''
+                    },
+                    contacts: [
+                        { name: conversionLead.name, email: conversionLead.email || '', phone: conversionLead.phone || '', role: 'Principal' }
+                    ],
+                    isRecurring: isRecurring,
+                    level: clientLevel,
+                    tags: conversionLead.tags || [],
+                    internalNotes: `Cliente originado do CRM por conversão direta. Notas: ${conversionLead.notes || ''}`
+                } as Client;
+                
+                if (isRecurring) {
+                    clientData.monthlyValue = contractValue;
+                    clientData.contractStartDate = contractStartDate;
+                }
+                
+                const clientRes = await saveClient(clientData);
+                if (!clientRes.success) {
+                    throw new Error(clientRes.error?.message || 'Falha ao salvar cliente no banco de dados.');
+                }
+                
+                setClients(prev => {
+                    const exists = prev.find(c => c.id === clientId);
+                    if (exists) return prev.map(c => c.id === clientId ? clientData! : c);
+                    return [...prev, clientData!];
+                });
+            }
+            
+            // 2. Create and Save Financial Transaction
+            if (createFinance) {
+                const transactionId = `txn_${Date.now()}`;
+                const newTxn: FinancialTransaction = {
+                    id: transactionId,
+                    description: financeDescription,
+                    amount: financeAmount,
+                    type: 'INCOME',
+                    date: financeDate,
+                    status: financeStatus,
+                    categoryId: selectedCategory || null,
+                    bankAccountId: selectedBankAccount || null,
+                    clientId: clientData ? clientData.id : null,
+                    responsibleId: conversionLead.responsibleId || currentUser.id,
+                    createdAt: Date.now()
+                } as any;
+                
+                if (onSaveTransaction) {
+                    await onSaveTransaction(newTxn);
+                } else {
+                    const financeRes = await saveFinancialTransaction(newTxn);
+                    if (!financeRes.success) {
+                        throw new Error(financeRes.error?.message || 'Falha ao salvar transação financeira no banco de dados.');
+                    }
+                }
+            }
+            
+            // 3. Notify success
+            addNotification({
+                title: 'Conversão Realizada! 🚀',
+                message: `Lead ${conversionLead.company || conversionLead.name} convertido com sucesso!`,
+                type: 'SUCCESS',
+                priority: 'HIGH',
+                originModule: 'CRM',
+                targetUserId: currentUser.id,
+                navToView: 'clients',
+                metadata: { referenceId: conversionLead.id, module: 'leads' }
+            });
+            
+            // Close conversion modal
+            setConversionLead(null);
+        } catch (error: any) {
+            console.error('Erro na conversão direta:', error);
+            setConversionError(error.message || 'Erro inesperado ao realizar conversão.');
+        } finally {
+            setIsConverting(false);
+        }
+    };
 
     const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER';
 
@@ -192,55 +344,12 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
             setLeads(prev => prev.map(l => l.id === lead.id ? lead : l));
         }
 
-        // Check if WON to create Client
+        // Check if WON to open the Direct Conversion Wizard
         if (lead.status === 'WON') {
-            const clientExists = clients.find(c => c.id === `client_${lead.id}`);
-            if (!clientExists) {
-                const newClient: Client = {
-                    id: `client_${lead.id}`,
-                    name: lead.company,
-                    status: 'ACTIVE',
-                    entryDate: new Date().toISOString().split('T')[0],
-                    responsibleId: lead.responsibleId,
-                    contact: {
-                        name: lead.name,
-                        email: lead.email,
-                        phone: lead.phone || '',
-                        whatsapp: lead.phone || ''
-                    },
-                    contacts: [
-                        { name: lead.name, email: lead.email, phone: lead.phone || '', role: 'Principal' }
-                    ],
-                    isRecurring: false,
-                    level: 'BASIC',
-                    tags: lead.tags || [],
-                    internalNotes: `Cliente originado do CRM. Notas: ${lead.notes || ''}`
-                };
-                setClients(prev => [...prev, newClient]);
-                
-                // Notify Admin/Finance
-                const winNotification: Notification = {
-                    id: Date.now().toString() + '_win',
-                    title: 'Novo Negócio Fechado!',
-                    message: `O lead ${lead.company} foi marcado como GANHO. Cliente pré-cadastrado.`,
-                    type: 'SUCCESS',
-                    priority: 'HIGH',
-                    status: 'UNREAD',
-                    originModule: 'CRM',
-                    timestamp: Date.now(),
-                    targetRole: 'ADMIN',
-                    navToView: 'clients'
-                };
-                addNotification({
-                    title: 'Lead Ganho! 🎉',
-                    message: `Parabéns! O lead ${lead.company} foi convertido em cliente.`,
-                    type: 'SUCCESS',
-                    priority: 'HIGH',
-                    originModule: 'CRM',
-                    targetUserId: lead.responsibleId,
-                    navToView: 'crm',
-                    metadata: { referenceId: lead.id, module: 'leads' }
-                });
+            const previousLead = leads.find(l => l.id === lead.id);
+            const becameWon = !previousLead || previousLead.status !== 'WON';
+            if (becameWon) {
+                setConversionLead(lead);
             }
         }
 
@@ -520,6 +629,244 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                     lossReasons={lossReasons}
                     currentUser={currentUser}
                 />
+            )}
+
+            {/* DIRECT CONVERSION WIZARD MODAL */}
+            {conversionLead && (
+                <Modal
+                    isOpen={!!conversionLead}
+                    onClose={() => setConversionLead(null)}
+                    title="Conversão de Lead em Cliente / Contrato"
+                    maxWidth="600px"
+                >
+                    <div className="p-1 text-slate-800 space-y-6">
+                        {/* Heading summary */}
+                        <div className="bg-indigo-50/50 rounded-2xl p-4 border border-indigo-100 flex items-start gap-4 animate-in fade-in duration-300">
+                            <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-600/10 shrink-0">
+                                <DollarSign size={20} />
+                            </div>
+                            <div>
+                                <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider">Negócio Fechado com Sucesso! 🎉</h4>
+                                <p className="text-xs text-indigo-700/80 font-semibold mt-0.5">
+                                    O lead <strong className="text-indigo-900 font-extrabold">{conversionLead.company || conversionLead.name}</strong> com valor previsto de <strong className="text-indigo-900 font-extrabold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(conversionLead.value || 0)}</strong> foi marcado como Ganho. Escolha as ações de conversão direta abaixo.
+                                </p>
+                            </div>
+                        </div>
+
+                        {conversionError && (
+                            <div className="bg-red-50 text-red-700 p-3.5 rounded-2xl border border-red-100 flex items-center gap-3 text-xs font-bold uppercase tracking-wide">
+                                <AlertCircle size={16} className="shrink-0" />
+                                <span>{conversionError}</span>
+                            </div>
+                        )}
+
+                        <div className="space-y-5">
+                            {/* ACTION 1: CREATE CLIENT / CONTRACT */}
+                            <div className="border border-slate-100 rounded-2xl p-5 space-y-4 hover:border-slate-200 transition-all">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id="chkClient"
+                                            checked={createClient}
+                                            onChange={(e) => setCreateClient(e.target.checked)}
+                                            className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                        />
+                                        <label htmlFor="chkClient" className="text-xs font-black uppercase tracking-wider text-slate-700 cursor-pointer flex items-center gap-1.5 select-none">
+                                            <Users size={14} className="text-slate-400" /> Converter em Cliente
+                                        </label>
+                                    </div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">Automático</span>
+                                </div>
+
+                                {createClient && (
+                                    <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 animate-in fade-in duration-200">
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Nome / Empresa</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-50 border border-transparent rounded-xl p-3 text-xs font-bold outline-none"
+                                                value={conversionLead.company || conversionLead.name}
+                                                disabled
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Contato Principal</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-50 border border-transparent rounded-xl p-3 text-xs font-bold outline-none"
+                                                value={conversionLead.name}
+                                                disabled
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Plano / Nível</label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                value={clientLevel}
+                                                onChange={(e) => setClientLevel(e.target.value as any)}
+                                            >
+                                                <option value="BASIC">Básico (BASIC)</option>
+                                                <option value="INTERMEDIATE">Intermediário (INTERMEDIATE)</option>
+                                                <option value="ADVANCED">Avançado (ADVANCED)</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="sm:col-span-2 pt-2 border-t border-slate-50">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <input
+                                                    type="checkbox"
+                                                    id="chkRecurring"
+                                                    checked={isRecurring}
+                                                    onChange={(e) => setIsRecurring(e.target.checked)}
+                                                    className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                                />
+                                                <label htmlFor="chkRecurring" className="text-[10px] font-black uppercase tracking-wider text-slate-600 cursor-pointer select-none">
+                                                    Este será um contrato de receita recorrente (Contrato Mensal)
+                                                </label>
+                                            </div>
+
+                                            {isRecurring && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in slide-in-from-top-1 duration-200">
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Valor Mensal (R$)</label>
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                            value={contractValue}
+                                                            onChange={(e) => setContractValue(Number(e.target.value))}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Data Inicial do Contrato</label>
+                                                        <input
+                                                            type="date"
+                                                            className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                            value={contractStartDate}
+                                                            onChange={(e) => setContractStartDate(e.target.value)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ACTION 2: FINANCE MODULE ENTRY */}
+                            <div className="border border-slate-100 rounded-2xl p-5 space-y-4 hover:border-slate-200 transition-all">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="chkFinance"
+                                        checked={createFinance}
+                                        onChange={(e) => setCreateFinance(e.target.checked)}
+                                        className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                    />
+                                    <label htmlFor="chkFinance" className="text-xs font-black uppercase tracking-wider text-slate-700 cursor-pointer flex items-center gap-1.5 select-none">
+                                        <DollarSign size={14} className="text-slate-400" /> Registrar Entrada Financeira (Módulo Financeiro)
+                                    </label>
+                                </div>
+
+                                {createFinance && (
+                                    <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 animate-in fade-in duration-200">
+                                        <div className="sm:col-span-2">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Descrição do Lançamento</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                value={financeDescription}
+                                                onChange={(e) => setFinanceDescription(e.target.value)}
+                                                placeholder="Lançamento financeiro..."
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Valor do Lançamento (R$)</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                value={financeAmount}
+                                                onChange={(e) => setFinanceAmount(Number(e.target.value))}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Data do Pagamento/Vencimento</label>
+                                            <input
+                                                type="date"
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                value={financeDate}
+                                                onChange={(e) => setFinanceDate(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Status da Entrada</label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                value={financeStatus}
+                                                onChange={(e) => setFinanceStatus(e.target.value as any)}
+                                            >
+                                                <option value="PENDING">A Receber (Não Pago)</option>
+                                                <option value="COMPLETED">Recebido (Liquidado)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Conta de Destino / Caixa</label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                value={selectedBankAccount}
+                                                onChange={(e) => setSelectedBankAccount(e.target.value)}
+                                            >
+                                                <option value="">Nenhuma Conta Integrada</option>
+                                                {bankAccounts.map(account => (
+                                                    <option key={account.id} value={account.id}>
+                                                        {account.name} (Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(account.balance)})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Categoria Financeira</label>
+                                            <select
+                                                className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-xl p-3 text-xs font-bold outline-none transition-all"
+                                                value={selectedCategory}
+                                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                            >
+                                                <option value="">Sem Categoria</option>
+                                                {categories.filter(c => c.type === 'INCOME' || c.type === 'BOTH').map(category => (
+                                                    <option key={category.id} value={category.id}>
+                                                        {category.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Modal Footer actions */}
+                        <div className="pt-4 border-t border-slate-50 flex gap-3 justify-end">
+                            <button
+                                onClick={() => setConversionLead(null)}
+                                className="px-5 py-2.5 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600 transition-colors"
+                            >
+                                Descartar Conversão
+                            </button>
+                            <button
+                                onClick={handleExecuteConversion}
+                                disabled={isConverting || (!createClient && !createFinance)}
+                                className="px-7 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-xl shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isConverting ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0"></div>
+                                ) : (
+                                    <Save size={16} className="shrink-0" />
+                                )}
+                                {isConverting ? 'Convertendo...' : 'Confirmar Conversão'}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );

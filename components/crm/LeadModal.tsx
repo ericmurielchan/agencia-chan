@@ -12,7 +12,7 @@ import {
 interface LeadModalProps {
     lead: Partial<Lead>;
     onClose: () => void;
-    onSave: (lead: Lead) => void;
+    onSave: (lead: Lead) => void | Promise<void>;
     onDelete?: (id: string) => void;
     users: User[];
     stages: PipelineStage[];
@@ -42,8 +42,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     const [selectedLossReason, setSelectedLossReason] = useState('');
     const [newTask, setNewTask] = useState<Partial<LeadTask>>({ text: '', type: 'TASK' });
     const [errors, setErrors] = useState<string[]>([]);
+    const [isSaving, setIsSaving] = useState(false);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const newErrors: string[] = [];
         if (!formData.company) newErrors.push('Empresa é obrigatória');
         if (!formData.name) newErrors.push('Nome do contato é obrigatório');
@@ -95,7 +96,17 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             history: finalHistory
         } as Lead;
 
-        onSave(finalLead);
+        setIsSaving(true);
+        setErrors([]);
+        try {
+            await onSave(finalLead);
+            onClose();
+        } catch (error: any) {
+            console.error('Erro ao salvar lead:', error);
+            setErrors([error.message || 'Erro inesperado no servidor ao tentar salvar o lead.']);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleStatusChange = (status: 'WON' | 'LOST') => {
@@ -576,9 +587,15 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                         <button onClick={onClose} className="flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:text-slate-600 transition-colors">Cancelar</button>
                         <button 
                             onClick={handleSave} 
-                            className="flex-2 sm:flex-none px-5 sm:px-8 py-2 sm:py-3 rounded-lg sm:rounded-2xl bg-indigo-600 text-white font-black text-[9px] sm:text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 transform active:scale-95"
+                            disabled={isSaving}
+                            className="flex-2 sm:flex-none px-5 sm:px-8 py-2 sm:py-3 rounded-lg sm:rounded-2xl bg-indigo-600 text-white font-black text-[9px] sm:text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 transform active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            <Save size={16} className="sm:w-4 sm:h-4" /> Salvar Alterações
+                            {isSaving ? (
+                                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0"></div>
+                            ) : (
+                                <Save size={16} className="sm:w-4 sm:h-4 shrink-0" />
+                            )}
+                            {isSaving ? 'Salvando...' : 'Salvar Alterações'}
                         </button>
                     </div>
                 </div>
