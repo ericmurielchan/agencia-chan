@@ -113,7 +113,7 @@ const mapLead = (l: any): Lead => ({
   createdAt: l.created_at || Date.now(),
   updatedAt: l.updated_at || Date.now(),
   lastContact: l.last_contact || new Date().toISOString(),
-  createdBy: l.created_by,
+  createdBy: mapUserId(l.created_by) || '',
   history: l.history || [],
   tasks: l.tasks || []
 });
@@ -403,7 +403,7 @@ export const deleteClient = async (id: string) => {
  * Busca todos os leads do banco de dados
  */
 export const fetchLeads = async () => {
-  const { data, error } = await supabase.from('leads').select('id, name, company, value, stage_id, status, email, phone, priority, temperature, responsible_id, notes, tags, created_at, updated_at, last_contact, history, tasks');
+  const { data, error } = await supabase.from('leads').select('*');
   if (error) {
     console.error('Erro ao buscar leads:', error);
     return [];
@@ -415,19 +415,74 @@ export const fetchLeads = async () => {
  * Salva ou atualiza um lead no banco de dados
  */
 export const saveLead = async (lead: Partial<Lead>) => {
-  const { error } = await supabase.from('leads').upsert({
+  // Obter dados reais das tabelas de referência para evitar violações de chaves estrangeiras
+  const [dbUsersResult, dbStagesResult, dbLossReasonsResult] = await Promise.all([
+    supabase.from('users').select('id'),
+    supabase.from('pipeline_stages').select('id'),
+    supabase.from('loss_reasons').select('id')
+  ]);
+
+  const existingUserIds = new Set<string>((dbUsersResult.data || []).map((u: any) => u.id));
+  const existingStageIds = new Set<string>((dbStagesResult.data || []).map((s: any) => s.id));
+  const existingLossReasonIds = new Set<string>((dbLossReasonsResult.data || []).map((r: any) => r.id));
+
+  const resolveDbUserId = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    
+    // 1. Verificar se o ID é usado de forma direta no banco de dados
+    if (existingUserIds.has(id)) {
+      return id;
+    }
+    
+    // 2. Verificar se o valor mapeado existe
+    const mapped = mapUserId(id);
+    if (mapped && existingUserIds.has(mapped)) {
+      return mapped;
+    }
+
+    // 3. Fallbacks bidirecionais explícitos para u1, u2, u3
+    if (id === 'u1' && existingUserIds.has('00000000-0000-0000-0000-000000000001')) {
+      return '00000000-0000-0000-0000-000000000001';
+    }
+    if (id === 'u2' && existingUserIds.has('00000000-0000-0000-0000-000000000002')) {
+      return '00000000-0000-0000-0000-000000000002';
+    }
+    if (id === 'u3' && existingUserIds.has('00000000-0000-0000-0000-000000000003')) {
+      return '00000000-0000-0000-0000-000000000003';
+    }
+    
+    if (id === '00000000-0000-0000-0000-000000000001' && existingUserIds.has('u1')) {
+      return 'u1';
+    }
+    if (id === '00000000-0000-0000-0000-000000000002' && existingUserIds.has('u2')) {
+      return 'u2';
+    }
+    if (id === '00000000-0000-0000-0000-000000000003' && existingUserIds.has('u3')) {
+      return 'u3';
+    }
+    
+    // Se o usuário não existir no banco, retornamos nulo com segurança
+    return null;
+  };
+
+  const responsible_id = resolveDbUserId(lead.responsibleId);
+  const created_by = resolveDbUserId(lead.createdBy);
+  const stage_id = lead.stageId && existingStageIds.has(lead.stageId) ? lead.stageId : null;
+  const loss_reason_id = lead.lossReasonId && existingLossReasonIds.has(lead.lossReasonId) ? lead.lossReasonId : null;
+
+  const payload = {
     id: lead.id || undefined,
     name: lead.name,
     company: lead.company,
     value: lead.value,
-    stage_id: lead.stageId || null,
+    stage_id: stage_id,
     status: lead.status,
-    loss_reason_id: lead.lossReasonId || null,
+    loss_reason_id: loss_reason_id,
     email: lead.email,
     phone: lead.phone,
     priority: lead.priority,
     temperature: lead.temperature,
-    responsible_id: mapUserId(lead.responsibleId) || null,
+    responsible_id: responsible_id,
     notes: lead.notes,
     tags: lead.tags,
     source: lead.source,
@@ -435,12 +490,28 @@ export const saveLead = async (lead: Partial<Lead>) => {
     tasks: lead.tasks,
     history: lead.history,
     last_contact: lead.lastContact,
-    created_by: lead.createdBy || null,
+    created_by: created_by,
     created_at: lead.createdAt || Date.now(),
     updated_at: Date.now()
-  });
+  };
+
+  const { error } = await supabase.from('leads').upsert(payload);
 
   if (error) {
+    // Se o erro for de restrição de chave estrangeira relacionada ao created_by, tentamos salvar com NULL
+    if (error.code === '23503' && error.message?.includes('leads_created_by_fkey')) {
+      console.warn('Auto-healing: Erro de FK detectado em leads_created_by_fkey. Retentando salvar com created_by = null.');
+      const retryResult = await supabase.from('leads').upsert({
+        ...payload,
+        created_by: null
+      });
+      if (retryResult.error) {
+        console.error('Erro fatal após tentativa de auto-healing para leads:', retryResult.error);
+        return { success: false, error: retryResult.error };
+      }
+      return { success: true };
+    }
+
     console.error('Erro ao salvar lead:', error);
     return { success: false, error };
   }

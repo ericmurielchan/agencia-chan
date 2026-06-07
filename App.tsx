@@ -213,9 +213,30 @@ const App: React.FC = () => {
           console.log('Carregando dados reais do Supabase...');
           
           // Lote 1: Essenciais
-          const [dbUsers, settingsData, clientsData, squadsData] = await Promise.all([
-            fetchUsers(), fetchSystemSettings(), fetchClients(), fetchSquads()
+          let dbUsers = await fetchUsers();
+          const [settingsData, clientsData, squadsData] = await Promise.all([
+            fetchSystemSettings(), fetchClients(), fetchSquads()
           ]);
+          
+          if (dbUsers.length === 0) {
+            console.log('Semeando usuários iniciais no Supabase...');
+            await Promise.all(initialUsers.map(u => saveUser(u)));
+            dbUsers = await fetchUsers();
+          }
+
+          // Garantir que o usuário atualmente logado existe no banco de dados para evitar erros de chave estrangeira
+          const savedUser = localStorage.getItem('currentUser');
+          if (savedUser) {
+            try {
+              const parsedUser = JSON.parse(savedUser);
+              if (parsedUser && !dbUsers.some(u => u.id === parsedUser.id)) {
+                await saveUser(parsedUser);
+                dbUsers = await fetchUsers();
+              }
+            } catch (e) {
+              console.error('Erro ao restaurar e sincronizar usuário atual:', e);
+            }
+          }
           
           setUsers(dbUsers as any);
           if (settingsData) setSystemSettings(settingsData);
@@ -420,10 +441,20 @@ const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogin = (user: User) => {
+  const handleLogin = async (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('lastActivity', Date.now().toString());
+    
+    try {
+      await saveUser(user);
+      const dbUsers = await fetchUsers();
+      if (dbUsers && dbUsers.length > 0) {
+        setUsers(dbUsers as any);
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar login com o Supabase:', err);
+    }
     
     if (user.role === 'CLIENT') setCurrentView('client-portal');
     else if (user.role === 'COMMERCIAL' || user.role === 'FREELANCER') setCurrentView('crm');
@@ -807,6 +838,9 @@ const App: React.FC = () => {
                             if (exists) return prev.map(l => l.id === lead.id ? lead : l);
                             return [...prev, lead];
                         });
+                    } else {
+                        const errorDetails = result.error ? (result.error.message || JSON.stringify(result.error)) : 'Desconhecido';
+                        throw new Error(`Erro no banco de dados: ${errorDetails}`);
                     }
                 }}
                 onDeleteLead={async (id) => {
