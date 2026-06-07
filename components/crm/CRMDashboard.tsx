@@ -32,12 +32,18 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
         const valueLost = leads.filter(l => l.status === 'LOST').reduce((acc, l) => acc + (l.value || 0), 0);
         const avgTicket = won > 0 ? valueWon / won : 0;
 
+        // CRM Tasks calculations
+        const totalTasks = leads.reduce((acc, l) => acc + (l.tasks?.length || 0), 0);
+        const completedTasks = leads.reduce((acc, l) => acc + (l.tasks?.filter(t => t.completed).length || 0), 0);
+        const pendingTasks = totalTasks - completedTasks;
+
         // Conversion rate
         const conversionRate = total > 0 ? (won / total) * 100 : 0;
 
         return {
             total, newLeads, inNegotiation, won, lost, noContact, noResponsible,
-            valueNegotiation, valueWon, valueLost, avgTicket, conversionRate
+            valueNegotiation, valueWon, valueLost, avgTicket, conversionRate,
+            totalTasks, completedTasks, pendingTasks
         };
     }, [leads]);
 
@@ -69,11 +75,12 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
     return (
         <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500">
             {/* TOP INDICATORS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white p-4 sm:p-6 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {/* Total Leads */}
+                <div className="bg-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
                     <div className="flex justify-between items-start mb-3 sm:mb-4">
-                        <div className="p-2 sm:p-3 bg-blue-50 text-blue-600 rounded-xl sm:rounded-2xl">
-                            <Users size={20} className="sm:w-6 sm:h-6" />
+                        <div className="p-2 sm:p-2.5 bg-blue-50 text-blue-600 rounded-xl sm:rounded-2xl">
+                            <Users size={18} className="sm:w-5 sm:h-5" />
                         </div>
                         <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
                             <ArrowUpRight size={10} className="sm:w-3 sm:h-3" /> +12%
@@ -81,32 +88,64 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
                     </div>
                     <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Total de Leads</p>
                     <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">{stats.total}</h3>
-                    <div className="mt-3 sm:mt-4 flex items-center gap-2">
-                        <div className="flex-1 h-1 sm:h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="mt-3 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-500" style={{ width: '70%' }}></div>
                         </div>
-                        <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">70% meta</span>
+                        <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 whitespace-nowrap">70% meta</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 sm:p-6 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                {/* CRM Opportunities Value */}
+                <div className="bg-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
                     <div className="flex justify-between items-start mb-3 sm:mb-4">
-                        <div className="p-2 sm:p-3 bg-emerald-50 text-emerald-600 rounded-xl sm:rounded-2xl">
-                            <DollarSign size={20} className="sm:w-6 sm:h-6" />
+                        <div className="p-2 sm:p-2.5 bg-amber-50 text-amber-600 rounded-xl sm:rounded-2xl">
+                            <TrendingUp size={18} className="sm:w-5 sm:h-5" />
+                        </div>
+                        <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-amber-600 bg-amber-100 px-2.5 py-1 rounded-full">
+                            Em aberto
+                        </span>
+                    </div>
+                    <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Oportunidades em Aberto</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">R$ {(stats.valueNegotiation || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                    <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1 font-bold">Total ativo em negociação</p>
+                </div>
+
+                {/* Won Revenue */}
+                <div className="bg-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start mb-3 sm:mb-4">
+                        <div className="p-2 sm:p-2.5 bg-emerald-50 text-emerald-600 rounded-xl sm:rounded-2xl">
+                            <DollarSign size={18} className="sm:w-5 sm:h-5" />
                         </div>
                         <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
                             <ArrowUpRight size={10} className="sm:w-3 sm:h-3" /> +8%
                         </span>
                     </div>
                     <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Receita Ganhos</p>
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">R$ {(stats.valueWon || 0).toLocaleString()}</h3>
-                    <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1 font-bold">Ticket Médio: R$ {(stats.avgTicket || 0).toLocaleString()}</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">R$ {(stats.valueWon || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                    <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1 font-bold">Ticket Médio: R$ {(stats.avgTicket || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</p>
                 </div>
 
-                <div className="bg-white p-4 sm:p-6 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                {/* Lost Deals Value */}
+                <div className="bg-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
                     <div className="flex justify-between items-start mb-3 sm:mb-4">
-                        <div className="p-2 sm:p-3 bg-indigo-50 text-indigo-600 rounded-xl sm:rounded-2xl">
-                            <Target size={20} className="sm:w-6 sm:h-6" />
+                        <div className="p-2 sm:p-2.5 bg-rose-50 text-rose-600 rounded-xl sm:rounded-2xl">
+                            <XCircle size={18} className="sm:w-5 sm:h-5" />
+                        </div>
+                        <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-full">
+                            Cancelados
+                        </span>
+                    </div>
+                    <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Negócios Perdidos</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">R$ {(stats.valueLost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                    <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1 font-bold">Volume não convertido</p>
+                </div>
+
+                {/* Conversion Rate */}
+                <div className="bg-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start mb-3 sm:mb-4">
+                        <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl sm:rounded-2xl">
+                            <Target size={18} className="sm:w-5 sm:h-5" />
                         </div>
                         <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">
                             {stats.conversionRate.toFixed(1)}%
@@ -114,19 +153,39 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
                     </div>
                     <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Taxa de Conversão</p>
                     <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">{stats.won} Negócios</h3>
-                    <div className="mt-3 sm:mt-4 flex items-center gap-2 text-[9px] sm:text-[10px] font-bold text-slate-400">
-                        <CheckCircle2 size={12} className="text-emerald-500 sm:w-3.5 sm:h-3.5" />
+                    <div className="mt-3 flex items-center gap-2 text-[9px] sm:text-[10px] font-bold text-slate-400">
+                        <CheckCircle2 size={12} className="text-emerald-500" />
                         <span>{stats.won} ganhos</span>
-                        <span className="mx-1">•</span>
-                        <XCircle size={12} className="text-red-500 sm:w-3.5 sm:h-3.5" />
+                        <span className="mx-0.5">•</span>
+                        <XCircle size={12} className="text-red-500" />
                         <span>{stats.lost} perdidos</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 sm:p-6 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                {/* CRM Tasks Created */}
+                <div className="bg-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
                     <div className="flex justify-between items-start mb-3 sm:mb-4">
-                        <div className="p-2 sm:p-3 bg-orange-50 text-orange-600 rounded-xl sm:rounded-2xl">
-                            <Clock size={20} className="sm:w-6 sm:h-6" />
+                        <div className="p-2 sm:p-2.5 bg-purple-50 text-purple-600 rounded-xl sm:rounded-2xl">
+                            <CheckCircle2 size={18} className="sm:w-5 sm:h-5" />
+                        </div>
+                        <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">
+                            Tarefas
+                        </span>
+                    </div>
+                    <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Tarefas no CRM</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">{stats.totalTasks} tarefas</h3>
+                    <div className="mt-3 flex items-center gap-2 text-[9px] sm:text-[10px] font-bold text-slate-400">
+                        <span className="text-emerald-600">{stats.completedTasks} concluídas</span>
+                        <span className="mx-0.5">•</span>
+                        <span className="text-amber-600">{stats.pendingTasks} pendentes</span>
+                    </div>
+                </div>
+
+                {/* Pending Actions */}
+                <div className="bg-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start mb-3 sm:mb-4">
+                        <div className="p-2 sm:p-2.5 bg-orange-50 text-orange-600 rounded-xl sm:rounded-2xl">
+                            <Clock size={18} className="sm:w-5 sm:h-5" />
                         </div>
                         <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
                             Atenção
@@ -134,15 +193,10 @@ export const CRMDashboard: React.FC<CRMDashboardProps> = ({ leads, users, lossRe
                     </div>
                     <p className="text-slate-400 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">Ações Pendentes</p>
                     <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-1">{stats.noContact + stats.noResponsible}</h3>
-                    <div className="mt-3 sm:mt-4 space-y-1">
-                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 flex justify-between">
-                            <span>Sem Responsável:</span>
-                            <span className="text-orange-600">{stats.noResponsible}</span>
-                        </p>
-                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 flex justify-between">
-                            <span>Sem Contato:</span>
-                            <span className="text-orange-600">{stats.noContact}</span>
-                        </p>
+                    <div className="mt-3 flex gap-2 text-[9px] sm:text-[10px] font-bold text-slate-500">
+                        <span>Sem Resp: <strong className="text-orange-600">{stats.noResponsible}</strong></span>
+                        <span>•</span>
+                        <span>Sem Contato: <strong className="text-orange-600">{stats.noContact}</strong></span>
                     </div>
                 </div>
             </div>

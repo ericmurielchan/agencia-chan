@@ -153,7 +153,7 @@ export const Financials: React.FC<FinancialsProps> = ({
     const [categoryFilter, setCategoryFilter] = useState('ALL');
     const [clientFilter, setClientFilter] = useState('ALL');
 
-    // Reports Custom Filters
+    // Reports Custom Filters (Inputs)
     const [reportType, setReportType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
     const [reportStatus, setReportStatus] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
     const [reportBankAccountId, setReportBankAccountId] = useState('ALL');
@@ -163,6 +163,134 @@ export const Financials: React.FC<FinancialsProps> = ({
     const [reportClientId, setReportClientId] = useState('ALL');
     const [reportMinAmount, setReportMinAmount] = useState('');
     const [reportMaxAmount, setReportMaxAmount] = useState('');
+    const [reportSearchTerm, setReportSearchTerm] = useState('');
+    const [reportStartDate, setReportStartDate] = useState(() => {
+        const d = new Date();
+        const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+        return firstDay.toISOString().split('T')[0];
+    });
+    const [reportEndDate, setReportEndDate] = useState(() => {
+        const d = new Date();
+        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        return lastDay.toISOString().split('T')[0];
+    });
+
+    // Applied states for reports
+    const [appliedReportFilters, setAppliedReportFilters] = useState({
+        type: 'ALL',
+        status: 'ALL',
+        bankAccountId: 'ALL',
+        creditCardId: 'ALL',
+        categoryId: 'ALL',
+        responsibleId: 'ALL',
+        clientId: 'ALL',
+        minAmount: '',
+        maxAmount: '',
+        searchTerm: '',
+        startDate: (() => {
+            const d = new Date();
+            const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+            return firstDay.toISOString().split('T')[0];
+        })(),
+        endDate: (() => {
+            const d = new Date();
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+            return lastDay.toISOString().split('T')[0];
+        })()
+    });
+
+    const handleApplyReportFilters = () => {
+        setAppliedReportFilters({
+            type: reportType,
+            status: reportStatus,
+            bankAccountId: reportBankAccountId,
+            creditCardId: reportCreditCardId,
+            categoryId: reportCategoryId,
+            responsibleId: reportResponsibleId,
+            clientId: reportClientId,
+            minAmount: reportMinAmount,
+            maxAmount: reportMaxAmount,
+            searchTerm: reportSearchTerm,
+            startDate: reportStartDate,
+            endDate: reportEndDate
+        });
+    };
+
+    const handleClearReportFilters = () => {
+        setReportType('ALL');
+        setReportStatus('ALL');
+        setReportBankAccountId('ALL');
+        setReportCreditCardId('ALL');
+        setReportCategoryId('ALL');
+        setReportResponsibleId('ALL');
+        setReportClientId('ALL');
+        setReportMinAmount('');
+        setReportMaxAmount('');
+        setReportSearchTerm('');
+        
+        const d = new Date();
+        const firstDay = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+        setReportStartDate(firstDay);
+        setReportEndDate(lastDay);
+
+        setAppliedReportFilters({
+            type: 'ALL',
+            status: 'ALL',
+            bankAccountId: 'ALL',
+            creditCardId: 'ALL',
+            categoryId: 'ALL',
+            responsibleId: 'ALL',
+            clientId: 'ALL',
+            minAmount: '',
+            maxAmount: '',
+            searchTerm: '',
+            startDate: firstDay,
+            endDate: lastDay
+        });
+    };
+
+    const handleExportToCSV = () => {
+        if (reportTransactions.length === 0) {
+            alert('Não há dados para exportar.');
+            return;
+        }
+
+        // CSV columns with proper semicolon delimiter (common for Excel in BR)
+        const headers = ['Data', 'Descricao', 'Tipo', 'Conta/Cartao', 'Categoria', 'Situacao', 'Valor (R$)'];
+        const rows = reportTransactions.map(t => {
+            const catObj = categories.find(c => c.id === t.categoryId);
+            const bankObj = bankAccounts.find(b => b.id === t.bankAccountId);
+            const cardObj = creditCards.find(c => c.id === t.creditCardId);
+            
+            const dateStr = t.date.split('-').reverse().join('/');
+            const typeStr = t.type === 'INCOME' ? 'Receita' : 'Despesa';
+            const sourceStr = bankObj ? bankObj.name : cardObj ? `${cardObj.name} (Cartão)` : 'Geral';
+            const catStr = catObj?.name || 'Geral';
+            const statusStr = t.status === 'PAID' ? 'LIQUIDADO' : 'PENDENTE';
+            const amountStr = t.amount.toFixed(2).replace('.', ',');
+
+            return [
+                dateStr,
+                `"${t.description.replace(/"/g, '""')}"`,
+                typeStr,
+                `"${sourceStr.replace(/"/g, '""')}"`,
+                `"${catStr.replace(/"/g, '""')}"`,
+                statusStr,
+                amountStr
+            ];
+        });
+
+        const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(e => e.join(';'))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `relatorio_financeiro_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     // Date Bounds
     const [startDate, setStartDate] = useState(() => {
@@ -300,25 +428,25 @@ export const Financials: React.FC<FinancialsProps> = ({
     // Relatórios Memo
     const reportTransactions = useMemo(() => {
         return transactions.filter(t => {
-            if (reportType !== 'ALL' && t.type !== reportType) return false;
-            if (reportStatus !== 'ALL' && t.status !== reportStatus) return false;
+            if (appliedReportFilters.type !== 'ALL' && t.type !== appliedReportFilters.type) return false;
+            if (appliedReportFilters.status !== 'ALL' && t.status !== appliedReportFilters.status) return false;
             
-            if (reportBankAccountId !== 'ALL' && t.bankAccountId !== reportBankAccountId) return false;
-            if (reportCreditCardId !== 'ALL' && t.creditCardId !== reportCreditCardId) return false;
-            if (reportCategoryId !== 'ALL' && t.categoryId !== reportCategoryId) return false;
-            if (reportResponsibleId !== 'ALL' && t.responsibleId !== reportResponsibleId) return false;
-            if (reportClientId !== 'ALL' && t.clientId !== reportClientId) return false;
+            if (appliedReportFilters.bankAccountId !== 'ALL' && t.bankAccountId !== appliedReportFilters.bankAccountId) return false;
+            if (appliedReportFilters.creditCardId !== 'ALL' && t.creditCardId !== appliedReportFilters.creditCardId) return false;
+            if (appliedReportFilters.categoryId !== 'ALL' && t.categoryId !== appliedReportFilters.categoryId) return false;
+            if (appliedReportFilters.responsibleId !== 'ALL' && t.responsibleId !== appliedReportFilters.responsibleId) return false;
+            if (appliedReportFilters.clientId !== 'ALL' && t.clientId !== appliedReportFilters.clientId) return false;
             
-            if (startDate && t.date < startDate) return false;
-            if (endDate && t.date > endDate) return false;
+            if (appliedReportFilters.startDate && t.date < appliedReportFilters.startDate) return false;
+            if (appliedReportFilters.endDate && t.date > appliedReportFilters.endDate) return false;
             
-            const minAmt = reportMinAmount ? parseFloat(reportMinAmount) : null;
-            const maxAmt = reportMaxAmount ? parseFloat(reportMaxAmount) : null;
+            const minAmt = appliedReportFilters.minAmount ? parseFloat(appliedReportFilters.minAmount) : null;
+            const maxAmt = appliedReportFilters.maxAmount ? parseFloat(appliedReportFilters.maxAmount) : null;
             if (minAmt !== null && t.amount < minAmt) return false;
             if (maxAmt !== null && t.amount > maxAmt) return false;
             
-            if (searchTerm) {
-                const term = searchTerm.toLowerCase();
+            if (appliedReportFilters.searchTerm) {
+                const term = appliedReportFilters.searchTerm.toLowerCase();
                 const descMatch = t.description.toLowerCase().includes(term);
                 const clientMatch = (clients.find(c => c.id === t.clientId)?.name || '').toLowerCase().includes(term);
                 if (!descMatch && !clientMatch) return false;
@@ -326,11 +454,7 @@ export const Financials: React.FC<FinancialsProps> = ({
             
             return true;
         }).sort((a, b) => b.date.localeCompare(a.date));
-    }, [
-        transactions, reportType, reportStatus, reportBankAccountId, reportCreditCardId,
-        reportCategoryId, reportResponsibleId, reportClientId, reportMinAmount, reportMaxAmount,
-        startDate, endDate, searchTerm, clients
-    ]);
+    }, [transactions, appliedReportFilters, clients]);
 
     // Relatórios Stats
     const reportStats = useMemo(() => {
@@ -1780,29 +1904,57 @@ export const Financials: React.FC<FinancialsProps> = ({
                             <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-200 shadow-sm space-y-6">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div>
-                                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Filtros Avançados de Relatório</h3>
-                                        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Refine detalhadamente as transações listadas</p>
+                                         <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Filtros Avançados de Relatório</h3>
+                                         <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Configure os parâmetros e clique em "Aplicar Filtros" para atualizar as estatísticas</p>
                                     </div>
-                                    <button
-                                        onClick={() => {
-                                            setReportType('ALL');
-                                            setReportStatus('ALL');
-                                            setReportBankAccountId('ALL');
-                                            setReportCreditCardId('ALL');
-                                            setReportCategoryId('ALL');
-                                            setReportResponsibleId('ALL');
-                                            setReportClientId('ALL');
-                                            setReportMinAmount('');
-                                            setReportMaxAmount('');
-                                            setSearchTerm('');
-                                        }}
-                                        className="text-rose-500 hover:text-rose-700 font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl border border-rose-100 hover:bg-rose-50 transition flex items-center gap-1 cursor-pointer"
-                                    >
-                                        <X size={12} /> Limpar Filtros
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 px-3 py-1.5 rounded-xl border border-amber-100 flex items-center gap-1.5 animate-pulse">
+                                            <SlidersHorizontal size={10} /> Filtro manual ativo
+                                        </span>
+                                    </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    {/* Busca por termo */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                            <Search size={10} /> Busca Textual
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar termo..."
+                                            value={reportSearchTerm}
+                                            onChange={e => setReportSearchTerm(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition"
+                                        />
+                                    </div>
+
+                                    {/* Data Inicial */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                            <Calendar size={10} /> Período De
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={reportStartDate}
+                                            onChange={e => setReportStartDate(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        />
+                                    </div>
+
+                                    {/* Data Final */}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                            <Calendar size={10} /> Período Até
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={reportEndDate}
+                                            onChange={e => setReportEndDate(e.target.value)}
+                                            className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition cursor-pointer"
+                                        />
+                                    </div>
+
                                     {/* Tipo */}
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tipo de Lançamento</label>
@@ -1928,6 +2080,39 @@ export const Financials: React.FC<FinancialsProps> = ({
                                                 className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white outline-none transition"
                                             />
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Botoes de Acao do Relatorio */}
+                                <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <button
+                                        onClick={handleClearReportFilters}
+                                        className="text-rose-500 hover:text-rose-700 font-bold text-[10px] uppercase tracking-wider px-4 py-3 rounded-xl border border-rose-100 hover:bg-rose-50 transition flex items-center justify-center gap-1.5 cursor-pointer self-start md:self-auto"
+                                    >
+                                        <X size={12} /> Limpar Filtros
+                                    </button>
+
+                                    <div className="flex flex-wrap items-center gap-2.5">
+                                        <button
+                                            onClick={handleExportToCSV}
+                                            className="text-emerald-600 hover:text-white font-bold text-[10px] uppercase tracking-wider px-4 py-3 rounded-xl border border-emerald-100 hover:bg-emerald-600 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                        >
+                                            <Download size={12} /> Baixar CSV
+                                        </button>
+
+                                        <button
+                                            onClick={() => window.print()}
+                                            className="text-slate-600 hover:text-white font-bold text-[10px] uppercase tracking-wider px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                        >
+                                            <FileText size={12} /> Baixar PDF / Imprimir
+                                        </button>
+
+                                        <button
+                                            onClick={handleApplyReportFilters}
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10.5px] uppercase tracking-wider px-5 py-3 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                                        >
+                                            <Check size={13} /> Aplicar Filtros & Gerar
+                                        </button>
                                     </div>
                                 </div>
                             </div>
