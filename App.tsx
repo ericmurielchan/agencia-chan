@@ -959,6 +959,10 @@ const App: React.FC = () => {
                 currentUser={currentUser!} 
                 users={users} 
                 onSaveUser={async (user) => {
+                    if (currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'FREELANCER' || currentUser?.role === 'CLIENT') {
+                        alert('Erro: Você não tem permissão para editar dados de colaboradores.');
+                        return;
+                    }
                     const result = await saveUser(user);
                     if (result.success) {
                         setUsers(prev => {
@@ -1128,10 +1132,20 @@ const App: React.FC = () => {
                 setUsers={setUsers} 
                 squads={squads} 
                 setSquads={setSquads} 
+                tasks={tasks}
+                setTasks={setTasks}
+                leads={leads}
+                setLeads={setLeads}
+                clients={clients}
+                setClients={setClients}
                 openConfirm={openConfirm} 
                 currentUserRole={currentUser?.role}
                 currentUserId={currentUser?.id}
                 onSaveUser={async (user) => {
+                    if (currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'FREELANCER' || currentUser?.role === 'CLIENT') {
+                        alert('Erro: Você não tem permissão para salvar colaboradores.');
+                        return;
+                    }
                     const result = await saveUser(user);
                     if (result.success) {
                         setUsers(prev => {
@@ -1142,6 +1156,10 @@ const App: React.FC = () => {
                     }
                 }}
                 onDeleteUser={async (id) => {
+                    if (currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'FREELANCER' || currentUser?.role === 'CLIENT') {
+                        alert('Erro: Você não tem permissão para excluir colaboradores.');
+                        return;
+                    }
                     const result = await deleteUser(id);
                     if (result.success) {
                         setUsers(prev => prev.filter(u => u.id !== id));

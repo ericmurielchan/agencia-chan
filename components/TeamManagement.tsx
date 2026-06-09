@@ -1,15 +1,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
-import { User, Squad, ConfirmOptions, Role } from '../types';
-import { Plus, Trash2, Edit2, Shield, User as UserIcon, FileText, Lock, Key, X, CheckCircle, Users, Mail, Eye, EyeOff } from 'lucide-react';
-import { saveUser, deleteUser, saveSquad, deleteSquad } from '../services/supabaseService';
+import { User, Squad, ConfirmOptions, Role, Task, Lead, Client } from '../types';
+import { Plus, Trash2, Edit2, Shield, User as UserIcon, FileText, Lock, Key, X, CheckCircle, Users, Mail, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { saveUser, deleteUser, saveSquad, deleteSquad, saveTask, saveLead, saveClient } from '../services/supabaseService';
 
 interface TeamManagementProps {
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   squads: Squad[];
   setSquads: React.Dispatch<React.SetStateAction<Squad[]>>;
+  tasks: Task[];
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+  leads: Lead[];
+  setLeads: React.Dispatch<React.SetStateAction<Lead[]>>;
+  clients: Client[];
+  setClients: React.Dispatch<React.SetStateAction<Client[]>>;
   openConfirm: (options: ConfirmOptions) => Promise<boolean>;
   currentUserRole?: Role;
   currentUserId?: string;
@@ -30,7 +36,9 @@ const ROLES: { value: Role; label: string }[] = [
 ];
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ 
-    users, setUsers, squads, setSquads, openConfirm, currentUserRole = 'ADMIN' as Role,
+    users, setUsers, squads, setSquads, 
+    tasks = [], setTasks, leads = [], setLeads, clients = [], setClients,
+    openConfirm, currentUserRole = 'ADMIN' as Role,
     currentUserId,
     onSaveUser, onDeleteUser, onSaveSquad, onDeleteSquad
 }) => {
@@ -68,6 +76,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const [isSquadModalOpen, setIsSquadModalOpen] = useState(false);
   const [editingSquad, setEditingSquad] = useState<Partial<Squad>>({ name: '', members: [] });
 
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [userToReassign, setUserToReassign] = useState<User | null>(null);
+  const [transferUserId, setTransferUserId] = useState<string>('');
+
   const canEditUser = (u: User) => {
       if (isReadOnly) return false;
       if (currentUserRole === 'MANAGER') {
@@ -89,6 +101,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const handleSaveUser = async () => {
       if (!editingUser.name || !editingUser.email) return;
+
+      if (isReadOnly) {
+          alert('Você não possui permissão para criar ou editar colaboradores.');
+          return;
+      }
 
       if (currentUserRole === 'MANAGER') {
           if (editingUser.id !== currentUserId) {
@@ -146,9 +163,26 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   };
 
   const handleDeleteUser = async (id: string) => {
+      if (isReadOnly) {
+          alert('Você não possui permissão para excluir colaboradores.');
+          return;
+      }
+
       const targetUser = users.find(u => u.id === id);
       if (currentUserRole === 'MANAGER' && targetUser && (targetUser.role === 'ADMIN' || targetUser.role === 'MANAGER')) {
           alert('Você não possui permissão para excluir colaboradores com nível de hierarquia igual ou superior ao seu.');
+          return;
+      }
+
+      // Detect active tasks, leads, and clients
+      const userTasks = tasks.filter(t => t.assigneeIds?.includes(id) && t.status !== 'DONE' && !t.archived);
+      const userLeads = leads.filter(l => l.responsibleId === id && l.stageId !== 'WON' && l.stageId !== 'LOST');
+      const userClients = clients.filter(c => c.responsibleId === id && c.status === 'ACTIVE');
+
+      if (userTasks.length > 0 || userLeads.length > 0 || userClients.length > 0) {
+          setUserToReassign(targetUser || null);
+          setTransferUserId('');
+          setReassignModalOpen(true);
           return;
       }
 
@@ -169,6 +203,77 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                   alert('Erro ao excluir colaborador do banco de dados.');
               }
           }
+      }
+  };
+
+  const handleReassignAndDelete = async () => {
+      if (!userToReassign) return;
+      
+      if (isReadOnly) {
+          alert('Você não possui permissão para excluir ou reatribuir colaboradores.');
+          return;
+      }
+      
+      const targetUserId = userToReassign.id;
+      setIsSaving(true);
+      
+      try {
+          // 1. Reassign or Unassign tasks
+          const userTasks = tasks.filter(t => t.assigneeIds?.includes(targetUserId));
+          for (const task of userTasks) {
+              const updatedAssignees = transferUserId 
+                  ? (task.assigneeIds.includes(transferUserId) 
+                      ? task.assigneeIds.filter(id => id !== targetUserId) 
+                      : task.assigneeIds.map(id => id === targetUserId ? transferUserId : id))
+                  : task.assigneeIds.filter(id => id !== targetUserId);
+                  
+              const updatedTask = { ...task, assigneeIds: updatedAssignees };
+              await saveTask(updatedTask);
+              if (setTasks) {
+                  setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
+              }
+          }
+
+          // 2. Reassign or Unassign leads
+          const userLeads = leads.filter(l => l.responsibleId === targetUserId);
+          for (const lead of userLeads) {
+              const updatedLead = { ...lead, responsibleId: transferUserId || undefined };
+              await saveLead(updatedLead);
+              if (setLeads) {
+                  setLeads(prev => prev.map(l => l.id === lead.id ? updatedLead : l));
+              }
+          }
+
+          // 3. Reassign or Unassign clients
+          const userClients = clients.filter(c => c.responsibleId === targetUserId);
+          for (const client of userClients) {
+              const updatedClient = { ...client, responsibleId: transferUserId || undefined };
+              await saveClient(updatedClient);
+              if (setClients) {
+                  setClients(prev => prev.map(c => c.id === client.id ? updatedClient : c));
+              }
+          }
+
+          // 4. Finally, delete the user
+          if (onDeleteUser) {
+              await onDeleteUser(targetUserId);
+          } else {
+              const result = await deleteUser(targetUserId);
+              if (result.success) {
+                  setUsers(prev => prev.filter(u => u.id !== targetUserId));
+              } else {
+                  alert('Erro ao excluir colaborador do banco de dados.');
+              }
+          }
+          
+          setReassignModalOpen(false);
+          setUserToReassign(null);
+          setTransferUserId('');
+      } catch (err) {
+          console.error("Erro ao reatribuir e excluir colaborador:", err);
+          alert("Ocorreu um erro ao transferir as atribuições. Por favor, tente novamente.");
+      } finally {
+          setIsSaving(false);
       }
   };
 
@@ -569,6 +674,132 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                   ) : (
                       <button onClick={handleSaveSquad} className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold">Salvar Squad</button>
                   )}
+              </div>
+          </Modal>
+      )}
+
+      {reassignModalOpen && userToReassign && (
+          <Modal
+              isOpen={reassignModalOpen}
+              onClose={() => { if (!isSaving) { setReassignModalOpen(false); setUserToReassign(null); } }}
+              title="Atribuições Ativas Encontradas"
+              maxWidth="600px"
+          >
+              <div className="space-y-6 text-slate-700">
+                  {/* Warning Header */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-amber-800 text-sm">
+                      <AlertTriangle className="text-amber-600 flex-shrink-0" size={20} />
+                      <div>
+                          <strong className="block font-bold">Atenção!</strong>
+                          O colaborador <strong className="font-bold">{userToReassign.name}</strong> possui tarefas ou responsabilidades ativas registradas no sistema. Para excluí-lo com segurança, decida o que fazer com suas atribuições pendentes.
+                      </div>
+                  </div>
+
+                  {/* Summary of Assignments */}
+                  <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest text-left">Resumo de Atribuições:</h4>
+                      
+                      {/* Active Tasks List */}
+                      {(() => {
+                          const userTasks = tasks.filter(t => t.assigneeIds?.includes(userToReassign.id) && t.status !== 'DONE' && !t.archived);
+                          if (userTasks.length === 0) return null;
+                          return (
+                              <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-900/40 text-xs text-left">
+                                  <div className="font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between mb-2">
+                                      <span>📋 Tarefas Ativas ({userTasks.length})</span>
+                                  </div>
+                                  <ul className="list-disc leading-relaxed pl-4 text-slate-600 dark:text-slate-400 max-h-24 overflow-y-auto w-full">
+                                      {userTasks.map(t => (
+                                          <li key={t.id} className="truncate">{t.title}</li>
+                                      ))}
+                                  </ul>
+                              </div>
+                          );
+                      })()}
+
+                      {/* Active Leads List */}
+                      {(() => {
+                          const userLeads = leads.filter(l => l.responsibleId === userToReassign.id && l.stageId !== 'WON' && l.stageId !== 'LOST');
+                          if (userLeads.length === 0) return null;
+                          return (
+                              <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-900/40 text-xs text-left">
+                                  <div className="font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between mb-2">
+                                      <span>💼 Negócios / Leads Ativos ({userLeads.length})</span>
+                                  </div>
+                                  <ul className="list-disc leading-relaxed pl-4 text-slate-600 dark:text-slate-400 max-h-24 overflow-y-auto w-full">
+                                      {userLeads.map(l => (
+                                          <li key={l.id} className="truncate">{l.company} - {l.name}</li>
+                                      ))}
+                                  </ul>
+                              </div>
+                          );
+                      })()}
+
+                      {/* Active Clients List */}
+                      {(() => {
+                          const userClients = clients.filter(c => c.responsibleId === userToReassign.id && c.status === 'ACTIVE');
+                          if (userClients.length === 0) return null;
+                          return (
+                              <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-3 bg-slate-50 dark:bg-slate-900/40 text-xs text-left">
+                                  <div className="font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between mb-2">
+                                      <span>🏢 Clientes Sob Responsabilidade ({userClients.length})</span>
+                                  </div>
+                                  <ul className="list-disc leading-relaxed pl-4 text-slate-600 dark:text-slate-400 max-h-24 overflow-y-auto w-full">
+                                      {userClients.map(c => (
+                                          <li key={c.id} className="truncate">{c.name}</li>
+                                      ))}
+                                  </ul>
+                              </div>
+                          );
+                      })()}
+                  </div>
+
+                  {/* Transfer Options Selector */}
+                  <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4 text-left">
+                      <label className="text-xs font-bold text-slate-500 uppercase block">Transferir Atribuições para:</label>
+                      <select 
+                          className="w-full border p-3 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all bg-white text-sm"
+                          value={transferUserId}
+                          onChange={e => setTransferUserId(e.target.value)}
+                      >
+                          <option value="">-- Ninguém (Apenas Desatribuir / Deixar sem responsável) --</option>
+                          {users
+                              .filter(u => u.id !== userToReassign.id && u.role !== 'CLIENT')
+                              .map(u => (
+                                  <option key={u.id} value={u.id}>{u.name} ({ROLES.find(r => r.value === u.role)?.label.split(' ')[0] || u.role})</option>
+                              ))
+                          }
+                      </select>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+                      <button 
+                          onClick={() => { setReassignModalOpen(false); setUserToReassign(null); }}
+                          disabled={isSaving}
+                          className="px-4 py-3 border rounded-lg text-sm font-semibold hover:bg-slate-55 shadow-sm text-slate-700 transition-all cursor-pointer"
+                      >
+                          Cancelar
+                      </button>
+                      <button 
+                          onClick={handleReassignAndDelete}
+                          disabled={isSaving}
+                          className={`px-4 py-3 rounded-lg text-sm font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                              isSaving 
+                                  ? 'bg-slate-400 cursor-not-allowed' 
+                                  : transferUserId 
+                                      ? 'bg-pink-600 hover:bg-pink-700 active:scale-95' 
+                                      : 'bg-red-600 hover:bg-red-700 active:scale-95'
+                          }`}
+                      >
+                          {isSaving ? 'Processando...' : (
+                              <>
+                                  <CheckCircle size={18}/>
+                                  {transferUserId ? 'Transferir e Excluir' : 'Remover e Excluir'}
+                              </>
+                          )}
+                      </button>
+                  </div>
               </div>
           </Modal>
       )}
