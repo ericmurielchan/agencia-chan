@@ -66,7 +66,8 @@ import {
     saveBankAccount, 
     deleteBankAccount,
     saveFinancialCategory,
-    deleteFinancialCategory
+    deleteFinancialCategory,
+    deleteFinancialTransaction
 } from '../services/supabaseService';
 import { analyzeFinancialHealth } from '../services/aiService';
 import { CommissionDashboard } from './CommissionDashboard';
@@ -366,6 +367,14 @@ export const Financials: React.FC<FinancialsProps> = ({
     const [editingCategory, setEditingCategory] = useState<Partial<FinancialCategory> | null>(null);
     const [editingAccount, setEditingAccount] = useState<Partial<BankAccount> | null>(null);
     const [editingCard, setEditingCard] = useState<Partial<CreditCard> | null>(null);
+
+    // Delete conflict resolution modal
+    const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+    const [conflictType, setConflictType] = useState<'ACCOUNT' | 'CARD' | null>(null);
+    const [conflictTargetId, setConflictTargetId] = useState<string>('');
+    const [conflictTransactions, setConflictTransactions] = useState<FinancialTransaction[]>([]);
+    const [selectedTxIds, setSelectedTxIds] = useState<Record<string, boolean>>({});
+    const [isDeletingConflict, setIsDeletingConflict] = useState(false);
 
     // AI Analysis Cache
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -790,9 +799,25 @@ export const Financials: React.FC<FinancialsProps> = ({
     };
 
     const handleDeleteBankAccountLocal = async (id: string) => {
+        const linkedTxs = transactions.filter(t => t.bankAccountId === id);
+        
+        if (linkedTxs.length > 0) {
+            // There are linked transactions - show the custom conflict resolution modal!
+            const initialSelected: Record<string, boolean> = {};
+            linkedTxs.forEach(t => {
+                initialSelected[t.id] = false;
+            });
+            setConflictTransactions(linkedTxs);
+            setSelectedTxIds(initialSelected);
+            setConflictTargetId(id);
+            setConflictType('ACCOUNT');
+            setIsConflictModalOpen(true);
+            return;
+        }
+
         const confirm = await openConfirm({
             title: 'Excluir Conta Bancária',
-            description: 'Deseja excluir esta conta bancária? Todas as transações vinculadas a ela perderão o vínculo.',
+            description: 'Deseja excluir esta conta bancária?',
             variant: 'danger'
         });
 
@@ -837,9 +862,25 @@ export const Financials: React.FC<FinancialsProps> = ({
     };
 
     const handleDeleteCreditCardLocal = async (id: string) => {
+        const linkedTxs = transactions.filter(t => t.creditCardId === id);
+        
+        if (linkedTxs.length > 0) {
+            // There are linked transactions - show the custom conflict resolution modal!
+            const initialSelected: Record<string, boolean> = {};
+            linkedTxs.forEach(t => {
+                initialSelected[t.id] = false;
+            });
+            setConflictTransactions(linkedTxs);
+            setSelectedTxIds(initialSelected);
+            setConflictTargetId(id);
+            setConflictType('CARD');
+            setIsConflictModalOpen(true);
+            return;
+        }
+
         const confirm = await openConfirm({
             title: 'Excluir Cartão de Crédito',
-            description: 'Deseja excluir este cartão de crédito? Todas as faturas e transações vinculadas a ele perderão o vínculo.',
+            description: 'Deseja excluir este cartão de crédito?',
             variant: 'danger'
         });
 
@@ -850,6 +891,60 @@ export const Financials: React.FC<FinancialsProps> = ({
             } else {
                 alert('Erro ao excluir cartão do banco de dados.');
             }
+        }
+    };
+
+    const handleResolveConflictAndDelete = async () => {
+        const doubleConfirm = await openConfirm({
+            title: 'Confirmar Exclusão Permanente',
+            description: 'Tem certeza de que deseja excluir permanentemente todas as transações selecionadas e este item? Esta ação NÃO PODERÁ SER DESFEITA!',
+            variant: 'danger'
+        });
+
+        if (!doubleConfirm) return;
+
+        setIsDeletingConflict(true);
+        try {
+            const txIdsToDelete = Object.keys(selectedTxIds).filter(id => selectedTxIds[id]);
+
+            let allTxDeleted = true;
+            for (const txId of txIdsToDelete) {
+                const res = await deleteFinancialTransaction(txId);
+                if (!res.success) {
+                    allTxDeleted = false;
+                }
+            }
+
+            if (!allTxDeleted) {
+                alert('Algumas transações não puderam ser excluídas. Por favor, tente novamente.');
+                setIsDeletingConflict(false);
+                return;
+            }
+
+            setTransactions(prev => prev.filter(t => !txIdsToDelete.includes(t.id)));
+
+            if (conflictType === 'ACCOUNT') {
+                const res = await deleteBankAccount(conflictTargetId);
+                if (res.success) {
+                    setBankAccounts(prev => prev.filter(c => c.id !== conflictTargetId));
+                    setIsConflictModalOpen(false);
+                } else {
+                    alert('Erro ao excluir a conta bancária após a remoção das transações.');
+                }
+            } else if (conflictType === 'CARD') {
+                const res = await deleteCreditCard(conflictTargetId);
+                if (res.success) {
+                    setCreditCards(prev => prev.filter(c => c.id !== conflictTargetId));
+                    setIsConflictModalOpen(false);
+                } else {
+                    alert('Erro ao excluir o cartão de crédito após a remoção das transações.');
+                }
+            }
+        } catch (err) {
+            console.error('Erro na remoção em cascata:', err);
+            alert('Encontrou-se um erro ao processar a exclusão permanente.');
+        } finally {
+            setIsDeletingConflict(false);
         }
     };
 
@@ -3336,6 +3431,98 @@ export const Financials: React.FC<FinancialsProps> = ({
                         >
                             Salvar Alterações
                         </button>
+                    </div>
+                </Modal>
+            )}
+
+            {isConflictModalOpen && (
+                <Modal
+                    isOpen={isConflictModalOpen}
+                    onClose={() => { setIsConflictModalOpen(false); setConflictType(null); }}
+                    title={conflictType === 'ACCOUNT' ? 'Exclusão Restrita - Conta Bancária' : 'Exclusão Restrita - Cartão de Crédito'}
+                    maxWidth="600px"
+                >
+                    <div className="space-y-4 p-1 text-slate-800 font-semibold text-xs leading-relaxed text-left animate-fade-in">
+                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3">
+                            <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+                            <div>
+                                <h4 className="font-extrabold text-amber-800 text-sm">Transações Vinculadas Detectadas!</h4>
+                                <p className="text-[11px] text-amber-700 mt-1">
+                                    Não é possível excluir esta {conflictType === 'ACCOUNT' ? 'conta bancária' : 'carteira de cartão'} porque existem transações ou movimentações financeiras vinculadas a ela no banco de dados.
+                                </p>
+                                <p className="text-[11.5px] text-amber-800 mt-2 font-bold">
+                                    Para prosseguir com a exclusão total, você deve primeiro excluir as transações associadas listadas abaixo.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Transações Vinculadas ({conflictTransactions.length})</span>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input 
+                                        type="checkbox"
+                                        className="rounded border-slate-300 text-pink-600 focus:ring-pink-500 h-3.5 w-3.5"
+                                        checked={conflictTransactions.length > 0 && conflictTransactions.every(t => selectedTxIds[t.id])}
+                                        onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            const updated: Record<string, boolean> = {};
+                                            conflictTransactions.forEach(t => {
+                                                updated[t.id] = checked;
+                                            });
+                                            setSelectedTxIds(updated);
+                                        }}
+                                    />
+                                    <span className="text-[10px] uppercase font-black tracking-wider text-slate-600">Marcar todas</span>
+                                </label>
+                            </div>
+
+                            <div className="border border-slate-100 rounded-2xl max-h-[220px] overflow-y-auto divide-y divide-slate-50">
+                                {conflictTransactions.map(t => (
+                                    <div key={t.id} className="p-3 flex items-center justify-between hover:bg-slate-50/50 transition">
+                                        <div className="flex items-center gap-3">
+                                            <input 
+                                                type="checkbox"
+                                                className="rounded border-slate-300 text-pink-600 focus:ring-pink-500 h-3.5 w-3.5"
+                                                checked={!!selectedTxIds[t.id]}
+                                                onChange={(e) => {
+                                                    setSelectedTxIds(prev => ({
+                                                        ...prev,
+                                                        [t.id]: e.target.checked
+                                                    }));
+                                                }}
+                                            />
+                                            <div>
+                                                <p className="font-extrabold text-slate-700 text-xs">{t.description}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold">{t.date.split('-').reverse().join('/')}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`font-black text-xs ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            {t.type === 'INCOME' ? '+' : '-'} R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="pt-4 flex gap-2 justify-end border-t border-slate-100">
+                            <button
+                                type="button"
+                                onClick={() => { setIsConflictModalOpen(false); setConflictType(null); }}
+                                className="px-4 py-2.5 bg-slate-100 rounded-xl text-slate-500 font-black text-[10px] uppercase tracking-wider"
+                                disabled={isDeletingConflict}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleResolveConflictAndDelete}
+                                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-[10px] uppercase tracking-wider shadow-md disabled:opacity-50 flex items-center gap-2"
+                                disabled={isDeletingConflict || !Object.values(selectedTxIds).some(v => v)}
+                            >
+                                {isDeletingConflict ? 'Excluindo...' : 'Excluir permanentemente'}
+                            </button>
+                        </div>
                     </div>
                 </Modal>
             )}
