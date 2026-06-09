@@ -47,41 +47,47 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({
         e.dataTransfer.dropEffect = 'move';
     };
 
-    const handleDrop = (e: React.DragEvent, stageId: string) => {
+    const handleDrop = async (e: React.DragEvent, stageId: string) => {
         e.preventDefault();
         const leadId = e.dataTransfer.getData('leadId');
         if (!leadId) return;
 
-        setLeads(prev => prev.map(l => {
-            if (l.id === leadId) {
-                const updatedLead = { 
-                    ...l, 
-                    stageId, 
-                    updatedAt: Date.now(),
-                    history: [
-                        ...l.history,
-                        {
-                            id: Date.now().toString(),
-                            userId: currentUser.id,
-                            action: `Mudou para etapa: ${stages.find(s => s.id === stageId)?.label}`,
-                            timestamp: Date.now()
-                        }
-                    ]
-                };
-                
-                // Special handling for WON/LOST if stages represent that
-                if (stageId === 'WON') onWinLead(updatedLead);
-                if (stageId === 'LOST') onLoseLead(updatedLead);
-                
-                if (onSaveLead) {
-                    onSaveLead(updatedLead);
+        const leadToUpdate = leads.find(l => l.id === leadId);
+        if (!leadToUpdate) return;
+
+        const updatedLead = { 
+            ...leadToUpdate, 
+            stageId, 
+            updatedAt: Date.now(),
+            history: [
+                ...leadToUpdate.history,
+                {
+                    id: Date.now().toString(),
+                    userId: currentUser.id,
+                    action: `Mudou para etapa: ${stages.find(s => s.id === stageId)?.label}`,
+                    timestamp: Date.now()
                 }
-                
-                return updatedLead;
-            }
-            return l;
-        }));
+            ]
+        };
+
+        // Optimistic state update in UI
+        setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
         setDraggedLeadId(null);
+
+        // Special handling for WON/LOST if stages represent that
+        if (stageId === 'WON') onWinLead(updatedLead);
+        if (stageId === 'LOST') onLoseLead(updatedLead);
+        
+        // Fully functional persistence call (external side-effect outside state updater)
+        if (onSaveLead) {
+            try {
+                await onSaveLead(updatedLead);
+            } catch (err) {
+                console.error("Erro ao salvar mudança de etapa do lead:", err);
+                // Rollback state in case of database sync failure
+                setLeads(prev => prev.map(l => l.id === leadId ? leadToUpdate : l));
+            }
+        }
     };
 
     return (

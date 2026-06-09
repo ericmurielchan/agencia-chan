@@ -339,6 +339,34 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                         </select>
                                     </div>
                                     <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Etapa do Pipeline</label>
+                                        <select 
+                                            className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl p-3.5 text-sm font-bold outline-none transition-all"
+                                            value={formData.stageId || ''}
+                                            onChange={e => {
+                                                const newStageId = e.target.value;
+                                                const oldStageId = formData.stageId;
+                                                if (newStageId !== oldStageId) {
+                                                    const newStageLabel = stages.find(s => s.id === newStageId)?.label || newStageId;
+                                                    const historyEntry: LeadHistory = {
+                                                        id: 'h' + Date.now().toString(),
+                                                        userId: currentUser.id,
+                                                        action: `Etapa alterada`,
+                                                        timestamp: Date.now(),
+                                                        details: `Alterada para: ${newStageLabel}`
+                                                    };
+                                                    setFormData({
+                                                        ...formData,
+                                                        stageId: newStageId,
+                                                        history: [...(formData.history || []), historyEntry]
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            {stages.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${errors.includes('Nome do contato é obrigatório') ? 'text-red-500' : 'text-slate-400'}`}>Contato Principal *</label>
                                         <div className="relative">
                                             <UserIcon size={16} className={`absolute left-4 top-1/2 -translate-y-1/2 ${errors.includes('Nome do contato é obrigatório') ? 'text-red-400' : 'text-slate-400'}`} />

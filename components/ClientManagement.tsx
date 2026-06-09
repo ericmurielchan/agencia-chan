@@ -46,7 +46,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   // Filter clients based on role
   const filteredClients = useMemo(() => {
     let base = clients;
-    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
+    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER' || currentUser.role === 'MANAGER') {
         const userSquads = squads.filter(s => s.members?.includes(currentUser.id)).map(s => s.id);
         base = clients.filter(c => c.responsibleId === currentUser.id || (c.squadId && userSquads.includes(c.squadId)));
     } else if (currentUser.role === 'COMMERCIAL') {

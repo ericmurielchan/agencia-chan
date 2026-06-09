@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Lead, PipelineStage, User, ConfirmOptions, LossReason, Client, Notification, BankAccount, FinancialCategory, FinancialTransaction } from '../../types';
+import { Lead, PipelineStage, User, ConfirmOptions, LossReason, Client, Notification, BankAccount, FinancialCategory, FinancialTransaction, Squad } from '../../types';
 import { 
     LayoutDashboard, Kanban, List, FileText, Settings, 
     Plus, Search, Filter, Download, Bell, 
@@ -35,13 +35,14 @@ interface CRMModuleProps {
     bankAccounts?: BankAccount[];
     categories?: FinancialCategory[];
     onSaveTransaction?: (transaction: FinancialTransaction) => Promise<void>;
+    squads?: Squad[];
 }
 
 export const CRMModule: React.FC<CRMModuleProps> = ({ 
     leads, setLeads, stages, setStages, lossReasons, setLossReasons, 
     users, currentUser, clients, setClients, notifications, addNotification, openConfirm,
     selectedLeadId, onClearSelectedLead, onSaveLead, onDeleteLead,
-    bankAccounts = [], categories = [], onSaveTransaction
+    bankAccounts = [], categories = [], onSaveTransaction, squads = []
 }) => {
     const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PIPELINE' | 'LIST' | 'REPORTS'>('PIPELINE');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -282,14 +283,17 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
         if (currentUser.role === 'ADMIN') return leads;
         
         if (currentUser.role === 'MANAGER') {
-            // Manager sees all leads from their team/squad members
+            const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
+            const mySquadIds = mySquads.map(s => s.id);
+            const squadMembers = users.filter(u => squads.some(s => mySquadIds.includes(s.id) && s.members?.includes(u.id))).map(u => u.id);
+            
+            // Manager sees all leads from their team/squad members or their own
             return leads.filter(l => {
                 const isResponsible = l.responsibleId === currentUser.id;
                 const isCreator = l.createdBy === currentUser.id;
-                const responsibleUser = users.find(u => u.id === l.responsibleId);
-                const isInMySquad = responsibleUser?.squad === currentUser.squad && currentUser.squad !== '';
+                const responsibleUserInSquad = l.responsibleId && squadMembers.includes(l.responsibleId);
                 
-                return isResponsible || isCreator || isInMySquad;
+                return isResponsible || isCreator || responsibleUserInSquad;
             });
         }
 
@@ -299,7 +303,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
         }
         
         return [];
-    }, [leads, currentUser, users]);
+    }, [leads, currentUser, users, squads]);
 
     const handleSaveLead = async (lead: Lead) => {
         const isNew = !leads.find(l => l.id === lead.id);

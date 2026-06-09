@@ -798,6 +798,7 @@ const App: React.FC = () => {
                 onClearSelectedTask={() => setSelectedTaskId(null)}
                 initialFilter={kanbanFilter}
                 onClearFilter={() => setKanbanFilter(null)}
+                squads={squads}
                 onNavigate={(view, refId) => {
                   setCurrentView(view);
                   if (view === 'kanban' && refId) setSelectedTaskId(refId);
@@ -858,6 +859,7 @@ const App: React.FC = () => {
                 openConfirm={openConfirm}
                 selectedLeadId={selectedLeadId}
                 onClearSelectedLead={() => setSelectedLeadId(null)}
+                squads={squads}
                 onNavigate={(view, refId) => {
                   setCurrentView(view);
                   if (view === 'kanban' && refId) setSelectedTaskId(refId);
@@ -1064,7 +1066,7 @@ const App: React.FC = () => {
                 tasks={tasks} 
                 setTasks={setTasks} 
                 users={users} 
-                squads={initialSquads} 
+                squads={squads} 
                 clients={clients} 
                 currentUser={currentUser} 
                 addNotification={addNotification} 

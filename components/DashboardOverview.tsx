@@ -73,6 +73,16 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
   const [selectedUserId, setSelectedUserId] = useState<string | 'ALL'>(isEmployee || isCommercial ? currentUser.id : 'ALL');
   const [selectedSquadId, setSelectedSquadId] = useState<string | 'ALL'>(isManager ? currentUser.squad || 'ALL' : 'ALL');
 
+  // Se o usuário selecionado não fizer parte da nova squad selecionada, reseta o usuário para 'ALL'
+  React.useEffect(() => {
+      if (selectedSquadId !== 'ALL' && selectedUserId !== 'ALL') {
+          const targetSquad = squads.find(s => s.id === selectedSquadId);
+          if (!targetSquad?.members?.includes(selectedUserId)) {
+              setSelectedUserId('ALL');
+          }
+      }
+  }, [selectedSquadId, selectedUserId, squads]);
+
   const applyPreset = (days: number | 'month', presetName: '7days' | '30days' | 'quarter' | 'month') => {
       const end = new Date();
       const start = new Date();
@@ -110,19 +120,24 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
         baseLeads = leads.filter(l => l.responsibleId === currentUser.id);
         baseClients = clients.filter(c => c.responsibleId === currentUser.id);
+        baseFinance = [];
     } else if (currentUser.role === 'COMMERCIAL') {
         // Commercial sees their own tasks but ALL leads and clients to manage them
         baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
         baseLeads = leads; 
         baseClients = clients;
+        baseFinance = [];
     } else if (currentUser.role === 'MANAGER') {
-        if (currentUser.squad) {
-            baseTasks = tasks.filter(t => t.squadId === currentUser.squad);
-            baseClients = clients.filter(c => c.squadId === currentUser.squad);
-            
-            const squadMembers = users.filter(u => u.squad === currentUser.squad).map(u => u.id);
-            baseLeads = leads.filter(l => l.responsibleId && squadMembers.includes(l.responsibleId));
-        }
+        const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
+        const mySquadIds = mySquads.map(s => s.id);
+        
+        baseTasks = tasks.filter(t => (t.squadId && mySquadIds.includes(t.squadId)) || t.assigneeIds.includes(currentUser.id));
+        baseClients = clients.filter(c => (c.squadId && mySquadIds.includes(c.squadId)) || c.responsibleId === currentUser.id);
+        
+        const squadMembers = users.filter(u => squads.some(s => mySquadIds.includes(s.id) && s.members?.includes(u.id))).map(u => u.id);
+        baseLeads = leads.filter(l => (l.responsibleId && squadMembers.includes(l.responsibleId)) || l.responsibleId === currentUser.id);
+        
+        baseFinance = []; // Gestão Financeira: não visualiza esse modulo
     }
 
     // Apply manual filters from dropdowns
@@ -146,7 +161,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         finance: baseFinance,
         clients: baseClients
     };
-  }, [tasks, leads, finance, clients, currentUser, users]);
+  }, [tasks, leads, finance, clients, currentUser, users, squads]);
 
   const stats = useMemo(() => {
     const periodTxs = filteredData.finance.filter(f => filterByDate(f.date));
@@ -257,7 +272,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
   const shortcuts = [
     { label: 'Novo Lead', icon: Plus, view: 'crm', color: 'bg-pink-600' },
     { label: 'Nova Tarefa', icon: CheckCircle2, view: 'kanban', color: 'bg-blue-600' },
-    { label: 'Nova Despesa', icon: DollarSign, view: 'finance', color: 'bg-slate-900' },
+    ...(!(currentUser.role === 'MANAGER') ? [{ label: 'Nova Despesa', icon: DollarSign, view: 'finance', color: 'bg-slate-900' }] : []),
     { label: 'Novo Cliente', icon: Users, view: 'clients', color: 'bg-emerald-600' },
   ];
 
@@ -272,14 +287,17 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto bg-slate-50 p-2 rounded-2xl border border-slate-100">
             {/* Squad Filter */}
-            {(isAdmin) && (
+            {(isAdmin || isManager) && (
                 <select 
                     value={selectedSquadId} 
                     onChange={(e) => setSelectedSquadId(e.target.value)}
                     className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-600 outline-none focus:border-pink-200 transition-all w-full sm:w-auto"
                 >
-                    <option value="ALL">Todas as Squads</option>
-                    {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    <option value="ALL">{isAdmin ? 'Todas as Squads' : 'Minhas Squads'}</option>
+                    {squads
+                        .filter(s => isAdmin || s.members?.includes(currentUser.id))
+                        .map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                    }
                 </select>
             )}
 
@@ -291,7 +309,20 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
                     className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-600 outline-none focus:border-pink-200 transition-all w-full sm:w-auto"
                 >
                     <option value="ALL">Todos os Colaboradores</option>
-                    {users.filter(u => u.role !== 'CLIENT' && (selectedSquadId === 'ALL' || u.squad === selectedSquadId)).map(u => (
+                    {users.filter(u => {
+                        if (u.role === 'CLIENT') return false;
+                        if (selectedSquadId !== 'ALL') {
+                            // Find if u is a member of selectedSquadId
+                            const targetSquad = squads.find(s => s.id === selectedSquadId);
+                            return targetSquad?.members?.includes(u.id) || u.id === currentUser.id;
+                        }
+                        if (isManager) {
+                            const managerSquads = squads.filter(s => s.members?.includes(currentUser.id));
+                            const squadUserIds = managerSquads.flatMap(s => s.members || []);
+                            return squadUserIds.includes(u.id) || u.id === currentUser.id;
+                        }
+                        return true;
+                    }).map(u => (
                         <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                 </select>
@@ -315,7 +346,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
       {/* Executive Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {/* Finance Context */}
-        {(isAdmin || isManager || isFinance) && (
+        {(isAdmin || isFinance) && (
             <>
                 <div onClick={() => setCurrentView('finance')} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-premium cursor-pointer hover:border-emerald-200 transition-all">
                     <p className="text-emerald-500 text-[9px] font-black uppercase tracking-widest mb-1">Receita</p>
@@ -390,7 +421,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
           )}
 
           {/* FINANCEIRO (RISCO) */}
-          {(isAdmin || isManager || isFinance) && (
+          {(isAdmin || isFinance) && (
               <div className="bg-slate-900 p-8 rounded-[40px] border border-slate-800 shadow-2xl flex flex-col text-white">
                   <div className="flex items-center justify-between mb-8">
                       <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">

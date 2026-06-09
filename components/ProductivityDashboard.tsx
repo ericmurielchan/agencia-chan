@@ -50,6 +50,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
 
   const isManagement = ['ADMIN', 'MANAGER', 'FINANCE', 'COMMERCIAL'].includes(currentUser.role);
   const isAdmin = currentUser.role === 'ADMIN';
+  const isManager = currentUser.role === 'MANAGER';
   
   React.useEffect(() => {
       if (!isManagement) {
@@ -58,6 +59,35 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
       }
   }, [currentUser, isManagement]);
 
+  // Se o usuário selecionado não fizer parte da nova squad selecionada, reseta o usuário para 'ALL'
+  React.useEffect(() => {
+      if (selectedSquadId !== 'ALL' && selectedUserId !== 'ALL') {
+          const targetSquad = squads.find(s => s.id === selectedSquadId);
+          if (!targetSquad?.members?.includes(selectedUserId)) {
+              setSelectedUserId('ALL');
+          }
+      }
+  }, [selectedSquadId, selectedUserId, squads]);
+
+  const filteredUsersForSelect = useMemo(() => {
+      return users.filter(u => {
+          if (u.role === 'CLIENT') return false;
+          
+          if (selectedSquadId !== 'ALL') {
+              const targetSquad = squads.find(s => s.id === selectedSquadId);
+              if (!targetSquad?.members?.includes(u.id)) return false;
+          }
+          
+          if (isManager) {
+              const managerSquads = squads.filter(s => s.members?.includes(currentUser.id));
+              const squadUserIds = managerSquads.flatMap(s => s.members || []);
+              return squadUserIds.includes(u.id) || u.id === currentUser.id;
+          }
+          
+          return true;
+      });
+  }, [users, squads, selectedSquadId, currentUser, isManager]);
+
   const formatHours = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -65,6 +95,16 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
   };
 
   // --- Lógica de Filtragem ---
+  const myAccessibleTasks = useMemo(() => {
+      if (isAdmin) return tasks;
+      if (isManager) {
+          const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
+          const mySquadIds = mySquads.map(s => s.id);
+          return tasks.filter(t => (t.squadId && mySquadIds.includes(t.squadId)) || t.assigneeIds.includes(currentUser.id));
+      }
+      return tasks;
+  }, [tasks, isAdmin, isManager, squads, currentUser.id]);
+
   const filteredTasks = useMemo(() => {
       const now = new Date();
       let startDate = new Date();
@@ -72,7 +112,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
       if (dateRange === '30days') startDate.setDate(now.getDate() - 30);
       if (dateRange === '90days') startDate.setDate(now.getDate() - 90);
 
-      return tasks.filter(t => {
+      return myAccessibleTasks.filter(t => {
           const taskDueDate = t.dueDate ? new Date(t.dueDate) : null;
           const taskCompletedDate = t.completedAt ? new Date(t.completedAt) : null;
           
@@ -86,7 +126,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
           const isUserMatch = selectedUserId === 'ALL' || t.assigneeIds.includes(selectedUserId);
           return isDateInRange && isSquadMatch && isUserMatch;
       });
-  }, [tasks, dateRange, selectedSquadId, selectedUserId]);
+  }, [myAccessibleTasks, dateRange, selectedSquadId, selectedUserId]);
 
   // --- Metas e Progresso ---
   const currentMonth = new Date().toISOString().substring(0, 7);
@@ -163,8 +203,8 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
 
   // --- Métricas Kanban (Respeitando Usuário/Squad selecionados) ---
   const kanbanMetrics = useMemo(() => {
-    return calculateKanbanMetrics(tasks, selectedUserId, selectedSquadId);
-  }, [tasks, selectedUserId, selectedSquadId]);
+    return calculateKanbanMetrics(myAccessibleTasks, selectedUserId, selectedSquadId);
+  }, [myAccessibleTasks, selectedUserId, selectedSquadId]);
 
   // --- Rankings ---
   const individualRanking = users
@@ -276,12 +316,17 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
             {isManagement && (
                 <>
                     <select value={selectedSquadId} onChange={e => setSelectedSquadId(e.target.value)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-100">
-                        <option value="ALL">Todas as Squads</option>
-                        {squads.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        <option value="ALL">{isAdmin ? 'Todas as Squads' : 'Minhas Squads'}</option>
+                        {squads
+                            .filter(s => isAdmin || s.members?.includes(currentUser.id))
+                            .map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                        }
                     </select>
                     <select value={selectedUserId} onChange={e => setSelectedUserId(e.target.value)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-pink-100">
-                        <option value="ALL">Time Completo</option>
-                        {users.filter(u => u.role !== 'CLIENT').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        <option value="ALL">Todos os Membros</option>
+                        {filteredUsersForSelect.map(u => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
                     </select>
                 </>
             )}

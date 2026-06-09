@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Task, User, ColumnConfig, Notification, SystemModule, ConfirmOptions, Client } from '../types';
+import { Task, User, ColumnConfig, Notification, SystemModule, ConfirmOptions, Client, Squad } from '../types';
 import { 
     Plus, Archive, Settings, X, Search, Bell, Layers, Menu
 } from 'lucide-react';
@@ -30,12 +30,13 @@ interface KanbanBoardProps {
   onNavigate?: (view: string, refId?: string) => void;
   onSaveTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
+  squads?: Squad[];
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
   tasks, setTasks, users, currentUser, columns, setColumns, notifications, addNotification, onNotificationClick, onMarkAllAsRead, openConfirm,
   sidebarOpen, sidebarCompact, isMobile, clients, selectedTaskId, onClearSelectedTask, initialFilter, onClearFilter, onNavigate,
-  onSaveTask, onDeleteTask
+  onSaveTask, onDeleteTask, squads = []
 }) => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -52,9 +53,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const isManager = currentUser.role === 'MANAGER';
   
   const visibleTasks = useMemo(() => {
-    if (isAdmin || isManager) return tasks;
+    if (isAdmin) return tasks;
+    if (isManager) {
+        const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
+        const mySquadIds = mySquads.map(s => s.id);
+        return tasks.filter(t => (t.squadId && mySquadIds.includes(t.squadId)) || t.assigneeIds.includes(currentUser.id));
+    }
     return tasks.filter(t => t.assigneeIds.includes(currentUser.id));
-  }, [tasks, currentUser, isAdmin, isManager]);
+  }, [tasks, currentUser, isAdmin, isManager, squads]);
 
   const activeColumns = useMemo(() => columns.filter(c => !c.isArchived).sort((a,b) => a.order - b.order), [columns]);
   const archivedColumns = useMemo(() => columns.filter(c => c.isArchived).sort((a,b) => a.order - b.order), [columns]);

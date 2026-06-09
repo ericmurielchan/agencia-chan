@@ -56,6 +56,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const isEditingSelf = editingUser.id === currentUserId;
+  const isTargetPeerOrSuperior = editingUser.role === 'ADMIN' || (editingUser.role === 'MANAGER' && !isEditingSelf);
+  const isTargetReadOnly = isReadOnly || (currentUserRole === 'MANAGER' && isTargetPeerOrSuperior);
+
   // Filtrar cargos disponíveis
   const availableRoles = isCommercial 
     ? ROLES.filter(r => r.value === 'CLIENT')
@@ -64,8 +68,42 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const [isSquadModalOpen, setIsSquadModalOpen] = useState(false);
   const [editingSquad, setEditingSquad] = useState<Partial<Squad>>({ name: '', members: [] });
 
+  const canEditUser = (u: User) => {
+      if (isReadOnly) return false;
+      if (currentUserRole === 'MANAGER') {
+          // Pode editar a si mesmo, mas não outros gerentes ou administradores
+          if (u.id === currentUserId) return true;
+          if (u.role === 'ADMIN' || u.role === 'MANAGER') return false;
+      }
+      return true;
+  };
+
+  const canDeleteUser = (u: User) => {
+      if (isReadOnly) return false;
+      if (currentUserRole === 'MANAGER') {
+          // Gerente não pode excluir a si mesmo nem outros gerentes ou administradores
+          if (u.role === 'ADMIN' || u.role === 'MANAGER') return false;
+      }
+      return true;
+  };
+
   const handleSaveUser = async () => {
       if (!editingUser.name || !editingUser.email) return;
+
+      if (currentUserRole === 'MANAGER') {
+          if (editingUser.id !== currentUserId) {
+              if (editingUser.role === 'ADMIN' || editingUser.role === 'MANAGER') {
+                  alert('Você não possui permissão para criar ou definir colaboradores com nível de hierarquia igual ou superior ao seu.');
+                  return;
+              }
+          } else {
+              const originalUser = users.find(u => u.id === currentUserId);
+              if (originalUser && editingUser.role !== originalUser.role) {
+                  alert('Você não tem permissão para alterar o seu próprio nível de hierarquia.');
+                  return;
+              }
+          }
+      }
       
       setIsSaving(true);
       try {
@@ -108,6 +146,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   };
 
   const handleDeleteUser = async (id: string) => {
+      const targetUser = users.find(u => u.id === id);
+      if (currentUserRole === 'MANAGER' && targetUser && (targetUser.role === 'ADMIN' || targetUser.role === 'MANAGER')) {
+          alert('Você não possui permissão para excluir colaboradores com nível de hierarquia igual ou superior ao seu.');
+          return;
+      }
+
       const ok = await openConfirm({ 
           title: "Excluir Colaborador?", 
           description: "Esta ação removerá o acesso e os dados deste usuário permanentemente.", 
@@ -227,7 +271,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                   </div>
                               </div>
                           </div>
-                          {!isReadOnly ? (
+                          {canEditUser(user) ? (
                               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button 
                                     onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
@@ -236,16 +280,18 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                   >
                                       <Edit2 size={16}/>
                                   </button>
-                                  <button 
-                                    onClick={()=>handleDeleteUser(user.id)} 
-                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="Excluir"
-                                  >
-                                      <Trash2 size={16}/>
-                                  </button>
+                                  {canDeleteUser(user) && (
+                                      <button 
+                                        onClick={()=>handleDeleteUser(user.id)} 
+                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Excluir"
+                                      >
+                                          <Trash2 size={16}/>
+                                      </button>
+                                  )}
                               </div>
                           ) : (
-                              user.id === currentUserId ? (
+                              (user.id === currentUserId || (currentUserRole === 'MANAGER' && (user.role === 'ADMIN' || user.role === 'MANAGER'))) ? (
                                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
                                         onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
@@ -357,7 +403,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
           <Modal 
               isOpen={isModalOpen} 
               onClose={() => setIsModalOpen(false)}
-              title={isReadOnly ? "Visualizar Colaborador" : (editingUser.id ? "Editar Colaborador" : "Novo Colaborador")}
+              title={isTargetReadOnly ? "Visualizar Colaborador" : (editingUser.id ? "Editar Colaborador" : "Novo Colaborador")}
               maxWidth="600px"
           >
               <div className="space-y-6">
@@ -366,14 +412,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                           <label className="text-xs font-bold text-slate-400 uppercase">Nome Completo</label>
                           <div className="relative">
                               <UserIcon className="absolute left-3 top-3 text-slate-400" size={18}/>
-                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all disabled:opacity-75 disabled:bg-slate-50" placeholder="Ex: João Silva" value={editingUser.name || ''} onChange={e => setEditingUser({...editingUser, name:e.target.value})} disabled={isReadOnly}/>
+                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all disabled:opacity-75 disabled:bg-slate-50" placeholder="Ex: João Silva" value={editingUser.name || ''} onChange={e => setEditingUser({...editingUser, name:e.target.value})} disabled={isTargetReadOnly}/>
                           </div>
                       </div>
                       <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-400 uppercase">E-mail</label>
                           <div className="relative">
                               <Mail className="absolute left-3 top-3 text-slate-400" size={18}/>
-                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all disabled:opacity-75 disabled:bg-slate-50" placeholder="Ex: joao@empresa.com" value={editingUser.email || ''} onChange={e => setEditingUser({...editingUser, email:e.target.value})} disabled={isReadOnly}/>
+                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all disabled:opacity-75 disabled:bg-slate-50" placeholder="Ex: joao@empresa.com" value={editingUser.email || ''} onChange={e => setEditingUser({...editingUser, email:e.target.value})} disabled={isTargetReadOnly}/>
                           </div>
                       </div>
                   </div>
@@ -387,7 +433,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                 className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all appearance-none bg-white disabled:opacity-75 disabled:bg-slate-50"
                                 value={editingUser.role || 'EMPLOYEE'}
                                 onChange={e => setEditingUser({...editingUser, role: e.target.value as Role})}
-                                disabled={isReadOnly || isCommercial}
+                                disabled={isTargetReadOnly || isCommercial || currentUserRole === 'MANAGER'}
                               >
                                   {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                               </select>
@@ -402,14 +448,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                 className="w-5 h-5 accent-pink-600 cursor-pointer disabled:opacity-75"
                                 checked={!!editingUser.hasSystemAccess}
                                 onChange={e => setEditingUser({...editingUser, hasSystemAccess: e.target.checked})}
-                                disabled={isReadOnly}
+                                disabled={isTargetReadOnly}
                               />
                               <label htmlFor="hasAccess" className="text-sm font-medium text-slate-700 cursor-pointer">Habilitar Login</label>
                           </div>
                       </div>
                   </div>
 
-                  {editingUser.hasSystemAccess && !isReadOnly && (
+                  {editingUser.hasSystemAccess && !isTargetReadOnly && (
                       <div className="space-y-1 animate-fade-in">
                           <label className="text-xs font-bold text-slate-400 uppercase">Senha de Acesso</label>
                           <div className="relative">
@@ -420,7 +466,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                 placeholder="Defina uma senha" 
                                 value={editingUser.password || ''} 
                                 onChange={e => setEditingUser({...editingUser, password: e.target.value})}
-                                disabled={isReadOnly}
+                                disabled={isTargetReadOnly}
                               />
                               <button 
                                 type="button"
@@ -434,7 +480,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                       </div>
                   )}
 
-                  {(currentUserRole === 'ADMIN' || currentUserRole === 'FINANCE' || currentUserRole === 'MANAGER') && (
+                  {(currentUserRole === 'ADMIN' || currentUserRole === 'FINANCE') && (
                       <div className="space-y-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 animate-fade-in text-left">
                           <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
                               <FileText size={16} className="text-pink-600" />
