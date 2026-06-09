@@ -2033,7 +2033,7 @@ export const saveProductivityGoal = async (goal: Partial<ProductivityGoal>) => {
 export const deleteUser = async (id: string) => {
   const resolvedId = mapUserId(id) || id;
 
-  // Limpar o usuário de quaisquer squads que ele pertença no banco de dados
+  // 1. Limpar o usuário de quaisquer squads que ele pertença no banco de dados
   try {
     const { data: squads, error: squadsErr } = await supabase.from('squads').select('id, members');
     if (!squadsErr && squads) {
@@ -2049,6 +2049,105 @@ export const deleteUser = async (id: string) => {
     console.error('Erro ao limpar usuário das squads no banco:', err);
   }
 
+  // 2. Limpar notificações enviadas/direcionadas ao usuário
+  try {
+    await supabase.from('notifications').delete().eq('target_user_id', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('notifications').delete().eq('target_user_id', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar notificações do usuário deletado:', e);
+  }
+
+  // 3. Limpar metas de produtividade associadas ao usuário
+  try {
+    await supabase.from('productivity_goals').delete().eq('user_id', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('productivity_goals').delete().eq('user_id', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar metas de produtividade do usuário deletado:', e);
+  }
+
+  // 4. Limpar comentários de aprovações (definir user_id como nulo)
+  try {
+    await supabase.from('approval_comments').update({ user_id: null }).eq('user_id', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('approval_comments').update({ user_id: null }).eq('user_id', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar comentários de aprovações do usuário deletado:', e);
+  }
+
+  // 5. Limpar sessões do caixa operadas pelo usuário
+  try {
+    await supabase.from('cash_register_sessions').update({ opened_by: null }).eq('opened_by', resolvedId);
+    await supabase.from('cash_register_sessions').update({ closed_by: null }).eq('closed_by', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('cash_register_sessions').update({ opened_by: null }).eq('opened_by', id);
+      await supabase.from('cash_register_sessions').update({ closed_by: null }).eq('closed_by', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar sessões do caixa do usuário deletado:', e);
+  }
+
+  // 6. Limpar ativos sob responsabilidade do usuário
+  try {
+    await supabase.from('assets').update({ responsible_id: null }).eq('responsible_id', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('assets').update({ responsible_id: null }).eq('responsible_id', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar ativos do usuário deletado:', e);
+  }
+
+  // 7. Limpar requisições (solicitante, aprovador, rejeitador)
+  try {
+    await supabase.from('requisitions').update({ requester_id: null }).eq('requester_id', resolvedId);
+    await supabase.from('requisitions').update({ approved_by: null }).eq('approved_by', resolvedId);
+    await supabase.from('requisitions').update({ rejected_by: null }).eq('rejected_by', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('requisitions').update({ requester_id: null }).eq('requester_id', id);
+      await supabase.from('requisitions').update({ approved_by: null }).eq('approved_by', id);
+      await supabase.from('requisitions').update({ rejected_by: null }).eq('rejected_by', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar requisições do usuário deletado:', e);
+  }
+
+  // 8. Limpar transações financeiras
+  try {
+    await supabase.from('financial_transactions').update({ responsible_id: null }).eq('responsible_id', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('financial_transactions').update({ responsible_id: null }).eq('responsible_id', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar transações financeiras do usuário deletado:', e);
+  }
+
+  // 9. Limpar leads (responsável e criador)
+  try {
+    await supabase.from('leads').update({ responsible_id: null }).eq('responsible_id', resolvedId);
+    await supabase.from('leads').update({ created_by: null }).eq('created_by', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('leads').update({ responsible_id: null }).eq('responsible_id', id);
+      await supabase.from('leads').update({ created_by: null }).eq('created_by', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar leads do usuário deletado:', e);
+  }
+
+  // 10. Limpar clientes sob a responsabilidade do usuário
+  try {
+    await supabase.from('clients').update({ responsible_id: null }).eq('responsible_id', resolvedId);
+    if (id !== resolvedId) {
+      await supabase.from('clients').update({ responsible_id: null }).eq('responsible_id', id);
+    }
+  } catch (e) {
+    console.error('Erro ao limpar clientes do usuário deletado:', e);
+  }
+
+  // Finalmente, excluir o registro do usuário
   const { error } = await supabase.from('users').delete().eq('id', resolvedId);
   if (error) {
     console.error('Erro ao excluir usuário:', error);
