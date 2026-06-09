@@ -57,14 +57,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return ['client-portal', 'help'].includes(itemId);
     }
     
-    // Comercial/Freelancer vê apenas o necessário para vendas
-    if (currentUserRole === 'COMMERCIAL' || currentUserRole === 'FREELANCER') {
+    // Comercial vê apenas o necessário para vendas
+    if (currentUserRole === 'COMMERCIAL') {
       const allowedForCommercial = ['crm', 'clients', 'catalog', 'requisitions', 'help', 'settings'];
       return allowedForCommercial.includes(itemId);
     }
 
-    // Colaborador (EMPLOYEE) não tem acesso a: Financeiro (finance), estoque (stock), ativos (assets) e administração (system-admin)
-    if (currentUserRole === 'EMPLOYEE') {
+    // Colaborador (EMPLOYEE) e Freelancer (FREELANCER) não têm acesso a: Financeiro (finance), estoque (stock), ativos (assets) e administração (system-admin)
+    if (currentUserRole === 'EMPLOYEE' || currentUserRole === 'FREELANCER') {
       const restrictedForEmployee = ['finance', 'stock', 'assets', 'system-admin'];
       if (restrictedForEmployee.includes(itemId)) return false;
     }

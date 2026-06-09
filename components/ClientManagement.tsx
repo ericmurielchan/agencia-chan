@@ -41,11 +41,15 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   const isManager = currentUser.role === 'MANAGER';
   const isFinance = currentUser.role === 'FINANCE';
   const canManageAccess = isAdmin || isManager || isFinance;
+  const isEmployee = currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER';
 
   // Filter clients based on role
   const filteredClients = useMemo(() => {
     let base = clients;
-    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
+        const userSquads = squads.filter(s => s.members?.includes(currentUser.id)).map(s => s.id);
+        base = clients.filter(c => c.responsibleId === currentUser.id || (c.squadId && userSquads.includes(c.squadId)));
+    } else if (currentUser.role === 'COMMERCIAL') {
         // Strict filter: only clients where the user is the responsible person
         base = clients.filter(c => c.responsibleId === currentUser.id);
     }
@@ -53,7 +57,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         c.legalName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [clients, searchTerm, currentUser]);
+  }, [clients, searchTerm, currentUser, squads]);
 
   const handleSave = async () => {
       if (!editingClient.name?.trim()) {
@@ -152,16 +156,18 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     />
                 </div>
             </div>
-            <button 
-                onClick={() => { 
-                    setEditingClient({ status: 'ACTIVE', level: 'BASIC', isRecurring: true, systemAccesses: [] }); 
-                    setActiveTab('GENERAL');
-                    setIsModalOpen(true); 
-                }} 
-                className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
-            >
-                <Plus size={18} strokeWidth={3} /> Novo Cliente
-            </button>
+            {!isEmployee && (
+                <button 
+                    onClick={() => { 
+                        setEditingClient({ status: 'ACTIVE', level: 'BASIC', isRecurring: true, systemAccesses: [] }); 
+                        setActiveTab('GENERAL');
+                        setIsModalOpen(true); 
+                    }} 
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
+                >
+                    <Plus size={18} strokeWidth={3} /> Novo Cliente
+                </button>
+            )}
         </div>
 
         {/* CLIENT GRID */}
@@ -182,20 +188,22 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                                 }`}>
                                     {client.status}
                                 </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); setEditingClient({ ...client, systemAccesses: client.systemAccesses || [] }); setActiveTab('GENERAL'); setIsModalOpen(true); }} 
-                                        className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
-                                    >
-                                        <Edit2 size={14}/>
-                                    </button>
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }} 
-                                        className="p-2 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-all"
-                                    >
-                                        <Trash2 size={14}/>
-                                    </button>
-                                </div>
+                                {!isEmployee && (
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setEditingClient({ ...client, systemAccesses: client.systemAccesses || [] }); setActiveTab('GENERAL'); setIsModalOpen(true); }} 
+                                            className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
+                                        >
+                                            <Edit2 size={14}/>
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }} 
+                                            className="p-2 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-all"
+                                        >
+                                            <Trash2 size={14}/>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                             
                             <h3 className="font-black text-slate-800 text-lg leading-tight mb-1 group-hover:text-pink-600 transition-colors">{client.name}</h3>

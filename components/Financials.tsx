@@ -106,10 +106,11 @@ interface FinancialsProps {
     onDeleteStockItem?: (id: string) => Promise<void>;
     onSaveAsset?: (asset: Partial<Asset>) => Promise<void>;
     onDeleteAsset?: (id: string) => Promise<void>;
+    onSaveUser?: (user: Partial<User>) => Promise<void>;
     initialTab?: TabType;
 }
 
-type TabType = 'DASHBOARD' | 'ACCOUNTS_RECEIVABLE' | 'ACCOUNTS_PAYABLE' | 'CASH_FLOW' | 'ASSETS' | 'STOCK' | 'COMMISSIONS' | 'ACCOUNTS_CARDS' | 'REPORTS';
+type TabType = 'DASHBOARD' | 'ACCOUNTS_RECEIVABLE' | 'ACCOUNTS_PAYABLE' | 'CASH_FLOW' | 'ASSETS' | 'STOCK' | 'COMMISSIONS' | 'ACCOUNTS_CARDS' | 'REPORTS' | 'COLLABORATORS_BANKS';
 
 export const Financials: React.FC<FinancialsProps> = ({
     bankAccounts,
@@ -142,9 +143,25 @@ export const Financials: React.FC<FinancialsProps> = ({
     onDeleteStockItem,
     onSaveAsset,
     onDeleteAsset,
+    onSaveUser,
     initialTab
 }) => {
     const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'DASHBOARD');
+    
+    // Collaborator Banks Tab States
+    const [bankSearch, setBankSearch] = useState('');
+    const [bankRoleFilter, setBankRoleFilter] = useState('ALL');
+    const [editingBankUser, setEditingBankUser] = useState<User | null>(null);
+    const [bankDetailsInput, setBankDetailsInput] = useState('');
+    const [salaryInput, setSalaryInput] = useState('');
+    const [hourlyRateInput, setHourlyRateInput] = useState('');
+    const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+    const handleCopyBankDetails = (userId: string, text: string) => {
+        navigator.clipboard.writeText(text);
+        setCopyFeedback(userId);
+        setTimeout(() => setCopyFeedback(null), 2000);
+    };
     
     // Core Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -975,6 +992,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                             { id: 'ASSETS', label: 'Ativos', icon: Box },
                             { id: 'STOCK', label: 'Estoque', icon: Package },
                             { id: 'COMMISSIONS', label: 'Comissões', icon: Calculator },
+                            { id: 'COLLABORATORS_BANKS', label: 'Dados Bancários', icon: CardIcon },
                             { id: 'REPORTS', label: 'Relatórios', icon: FileText }
                         ].map(sub => (
                             <button
@@ -1888,6 +1906,227 @@ export const Financials: React.FC<FinancialsProps> = ({
                                 setTransactions={setTransactions}
                                 setBankAccounts={setBankAccounts}
                             />
+                        </motion.div>
+                    )}
+
+                    {/* 7.5. COLLABORATORS_BANKS Tab */}
+                    {activeTab === 'COLLABORATORS_BANKS' && (
+                        <motion.div
+                            key="collaborators_banks"
+                            initial={{ opacity: 0, x: 15 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="space-y-6 text-left"
+                        >
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider mb-1">Membros da Equipe</p>
+                                        <h3 className="text-2xl font-black text-slate-800">
+                                            {users.filter(u => u.role !== 'CLIENT').length}
+                                        </h3>
+                                    </div>
+                                    <div className="bg-slate-50 p-3.5 rounded-2xl text-slate-700">
+                                        <Users size={18} />
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider mb-1">Com Chave PIX / Código de Banco</p>
+                                        <h3 className="text-2xl font-black text-emerald-600">
+                                            {users.filter(u => u.role !== 'CLIENT' && u.bankDetails?.trim()).length}
+                                        </h3>
+                                    </div>
+                                    <div className="bg-emerald-50/50 p-3.5 rounded-2xl text-emerald-600">
+                                        <CheckCircle2 size={18} />
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] text-slate-450 font-extrabold uppercase tracking-wider mb-1">Dados Bancários Pendentes</p>
+                                        <h3 className="text-2xl font-black text-amber-600">
+                                            {users.filter(u => u.role !== 'CLIENT' && !u.bankDetails?.trim()).length}
+                                        </h3>
+                                    </div>
+                                    <div className="bg-amber-50/50 p-3.5 rounded-2xl text-amber-600">
+                                        <AlertTriangle size={18} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Filter and Search Panel */}
+                            <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+                                <div className="relative w-full md:w-96">
+                                    <Search className="absolute left-4 top-3.5 text-slate-400" size={16} />
+                                    <input 
+                                        type="text"
+                                        placeholder="Buscar por nome ou e-mail..."
+                                        className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl py-3 pl-11 pr-4 text-sm outline-none focus:bg-white focus:border-slate-900 transition-all font-semibold text-slate-800"
+                                        value={bankSearch}
+                                        onChange={e => setBankSearch(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="flex gap-2 items-center w-full md:w-auto">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase whitespace-nowrap">Filtrar Cargo:</span>
+                                    <select
+                                        className="bg-slate-50 border border-slate-200/80 rounded-2xl py-2.5 px-4 text-xs font-bold text-slate-700 outline-none focus:border-slate-900 focus:bg-white transition-all w-full md:w-48 appearance-none"
+                                        value={bankRoleFilter}
+                                        onChange={e => setBankRoleFilter(e.target.value)}
+                                    >
+                                        <option value="ALL">Todos os Cargos</option>
+                                        <option value="EMPLOYEE">Colaborador</option>
+                                        <option value="FREELANCER">Freelancer</option>
+                                        <option value="FINANCE">Financeiro</option>
+                                        <option value="COMMERCIAL">Comercial</option>
+                                        <option value="MANAGER">Gerente</option>
+                                        <option value="ADMIN">Administrador</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Main List Table */}
+                            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-slate-100 bg-slate-50/50">
+                                                <th className="p-5 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Membro da Equipe</th>
+                                                <th className="p-5 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Cargo</th>
+                                                <th className="p-5 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider text-right">Contrato (Base)</th>
+                                                <th className="p-5 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Dados Bancários / PIX</th>
+                                                <th className="p-5 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider text-right">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-sm">
+                                            {(() => {
+                                                const filtered = users
+                                                    .filter(u => u.role !== 'CLIENT')
+                                                    .filter(u => {
+                                                        const matchSearch = u.name.toLowerCase().includes(bankSearch.toLowerCase()) || 
+                                                                            u.email.toLowerCase().includes(bankSearch.toLowerCase());
+                                                        const matchRole = bankRoleFilter === 'ALL' || u.role === bankRoleFilter;
+                                                        return matchSearch && matchRole;
+                                                    });
+
+                                                if (filtered.length === 0) {
+                                                    return (
+                                                        <tr>
+                                                            <td colSpan={5} className="p-8 text-center text-slate-400 font-bold">
+                                                                Nenhum colaborador ou freelancer encontrado com estes filtros.
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+
+                                                return filtered.map(u => {
+                                                    const cleanBankDetails = u.bankDetails?.trim() || '';
+                                                    const isCopied = copyFeedback === u.id;
+                                                    
+                                                    return (
+                                                        <tr key={u.id} className="hover:bg-slate-50/40 transition-colors">
+                                                            {/* User Info */}
+                                                            <td className="p-5">
+                                                                <div className="flex items-center gap-3">
+                                                                    <img 
+                                                                        src={u.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${u.name}`} 
+                                                                        className="w-10 h-10 rounded-full border border-slate-100 bg-slate-50" 
+                                                                        onError={e => {
+                                                                            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${u.name}`;
+                                                                        }}
+                                                                    />
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-extrabold text-slate-800 text-sm leading-tight">{u.name}</span>
+                                                                        <span className="text-[11px] text-slate-450 font-medium">{u.email}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+
+                                                            {/* Cargo */}
+                                                            <td className="p-5">
+                                                                <span className={`inline-flex items-center px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                                                                    u.role === 'ADMIN' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
+                                                                    u.role === 'MANAGER' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                                                    u.role === 'FINANCE' ? 'bg-teal-50 text-teal-700 border border-teal-100' :
+                                                                    u.role === 'FREELANCER' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                                                                    u.role === 'COMMERCIAL' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                                                                    'bg-slate-100 text-slate-600'
+                                                                }`}>
+                                                                    {u.role === 'ADMIN' ? 'Admin' :
+                                                                     u.role === 'MANAGER' ? 'Gerente' :
+                                                                     u.role === 'FINANCE' ? 'Financeiro' :
+                                                                     u.role === 'EMPLOYEE' ? 'Colaborador' :
+                                                                     u.role === 'FREELANCER' ? 'Freelancer' :
+                                                                     u.role === 'COMMERCIAL' ? 'Comercial' : u.role}
+                                                                </span>
+                                                            </td>
+
+                                                            {/* Pagamentos */}
+                                                            <td className="p-5 text-right font-semibold">
+                                                                <div className="flex flex-col text-slate-700 text-xs">
+                                                                    {u.salary ? (
+                                                                        <span>Salário: <strong className="text-slate-900 font-extrabold">R$ {u.salary.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                                                    ) : null}
+                                                                    {u.hourlyRate ? (
+                                                                        <span>Valor Hora: <strong className="text-slate-900 font-black">R$ {u.hourlyRate.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                                                    ) : null}
+                                                                    {!u.salary && !u.hourlyRate && (
+                                                                        <span className="text-slate-400 italic font-medium">Não definido</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+
+                                                            {/* Dados Bancarios / PIX */}
+                                                            <td className="p-5">
+                                                                {cleanBankDetails ? (
+                                                                    <div className="flex items-center gap-2 max-w-sm">
+                                                                        <div className="bg-slate-50 border border-slate-150 text-slate-600 rounded-xl p-2.5 font-mono text-xs whitespace-pre-line leading-normal shadow-inner line-clamp-1 max-h-[38px] overflow-hidden flex-1 select-all relative">
+                                                                            {cleanBankDetails}
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleCopyBankDetails(u.id, cleanBankDetails)}
+                                                                            className={`p-2.5 rounded-xl border flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                                                                                isCopied
+                                                                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-600 scale-105'
+                                                                                    : 'bg-white hover:bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-800'
+                                                                            }`}
+                                                                            title={isCopied ? "Copiado!" : "Copiar dados bancários"}
+                                                                        >
+                                                                            {isCopied ? <Check size={14} /> : <FileText size={14} />}
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-1.5 text-xs text-amber-500 font-bold bg-amber-50/50 px-3 py-1 rounded-full border border-amber-100/60 animate-pulse">
+                                                                        <AlertTriangle size={12} /> Dados Pendentes
+                                                                    </span>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Actions */}
+                                                            <td className="p-5 text-right">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingBankUser(u);
+                                                                        setBankDetailsInput(u.bankDetails || '');
+                                                                        setSalaryInput(u.salary ? u.salary.toString() : '');
+                                                                        setHourlyRateInput(u.hourlyRate ? u.hourlyRate.toString() : '');
+                                                                    }}
+                                                                    className="bg-white hover:bg-slate-100 text-slate-700 font-extrabold text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl border border-slate-200 shadow-sm transition-all duration-200 cursor-pointer"
+                                                                >
+                                                                    Editar Info
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                });
+                                            })()}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </motion.div>
                     )}
 
@@ -3013,6 +3252,91 @@ export const Financials: React.FC<FinancialsProps> = ({
                             </button>
                         </div>
                     </form>
+                </Modal>
+            )}
+
+            {editingBankUser && (
+                <Modal
+                    isOpen={!!editingBankUser}
+                    onClose={() => setEditingBankUser(null)}
+                    title={`Editar Informações Financeiras`}
+                    maxWidth="500px"
+                >
+                    <div className="space-y-6 text-left">
+                        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 animate-fade-in">
+                            <img 
+                                src={editingBankUser.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${editingBankUser.name}`} 
+                                className="w-10 h-10 rounded-full border border-slate-100 bg-white" 
+                                onError={e => {
+                                    (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${editingBankUser.name}`;
+                                }}
+                            />
+                            <div className="flex flex-col">
+                                <span className="font-extrabold text-slate-800 dark:text-white text-sm leading-tight">{editingBankUser.name}</span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+                                    {editingBankUser.role === 'ADMIN' ? 'Administrador' :
+                                     editingBankUser.role === 'MANAGER' ? 'Gerente' :
+                                     editingBankUser.role === 'FINANCE' ? 'Financeiro' :
+                                     editingBankUser.role === 'EMPLOYEE' ? 'Colaborador' :
+                                     editingBankUser.role === 'FREELANCER' ? 'Freelancer' :
+                                     editingBankUser.role === 'COMMERCIAL' ? 'Comercial' : editingBankUser.role}                                    
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase">Salário Base (R$)</label>
+                                <input 
+                                    type="number"
+                                    placeholder="Ex: 5000"
+                                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-2xl text-sm bg-white dark:bg-slate-800 dark:text-white outline-none focus:border-slate-900 transition-all font-semibold"
+                                    value={salaryInput}
+                                    onChange={e => setSalaryInput(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase">Valor Hora (R$)</label>
+                                <input 
+                                    type="number"
+                                    placeholder="Ex: 50"
+                                    className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-2xl text-sm bg-white dark:bg-slate-800 dark:text-white outline-none focus:border-slate-900 transition-all font-semibold"
+                                    value={hourlyRateInput}
+                                    onChange={e => setHourlyRateInput(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase">Dados Bancários / Chave PIX</label>
+                            <textarea 
+                                placeholder="Banco, conta, agência, chave PIX, etc."
+                                className="w-full border border-slate-200 dark:border-slate-700 p-3 rounded-2xl text-sm bg-white dark:bg-slate-800 dark:text-white outline-none h-32 resize-none focus:border-slate-900 transition-all font-semibold"
+                                value={bankDetailsInput}
+                                onChange={e => setBankDetailsInput(e.target.value)}
+                            />
+                        </div>
+
+                        <button
+                            onClick={async () => {
+                                if (!onSaveUser) {
+                                    alert('Ação de salvamento indisponível.');
+                                    return;
+                                }
+                                const updatedUser = {
+                                    ...editingBankUser,
+                                    salary: salaryInput ? parseFloat(salaryInput) : undefined,
+                                    hourlyRate: hourlyRateInput ? parseFloat(hourlyRateInput) : undefined,
+                                    bankDetails: bankDetailsInput.trim() || undefined
+                                };
+                                await onSaveUser(updatedUser);
+                                setEditingBankUser(null);
+                            }}
+                            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs uppercase tracking-widest py-4 rounded-2xl shadow-lg transition-all"
+                        >
+                            Salvar Alterações
+                        </button>
+                    </div>
                 </Modal>
             )}
 

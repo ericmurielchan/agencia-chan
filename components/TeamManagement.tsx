@@ -35,6 +35,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     onSaveUser, onDeleteUser, onSaveSquad, onDeleteSquad
 }) => {
   const isCommercial = currentUserRole === 'COMMERCIAL';
+  const isReadOnly = currentUserRole === 'EMPLOYEE' || currentUserRole === 'FREELANCER' || currentUserRole === 'CLIENT';
   
   // Filtrar usuários para Comercial: Ver apenas CLIENTS
   const displayedUsers = isCommercial 
@@ -193,7 +194,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     <div className="space-y-8 animate-pop">
       <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-slate-800">Equipes & Squads</h2>
-          {currentUserRole !== 'EMPLOYEE' && (
+          {!isReadOnly && (
               <button onClick={() => { setEditingUser(INITIAL_USER_STATE); setIsModalOpen(true) }} className="bg-pink-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow hover:bg-pink-700 active:scale-95 transition-all"><Plus size={18}/> Novo Colaborador</button>
           )}
       </div>
@@ -226,7 +227,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                   </div>
                               </div>
                           </div>
-                          {currentUserRole !== 'EMPLOYEE' && (
+                          {!isReadOnly ? (
                               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button 
                                     onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
@@ -243,6 +244,18 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                       <Trash2 size={16}/>
                                   </button>
                               </div>
+                          ) : (
+                              user.id === currentUserId ? (
+                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
+                                        className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
+                                        title="Visualizar"
+                                      >
+                                          <Eye size={16}/>
+                                      </button>
+                                  </div>
+                              ) : null
                           )}
                       </div>
                   ))}
@@ -304,7 +317,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                   )}
                               </div>
 
-                              {currentUserRole !== 'EMPLOYEE' && (
+                              {!isReadOnly ? (
                                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
                                         onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} 
@@ -321,6 +334,16 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                           <Trash2 size={16}/>
                                       </button>
                                   </div>
+                              ) : (
+                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} 
+                                        className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
+                                        title="Visualizar"
+                                      >
+                                          <Eye size={16}/>
+                                      </button>
+                                  </div>
                               )}
                           </div>
                       );
@@ -334,7 +357,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
           <Modal 
               isOpen={isModalOpen} 
               onClose={() => setIsModalOpen(false)}
-              title={editingUser.id ? "Editar Colaborador" : "Novo Colaborador"}
+              title={isReadOnly ? "Visualizar Colaborador" : (editingUser.id ? "Editar Colaborador" : "Novo Colaborador")}
               maxWidth="600px"
           >
               <div className="space-y-6">
@@ -343,14 +366,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                           <label className="text-xs font-bold text-slate-400 uppercase">Nome Completo</label>
                           <div className="relative">
                               <UserIcon className="absolute left-3 top-3 text-slate-400" size={18}/>
-                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all" placeholder="Ex: João Silva" value={editingUser.name || ''} onChange={e => setEditingUser({...editingUser, name:e.target.value})}/>
+                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all disabled:opacity-75 disabled:bg-slate-50" placeholder="Ex: João Silva" value={editingUser.name || ''} onChange={e => setEditingUser({...editingUser, name:e.target.value})} disabled={isReadOnly}/>
                           </div>
                       </div>
                       <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-400 uppercase">E-mail</label>
                           <div className="relative">
                               <Mail className="absolute left-3 top-3 text-slate-400" size={18}/>
-                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all" placeholder="Ex: joao@empresa.com" value={editingUser.email || ''} onChange={e => setEditingUser({...editingUser, email:e.target.value})}/>
+                              <input className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all disabled:opacity-75 disabled:bg-slate-50" placeholder="Ex: joao@empresa.com" value={editingUser.email || ''} onChange={e => setEditingUser({...editingUser, email:e.target.value})} disabled={isReadOnly}/>
                           </div>
                       </div>
                   </div>
@@ -361,10 +384,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                           <div className="relative">
                               <Shield className="absolute left-3 top-3 text-slate-400" size={18}/>
                               <select 
-                                className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all appearance-none bg-white"
+                                className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all appearance-none bg-white disabled:opacity-75 disabled:bg-slate-50"
                                 value={editingUser.role || 'EMPLOYEE'}
                                 onChange={e => setEditingUser({...editingUser, role: e.target.value as Role})}
-                                disabled={isCommercial}
+                                disabled={isReadOnly || isCommercial}
                               >
                                   {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                               </select>
@@ -372,30 +395,32 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                       </div>
                       <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-400 uppercase">Acesso ao Sistema</label>
-                          <div className="flex items-center gap-3 p-3 border rounded-lg h-[50px]">
+                          <div className="flex items-center gap-3 p-3 border rounded-lg h-[50px] disabled:opacity-75 disabled:bg-slate-50">
                               <input 
                                 type="checkbox" 
                                 id="hasAccess"
-                                className="w-5 h-5 accent-pink-600 cursor-pointer"
+                                className="w-5 h-5 accent-pink-600 cursor-pointer disabled:opacity-75"
                                 checked={!!editingUser.hasSystemAccess}
                                 onChange={e => setEditingUser({...editingUser, hasSystemAccess: e.target.checked})}
+                                disabled={isReadOnly}
                               />
                               <label htmlFor="hasAccess" className="text-sm font-medium text-slate-700 cursor-pointer">Habilitar Login</label>
                           </div>
                       </div>
                   </div>
 
-                  {editingUser.hasSystemAccess && (
+                  {editingUser.hasSystemAccess && !isReadOnly && (
                       <div className="space-y-1 animate-fade-in">
                           <label className="text-xs font-bold text-slate-400 uppercase">Senha de Acesso</label>
                           <div className="relative">
                               <Lock className="absolute left-3 top-3 text-slate-400" size={18}/>
                               <input 
                                 type={showPassword ? "text" : "password"}
-                                className="w-full border p-3 pl-10 pr-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all" 
+                                className="w-full border p-3 pl-10 pr-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all disabled:opacity-75 disabled:bg-slate-50" 
                                 placeholder="Defina uma senha" 
                                 value={editingUser.password || ''} 
                                 onChange={e => setEditingUser({...editingUser, password: e.target.value})}
+                                disabled={isReadOnly}
                               />
                               <button 
                                 type="button"
@@ -409,40 +434,95 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                       </div>
                   )}
 
-                  <button 
-                    onClick={handleSaveUser} 
-                    disabled={isSaving}
-                    className={`w-full py-4 rounded-lg font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 ${isSaving ? 'bg-slate-400' : 'bg-pink-600 hover:bg-pink-700 active:scale-95'}`}
-                  >
-                      {isSaving ? 'Salvando...' : (
-                          <>
-                              <CheckCircle size={20}/>
-                              {editingUser.id ? 'Atualizar Colaborador' : 'Criar Colaborador'}
-                          </>
-                      )}
-                  </button>
+                  {(currentUserRole === 'ADMIN' || currentUserRole === 'FINANCE' || currentUserRole === 'MANAGER') && (
+                      <div className="space-y-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 animate-fade-in text-left">
+                          <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                              <FileText size={16} className="text-pink-600" />
+                              Informações Financeiras & Pagamento
+                          </h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                  <label className="text-xs font-bold text-slate-400 uppercase">Salário Base (R$)</label>
+                                  <input 
+                                      type="number" 
+                                      className="w-full border p-2.5 rounded-lg text-sm bg-white dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all outline-none" 
+                                      placeholder="Ex: 5000" 
+                                      value={editingUser.salary || ''} 
+                                      onChange={e => setEditingUser({...editingUser, salary: parseFloat(e.target.value) || undefined})}
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-xs font-bold text-slate-400 uppercase">Valor Hora (R$)</label>
+                                  <input 
+                                      type="number" 
+                                      className="w-full border p-2.5 rounded-lg text-sm bg-white dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all outline-none" 
+                                      placeholder="Ex: 50" 
+                                      value={editingUser.hourlyRate || ''} 
+                                      onChange={e => setEditingUser({...editingUser, hourlyRate: parseFloat(e.target.value) || undefined})}
+                                  />
+                              </div>
+                          </div>
+
+                          <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-400 uppercase">Dados Bancários / Chave PIX</label>
+                              <textarea 
+                                  className="w-full border p-2.5 rounded-lg text-sm bg-white dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all outline-none h-20 resize-none" 
+                                  placeholder="Banco, Agência, Conta ou Chave PIX" 
+                                  value={editingUser.bankDetails || ''} 
+                                  onChange={e => setEditingUser({...editingUser, bankDetails: e.target.value})}
+                              />
+                          </div>
+                      </div>
+                  )}
+
+                  {isReadOnly ? (
+                      <button 
+                        onClick={() => setIsModalOpen(false)} 
+                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-2"
+                      >
+                          Fechar
+                      </button>
+                  ) : (
+                      <button 
+                        onClick={handleSaveUser} 
+                        disabled={isSaving}
+                        className={`w-full py-4 rounded-lg font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 ${isSaving ? 'bg-slate-400' : 'bg-pink-600 hover:bg-pink-700 active:scale-95'}`}
+                      >
+                          {isSaving ? 'Salvando...' : (
+                              <>
+                                  <CheckCircle size={20}/>
+                                  {editingUser.id ? 'Atualizar Colaborador' : 'Criar Colaborador'}
+                              </>
+                          )}
+                      </button>
+                  )}
               </div>
           </Modal>
       )}
 
-      {isSquadModalOpen && (
+       {isSquadModalOpen && (
           <Modal 
               isOpen={isSquadModalOpen} 
               onClose={() => setIsSquadModalOpen(false)}
-              title="Configurar Squad"
+              title={isReadOnly ? "Visualizar Squad" : "Configurar Squad"}
               maxWidth="512px"
           >
               <div className="space-y-6">
-                  <input className="w-full border p-3 rounded-lg" placeholder="Nome da Squad" value={editingSquad.name || ''} onChange={e => setEditingSquad({...editingSquad, name:e.target.value})}/>
+                  <input className="w-full border p-3 rounded-lg disabled:opacity-75 disabled:bg-slate-50" placeholder="Nome da Squad" value={editingSquad.name || ''} onChange={e => setEditingSquad({...editingSquad, name:e.target.value})} disabled={isReadOnly}/>
                   <div>
                       <label className="text-xs font-bold text-slate-400 uppercase">Membros</label>
                       <div className="grid grid-cols-2 gap-2 mt-2">
                           {users.filter(u=>u.role!=='CLIENT').map(u => (
-                              <button key={u.id} onClick={()=>toggleSquadMember(u.id)} className={`p-2 border rounded-lg text-xs font-bold text-left transition-all ${editingSquad.members?.includes(u.id) ? 'bg-pink-50 border-pink-500 text-pink-600' : 'bg-white text-slate-600'}`}>{u.name}</button>
+                              <button key={u.id} onClick={()=> !isReadOnly && toggleSquadMember(u.id)} className={`p-2 border rounded-lg text-xs font-bold text-left transition-all ${editingSquad.members?.includes(u.id) ? 'bg-pink-50 border-pink-500 text-pink-600' : 'bg-white text-slate-600'} ${isReadOnly ? 'cursor-default' : ''}`}>{u.name}</button>
                           ))}
                       </div>
                   </div>
-                  <button onClick={handleSaveSquad} className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold">Salvar Squad</button>
+                  {isReadOnly ? (
+                      <button onClick={() => setIsSquadModalOpen(false)} className="w-full bg-slate-950 hover:bg-slate-900 text-white py-3 rounded-lg font-bold">Fechar</button>
+                  ) : (
+                      <button onClick={handleSaveSquad} className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold">Salvar Squad</button>
+                  )}
               </div>
           </Modal>
       )}

@@ -129,6 +129,30 @@ const App: React.FC = () => {
     }
   }, [currentView]);
 
+  // Guard de views protegidas por cargo para segurança robusta
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const role = currentUser.role;
+    
+    if (role === 'CLIENT') {
+      const allowed = ['client-portal', 'help', 'settings', 'privacy'];
+      if (!allowed.includes(currentView)) {
+        setCurrentView('client-portal');
+      }
+    } else if (role === 'COMMERCIAL') {
+      const allowed = ['crm', 'clients', 'catalog', 'requisitions', 'help', 'settings', 'privacy', 'dashboard'];
+      if (!allowed.includes(currentView)) {
+        setCurrentView('dashboard');
+      }
+    } else if (role === 'EMPLOYEE' || role === 'FREELANCER') {
+      const restricted = ['finance', 'stock', 'assets', 'system-admin'];
+      if (restricted.includes(currentView)) {
+        setCurrentView('dashboard');
+      }
+    }
+  }, [currentView, currentUser]);
+
   // Monitorar atividade do usuário e atualizar timestamp para controle de inatividade
   useEffect(() => {
     if (!currentUser) return;
@@ -406,7 +430,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser) return;
 
-    if (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+    if (currentUser.role === 'COMMERCIAL') {
       const restrictedViews = [
         'dashboard', 'kanban', 'productivity', 'teams', 
         'approvals', 'finance', 'stock', 'assets', 'system-admin'
@@ -414,7 +438,7 @@ const App: React.FC = () => {
       if (restrictedViews.includes(currentView)) {
         setCurrentView('crm');
       }
-    } else if (currentUser.role === 'EMPLOYEE') {
+    } else if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
       const restrictedViews = [
         'finance', 'stock', 'assets', 'system-admin'
       ];
@@ -467,7 +491,7 @@ const App: React.FC = () => {
     }
     
     if (user.role === 'CLIENT') setCurrentView('client-portal');
-    else if (user.role === 'COMMERCIAL' || user.role === 'FREELANCER') setCurrentView('crm');
+    else if (user.role === 'COMMERCIAL') setCurrentView('crm');
     else {
         setCurrentView('dashboard');
     }
@@ -571,8 +595,8 @@ const App: React.FC = () => {
     const basicMatch = n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role));
     if (!basicMatch) return false;
 
-    // Commercial and Freelancer restrictions (Production vs Commercial)
-    if (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+    // Commercial restrictions (Production vs Commercial)
+    if (currentUser.role === 'COMMERCIAL') {
         // If they are explicitly targeted by ID, allow it regardless of module
         if (n.targetUserId === currentUser.id) return true;
         
@@ -932,6 +956,18 @@ const App: React.FC = () => {
                 setCashMovements={setCashMovements}
                 currentUser={currentUser!} 
                 users={users} 
+                onSaveUser={async (user) => {
+                    const result = await saveUser(user);
+                    if (result.success) {
+                        setUsers(prev => {
+                            const exists = prev.some(u => u.id === user.id);
+                            if (exists) return prev.map(u => u.id === user.id ? user as User : u);
+                            return [...prev, user as User];
+                        });
+                    } else {
+                        alert('Erro ao salvar dados do colaborador: ' + (result.error?.message || result.error || 'Erro desconhecido'));
+                    }
+                }}
                 clients={clients}
                 squads={squads}
                 leads={leads}

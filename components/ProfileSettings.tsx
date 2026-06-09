@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { User, UserPreferences } from '../types';
 import { User as UserIcon, Lock, Bell, Moon, Sun, CreditCard, Save, RefreshCw, Upload, Mail, Eye, EyeOff } from 'lucide-react';
+import { compressImage } from '../utils/imageCompressor';
 
 interface ProfileSettingsProps {
   currentUser: User;
@@ -94,14 +95,20 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({ currentUser, o
       }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              setFormData({ ...formData, avatar: reader.result as string });
-          };
-          reader.readAsDataURL(file);
+          try {
+              const compressedBase64 = await compressImage(file, { maxDimension: 180, quality: 0.75 });
+              setFormData({ ...formData, avatar: compressedBase64 });
+          } catch (error) {
+              console.error('Erro ao processar imagem:', error);
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                  setFormData({ ...formData, avatar: reader.result as string });
+              };
+              reader.readAsDataURL(file);
+          }
       }
   };
 

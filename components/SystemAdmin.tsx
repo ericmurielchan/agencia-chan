@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import { SystemSettings, Role } from '../types';
 import { Settings, Upload, Check, RefreshCcw, Palette, LayoutTemplate, Sidebar as SidebarIcon, Database } from 'lucide-react';
 import { seedDatabase, clearDatabase } from '../services/supabaseService';
+import { compressImage } from '../utils/imageCompressor';
 
 interface SystemAdminProps {
     settings: SystemSettings;
@@ -42,25 +43,37 @@ export const SystemAdmin: React.FC<SystemAdminProps> = ({ settings, onUpdateSett
         setTimeout(() => setSuccessMsg(''), 3000);
     };
 
-    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setLocalSettings({ ...localSettings, logo: reader.result as string });
-            };
-            reader.readAsDataURL(file);
+            try {
+                const compressed = await compressImage(file, { maxDimension: 400, quality: 0.8 });
+                setLocalSettings({ ...localSettings, logo: compressed });
+            } catch (error) {
+                console.error('Erro ao processar logo:', error);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setLocalSettings({ ...localSettings, logo: reader.result as string });
+                };
+                reader.readAsDataURL(file);
+            }
         }
     };
 
-    const handleFaviconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setLocalSettings({ ...localSettings, favicon: reader.result as string });
-            };
-            reader.readAsDataURL(file);
+            try {
+                const compressed = await compressImage(file, { maxDimension: 96, quality: 0.8 });
+                setLocalSettings({ ...localSettings, favicon: compressed });
+            } catch (error) {
+                console.error('Erro ao processar favicon:', error);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setLocalSettings({ ...localSettings, favicon: reader.result as string });
+                };
+                reader.readAsDataURL(file);
+            }
         }
     };
 

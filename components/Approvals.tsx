@@ -100,6 +100,41 @@ export const Approvals: React.FC<ApprovalsProps> = ({
   const [isNewBatchModalOpen, setIsNewBatchModalOpen] = useState(false);
   const [newBatchTitle, setNewBatchTitle] = useState('');
   const [newBatchClientId, setNewBatchClientId] = useState('');
+  
+  const allowedClients = React.useMemo(() => {
+    return clients.filter(client => {
+      // Admins/managers/finance see everything unless directly linked to a client
+      if (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE') {
+        if (currentUser.clientId) {
+          return client.id === currentUser.clientId;
+        }
+        return true;
+      }
+      // Clients see only their client profile
+      if (currentUser.role === 'CLIENT') {
+        return client.id === currentUser.clientId;
+      }
+      // Collaborators/Freelancers/Commercial can only see/create for their own client base
+      if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
+        const userSquads = squads.filter(s => s.members?.includes(currentUser.id)).map(s => s.id);
+        return client.responsibleId === currentUser.id || (client.squadId && userSquads.includes(client.squadId));
+      }
+      if (currentUser.role === 'COMMERCIAL') {
+        return client.responsibleId === currentUser.id;
+      }
+      return false;
+    });
+  }, [clients, currentUser, squads]);
+
+  React.useEffect(() => {
+    if (isNewBatchModalOpen) {
+      if (allowedClients.length === 1) {
+        setNewBatchClientId(allowedClients[0].id);
+      } else {
+        setNewBatchClientId('');
+      }
+    }
+  }, [isNewBatchModalOpen, allowedClients]);
   const [showHistory, setShowHistory] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -178,12 +213,10 @@ export const Approvals: React.FC<ApprovalsProps> = ({
       } else {
         return filtered.filter(b => b.status === 'SENT');
       }
-    } else if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL') {
-      // Visibility restricted to clients in the same squad
-      filtered = filtered.filter(b => {
-        const client = clients.find(c => c.id === b.clientId);
-        return client?.squadId === currentUser.squad;
-      });
+    } else if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+      // Visibility restricted to allowedClients (squad clients + own responsible clients)
+      const allowedClientIds = allowedClients.map(c => c.id);
+      filtered = filtered.filter(b => allowedClientIds.includes(b.clientId));
     }
     
     if (showHistory) {
@@ -191,7 +224,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     } else {
       return filtered.filter(b => b.status !== 'COMPLETED');
     }
-  }, [batches, currentUser.clientId, currentUser.role, currentUser.squad, clients, showHistory]);
+  }, [batches, currentUser.clientId, currentUser.role, allowedClients, showHistory]);
 
   const selectedBatch = batches.find(b => b.id === selectedBatchId);
   const selectedItem = selectedBatch?.items.find(i => i.id === selectedItemId);
@@ -1151,7 +1184,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                     onChange={(e) => setNewBatchClientId(e.target.value)}
                   >
                     <option value="">Selecione um cliente</option>
-                    {clients.map(client => (
+                    {allowedClients.map(client => (
                       <option key={client.id} value={client.id}>{client.name}</option>
                     ))}
                   </select>

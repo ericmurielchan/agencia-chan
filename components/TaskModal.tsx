@@ -9,6 +9,7 @@ import {
     UserPlus, Hash, AlignLeft, Info, History, User as UserIcon, AtSign, Building2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { compressImage } from '../utils/imageCompressor';
 
 interface TaskModalProps {
     task: Task;
@@ -492,12 +493,22 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                             {PRESET_COLORS.map(c => <button key={c} onClick={() => { updateWithLog({ coverType: 'color', coverValue: c }, 'mudou a cor da capa'); setActivePopover(null); }} className="w-10 h-10 rounded-xl border-4 border-white shadow-sm hover:scale-125 transition-transform" style={{ backgroundColor: c }}/>)}
                         </div>
                         <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center justify-center gap-3 py-4 bg-slate-50 hover:bg-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 border-2 border-dashed border-slate-200"><Camera size={18}/> Upload Foto</button>
-                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
+                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => { updateWithLog({ coverType: 'image', coverValue: reader.result as string }, 'subiu imagem de capa'); setActivePopover(null); };
-                                reader.readAsDataURL(file);
+                                try {
+                                    const compressed = await compressImage(file, { maxDimension: 800, quality: 0.75 });
+                                    updateWithLog({ coverType: 'image', coverValue: compressed }, 'subiu imagem de capa');
+                                    setActivePopover(null);
+                                } catch (error) {
+                                    console.error('Erro ao processar imagem de capa:', error);
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => { 
+                                        updateWithLog({ coverType: 'image', coverValue: reader.result as string }, 'subiu imagem de capa'); 
+                                        setActivePopover(null); 
+                                    };
+                                    reader.readAsDataURL(file);
+                                }
                             }
                         }} />
                     </div>

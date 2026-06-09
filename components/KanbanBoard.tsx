@@ -64,8 +64,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     const basicMatch = n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role));
     if (!basicMatch) return false;
 
-    // Commercial and Freelancer restrictions (Production vs Commercial)
-    if (currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
+    // Commercial restrictions (Production vs Commercial)
+    if (currentUser.role === 'COMMERCIAL') {
         // If they are explicitly targeted by ID, allow it regardless of module
         if (n.targetUserId === currentUser.id) return true;
         
