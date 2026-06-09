@@ -259,15 +259,26 @@ const App: React.FC = () => {
             dbUsers = await fetchUsers();
           }
 
-          // Garantir que o usuário atual logado não foi excluído. Se foi, efetuar logout.
+          // Garantir que o usuário atual logado não foi excluído ou teve dados/role alterados no banco.
           const savedUser = localStorage.getItem('currentUser');
           if (savedUser) {
             try {
               const parsedUser = JSON.parse(savedUser);
-              if (parsedUser && !dbUsers.some(u => u.id === parsedUser.id)) {
+              const mappedId = mapUserId(parsedUser.id) || parsedUser.id;
+              const dbUserFound = dbUsers.find(u => u.id === parsedUser.id || mapUserId(u.id) === mappedId || u.id === mappedId);
+              
+              if (parsedUser && !dbUserFound) {
                 console.warn('Usuário autenticado não existe mais no banco de dados. Efetuando logout automático.');
                 localStorage.removeItem('currentUser');
                 setCurrentUser(null);
+              } else if (dbUserFound) {
+                // Sincronizar dados e role do usuário atual
+                if (parsedUser.role !== dbUserFound.role || parsedUser.name !== dbUserFound.name || parsedUser.email !== dbUserFound.email) {
+                  console.log('Sincronizando dados ou cargo atualizado do usuário atual:', dbUserFound);
+                  const updatedUserObj = { ...parsedUser, ...dbUserFound };
+                  localStorage.setItem('currentUser', JSON.stringify(updatedUserObj));
+                  setCurrentUser(updatedUserObj);
+                }
               }
             } catch (e) {
               console.error('Erro ao verificar status do usuário atual:', e);
@@ -386,6 +397,19 @@ const App: React.FC = () => {
       } else if (payload.eventType === 'UPDATE') {
         const updatedUser = mapUser(payload.new);
         setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+
+        // Se o usuário logado atualmente foi atualizado, sincronizar os dados e role dele em tempo real
+        const currentActive = currentUserRef.current;
+        if (currentActive) {
+          const currentActiveMappedId = mapUserId(currentActive.id) || currentActive.id;
+          const updatedUserMappedId = mapUserId(updatedUser.id) || updatedUser.id;
+          if (currentActive.id === updatedUser.id || currentActiveMappedId === updatedUserMappedId) {
+            console.log('O usuário ativo recebeu uma atualização em tempo real. Sincronizando dados...');
+            const mergedUser = { ...currentActive, ...updatedUser };
+            localStorage.setItem('currentUser', JSON.stringify(mergedUser));
+            setCurrentUser(mergedUser);
+          }
+        }
       } else if (payload.eventType === 'DELETE') {
         const deletedId = payload.old.id;
         setUsers(prev => prev.filter(u => u.id !== deletedId && mapUserId(u.id) !== deletedId));
@@ -1260,6 +1284,10 @@ const App: React.FC = () => {
                     }
                 }}
                 onSaveSquad={async (squad) => {
+                    if (currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'FREELANCER' || currentUser?.role === 'CLIENT') {
+                        alert('Erro: Você não tem permissão para salvar squads.');
+                        return;
+                    }
                     const result = await saveSquad(squad);
                     if (result.success) {
                         setSquads(prev => {
@@ -1270,6 +1298,10 @@ const App: React.FC = () => {
                     }
                 }}
                 onDeleteSquad={async (id) => {
+                    if (currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'FREELANCER' || currentUser?.role === 'CLIENT') {
+                        alert('Erro: Você não tem permissão para excluir squads.');
+                        return;
+                    }
                     const result = await deleteSquad(id);
                     if (result.success) {
                         setSquads(prev => prev.filter(s => s.id !== id));
