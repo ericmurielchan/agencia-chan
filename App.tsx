@@ -123,6 +123,11 @@ const App: React.FC = () => {
     return null;
   });
 
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
   const [currentView, setCurrentView] = useState(() => {
     return localStorage.getItem('currentView') || 'dashboard';
   });
@@ -254,17 +259,18 @@ const App: React.FC = () => {
             dbUsers = await fetchUsers();
           }
 
-          // Garantir que o usuário atualmente logado existe no banco de dados para evitar erros de chave estrangeira
+          // Garantir que o usuário atual logado não foi excluído. Se foi, efetuar logout.
           const savedUser = localStorage.getItem('currentUser');
           if (savedUser) {
             try {
               const parsedUser = JSON.parse(savedUser);
               if (parsedUser && !dbUsers.some(u => u.id === parsedUser.id)) {
-                await saveUser(parsedUser);
-                dbUsers = await fetchUsers();
+                console.warn('Usuário autenticado não existe mais no banco de dados. Efetuando logout automático.');
+                localStorage.removeItem('currentUser');
+                setCurrentUser(null);
               }
             } catch (e) {
-              console.error('Erro ao restaurar e sincronizar usuário atual:', e);
+              console.error('Erro ao verificar status do usuário atual:', e);
             }
           }
           
@@ -383,6 +389,17 @@ const App: React.FC = () => {
       } else if (payload.eventType === 'DELETE') {
         const deletedId = payload.old.id;
         setUsers(prev => prev.filter(u => u.id !== deletedId && mapUserId(u.id) !== deletedId));
+
+        // Se o usuário logado atualmente é o que foi deletado, deslogar imediatamente em tempo real
+        const currentActive = currentUserRef.current;
+        if (currentActive) {
+          const currentActiveMappedId = mapUserId(currentActive.id) || currentActive.id;
+          if (currentActive.id === deletedId || currentActiveMappedId === deletedId) {
+            console.warn('O usuário ativo foi deletado via tempo real. Efetuando logout automático...');
+            localStorage.removeItem('currentUser');
+            setCurrentUser(null);
+          }
+        }
       }
     });
 
@@ -1216,6 +1233,14 @@ const App: React.FC = () => {
                     }
                     
                     const mappedId = mapUserId(id) || id;
+
+                    // Deslogar o usuário atual ANTES de prosseguir com a exclusão, caso ele esteja logado na mesma janela,
+                    // garantindo que nenhuma requisição ou sincronização automática posterior recrie ou interfira na exclusão.
+                    if (currentUser && (currentUser.id === id || currentUser.id === mappedId)) {
+                        console.warn('O usuário atual está sendo excluído. Efetuando logout preventivo automático...');
+                        localStorage.removeItem('currentUser');
+                        setCurrentUser(null);
+                    }
                     
                     // 1. Clean up user from any squads they belong to in DB and local state
                     const userSquads = squads.filter(s => s.members?.includes(id) || s.members?.includes(mappedId));
@@ -1231,6 +1256,7 @@ const App: React.FC = () => {
                     const result = await deleteUser(id);
                     if (!result.success) {
                         console.error('Erro ao excluir colaborador no banco:', result.error);
+                        alert('Erro ao excluir do banco de dados: ' + (result.error?.message || result.error || 'Erro desconhecido'));
                     }
                 }}
                 onSaveSquad={async (squad) => {
