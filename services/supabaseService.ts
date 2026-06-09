@@ -455,6 +455,54 @@ export const saveLead = async (lead: Partial<Lead>) => {
   const existingStageIds = new Set<string>((dbStagesResult.data || []).map((s: any) => s.id));
   const existingLossReasonIds = new Set<string>((dbLossReasonsResult.data || []).map((r: any) => r.id));
 
+  // Auto-seed de estágios se a tabela estiver vazia
+  if (existingStageIds.size === 0) {
+    await supabase.from('pipeline_stages').upsert(
+      initialCrmColumns.map(s => ({
+        id: s.id,
+        label: s.label,
+        color: s.color,
+        order: s.order
+      }))
+    );
+    initialCrmColumns.forEach(s => existingStageIds.add(s.id));
+  }
+
+  // Se o estágio do lead do payload não existe na tabela do banco, fazemos o seed dinâmico dele antes do upsert
+  if (lead.stageId && !existingStageIds.has(lead.stageId)) {
+    const matchedCol = initialCrmColumns.find(s => s.id === lead.stageId);
+    await supabase.from('pipeline_stages').upsert({
+      id: lead.stageId,
+      label: matchedCol?.label || lead.stageId,
+      color: matchedCol?.color || 'bg-slate-50 border-slate-200',
+      order: matchedCol?.order || 99
+    });
+    existingStageIds.add(lead.stageId);
+  }
+
+  // Auto-seed de motivos de perda se a tabela estiver vazia
+  if (existingLossReasonIds.size === 0) {
+    await supabase.from('loss_reasons').upsert(
+      initialLossReasons.map(r => ({
+        id: r.id,
+        label: r.label,
+        is_active: r.isActive
+      }))
+    );
+    initialLossReasons.forEach(r => existingLossReasonIds.add(r.id));
+  }
+
+  // Se o motivo de perda do lead do payload não existe na tabela do banco, fazemos o seed dinâmico dele antes do upsert
+  if (lead.lossReasonId && !existingLossReasonIds.has(lead.lossReasonId)) {
+    const matchedReason = initialLossReasons.find(r => r.id === lead.lossReasonId);
+    await supabase.from('loss_reasons').upsert({
+      id: lead.lossReasonId,
+      label: matchedReason?.label || lead.lossReasonId,
+      is_active: true
+    });
+    existingLossReasonIds.add(lead.lossReasonId);
+  }
+
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
     
@@ -2092,6 +2140,27 @@ export const seedDatabase = async () => {
     );
     if (taskError) console.error('Erro ao migrar Tarefas:', taskError);
 
+    // 4.2 Migrar Estágios Pipeline (Necessário antes de migrar os Leads)
+    const { error: pipelineError } = await supabase.from('pipeline_stages').upsert(
+      initialCrmColumns.map(s => ({
+        id: s.id,
+        label: s.label,
+        color: s.color,
+        order: s.order
+      }))
+    );
+    if (pipelineError) console.error('Erro ao migrar Estágios:', pipelineError);
+
+    // 4.3 Migrar Motivos de Perda (Necessário antes de migrar os Leads)
+    const { error: lossError } = await supabase.from('loss_reasons').upsert(
+      initialLossReasons.map(r => ({
+        id: r.id,
+        label: r.label,
+        is_active: r.isActive
+      }))
+    );
+    if (lossError) console.error('Erro ao migrar Motivos de Perda:', lossError);
+
     // 5. Migrar Leads (Mapeando responsible_id e created_by para UUID)
     const { error: leadError } = await supabase.from('leads').upsert(
       initialLeads.map(l => ({
@@ -2229,27 +2298,6 @@ export const seedDatabase = async () => {
         console.error('Erro ao migrar Transações:', txError);
       }
     }
-
-    // 12. Migrar Estágios Pipeline
-    const { error: pipelineError } = await supabase.from('pipeline_stages').upsert(
-      initialCrmColumns.map(s => ({
-        id: s.id,
-        label: s.label,
-        color: s.color,
-        order: s.order
-      }))
-    );
-    if (pipelineError) console.error('Erro ao migrar Estágios:', pipelineError);
-
-    // 13. Migrar Motivos de Perda
-    const { error: lossError } = await supabase.from('loss_reasons').upsert(
-      initialLossReasons.map(r => ({
-        id: r.id,
-        label: r.label,
-        is_active: r.isActive
-      }))
-    );
-    if (lossError) console.error('Erro ao migrar Motivos de Perda:', lossError);
 
     // 14. Migrar Faturas de Cartão
     const { error: invoiceError } = await supabase.from('card_invoices').upsert(

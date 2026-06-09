@@ -477,7 +477,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
 
                             {activeTab === 'PIPELINE' && (
                                 <button 
-                                    onClick={() => { setEditingLead({ stageId: stages[0]?.id }); setIsModalOpen(true); }}
+                                    onClick={() => { setEditingLead({ stageId: stages[1]?.id || 'QUALIFIED' }); setIsModalOpen(true); }}
                                     className="bg-slate-800 hover:bg-slate-900 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl flex items-center gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-lg transition-all justify-center"
                                 >
                                     <Plus size={14} className="sm:w-4 sm:h-4" strokeWidth={3} /> <span className="inline">Novo Negócio</span>
