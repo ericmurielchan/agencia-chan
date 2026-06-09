@@ -67,7 +67,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
   const isFinance = currentUser.role === 'FINANCE';
   const isAdmin = currentUser.role === 'ADMIN';
   const isManager = currentUser.role === 'MANAGER';
-  const isEmployee = currentUser.role === 'EMPLOYEE';
+  const isEmployee = currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER';
   const isCommercial = currentUser.role === 'COMMERCIAL';
 
   const [selectedUserId, setSelectedUserId] = useState<string | 'ALL'>(isEmployee || isCommercial ? currentUser.id : 'ALL');
@@ -106,7 +106,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     let baseFinance = finance;
     let baseClients = clients;
 
-    if (currentUser.role === 'EMPLOYEE') {
+    if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
         baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
         baseLeads = leads.filter(l => l.responsibleId === currentUser.id);
         baseClients = clients.filter(c => c.responsibleId === currentUser.id);

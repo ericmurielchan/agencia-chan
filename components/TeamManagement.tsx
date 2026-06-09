@@ -266,7 +266,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
             <div className="bg-white rounded-xl border shadow-sm p-4">
               <div className="flex justify-between mb-6 items-center">
                   <h3 className="font-bold">Squads</h3>
-                  {currentUserRole !== 'EMPLOYEE' && (
+                  {currentUserRole !== 'EMPLOYEE' && currentUserRole !== 'FREELANCER' && (
                       <button onClick={()=>{setEditingSquad({name:'',members:[]});setIsSquadModalOpen(true)}} className="text-xs text-pink-600 font-bold hover:text-pink-800 transition-colors">+ Criar Squad</button>
                   )}
               </div>

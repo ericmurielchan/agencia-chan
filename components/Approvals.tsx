@@ -599,7 +599,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
     if (currentUser.role === 'CLIENT') {
       // Comentário do cliente -> notificar: responsável pela peça (squad), gerência
       targetUsers = [...squadMembers, ...managers];
-    } else if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL') {
+    } else if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
       // Comentário da produção -> notificar: cliente, gerência
       targetUsers = [...clientUsers, ...managers];
     } else if (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') {
@@ -1098,7 +1098,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
           >
             <Calendar size={16} /> {showHistory ? 'Ver Ativos' : 'Histórico'}
           </button>
-          {(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL') && (
+          {(currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') && (
             <button 
               onClick={() => setIsNewBatchModalOpen(true)}
               className="flex items-center gap-2 px-5 py-3 bg-pink-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-pink-700 transition-all shadow-lg shadow-pink-200"

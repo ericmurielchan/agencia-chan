@@ -316,19 +316,21 @@ export const HelpCenter: React.FC<HelpCenterProps> = ({ currentUser }) => {
     ];
 
     // Filter Logic
+    const userRoleToCheck = currentUser.role === 'FREELANCER' ? 'EMPLOYEE' : currentUser.role;
+
     const availableCategories = currentUser.role === 'ADMIN' 
         ? ['ALL', 'ADMIN', 'MANAGER', 'EMPLOYEE', 'FINANCE', 'CLIENT'] 
-        : ['GERAL', currentUser.role];
+        : ['GERAL', userRoleToCheck];
 
     const filteredTutorials = tutorials.filter(t => {
         const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               (t.keywords && t.keywords.toLowerCase().includes(searchTerm.toLowerCase())) ||
                               (typeof t.content === 'string' && t.content.toLowerCase().includes(searchTerm.toLowerCase()));
         
-        const matchesTab = activeTab === 'ALL' ? true : (t.category === activeTab || (activeTab === currentUser.role && t.category === 'GERAL'));
+        const matchesTab = activeTab === 'ALL' ? true : (t.category === activeTab || (activeTab === userRoleToCheck && t.category === 'GERAL'));
 
         // Se não for admin, filtra estritamente pelo papel + geral
-        const allowedRole = currentUser.role === 'ADMIN' ? true : (t.category === currentUser.role || t.category === 'GERAL');
+        const allowedRole = currentUser.role === 'ADMIN' ? true : (t.category === userRoleToCheck || t.category === 'GERAL');
 
         return matchesSearch && matchesTab && allowedRole;
     });
