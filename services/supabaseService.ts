@@ -33,7 +33,7 @@ import {
 /**
  * Mapeia uma squad do Supabase para o formato do App
  */
-const mapSquad = (s: any): Squad => ({
+export const mapSquad = (s: any): Squad => ({
   id: s.id,
   name: s.name,
   members: s.members || []
@@ -1757,6 +1757,26 @@ export const subscribeToRequisitions = (callback: (payload: any) => void) => {
 };
 
 /**
+ * Inscreve-se para mudanças em tempo real nos usuários (colaboradores)
+ */
+export const subscribeToUsers = (callback: (payload: any) => void) => {
+  return supabase
+    .channel('public:users')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, callback)
+    .subscribe();
+};
+
+/**
+ * Inscreve-se para mudanças em tempo real nas squads (equipes)
+ */
+export const subscribeToSquads = (callback: (payload: any) => void) => {
+  return supabase
+    .channel('public:squads')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'squads' }, callback)
+    .subscribe();
+};
+
+/**
  * Busca todos os lotes de aprovação (Normalizado)
  */
 export const fetchApprovalBatches = async () => {
@@ -2011,7 +2031,25 @@ export const saveProductivityGoal = async (goal: Partial<ProductivityGoal>) => {
  * Exclui um usuário do banco de dados
  */
 export const deleteUser = async (id: string) => {
-  const { error } = await supabase.from('users').delete().eq('id', mapUserId(id) || id);
+  const resolvedId = mapUserId(id) || id;
+
+  // Limpar o usuário de quaisquer squads que ele pertença no banco de dados
+  try {
+    const { data: squads, error: squadsErr } = await supabase.from('squads').select('id, members');
+    if (!squadsErr && squads) {
+      for (const squad of squads) {
+        const members = squad.members || [];
+        if (members.includes(resolvedId) || members.includes(id)) {
+          const updatedMembers = members.filter((mId: string) => mId !== resolvedId && mId !== id);
+          await supabase.from('squads').update({ members: updatedMembers }).eq('id', squad.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao limpar usuário das squads no banco:', err);
+  }
+
+  const { error } = await supabase.from('users').delete().eq('id', resolvedId);
   if (error) {
     console.error('Erro ao excluir usuário:', error);
     return { success: false, error };

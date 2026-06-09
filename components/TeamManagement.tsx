@@ -254,17 +254,29 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
               }
           }
 
-          // 4. Finally, delete the user
+          // 3.5 Remove user from any squads they belong to (both in DB and local state)
+          const userSquads = squads.filter(s => s.members?.includes(targetUserId));
+          for (const squad of userSquads) {
+              const updatedMembers = squad.members.filter(mId => mId !== targetUserId);
+              const updatedSquad = { ...squad, members: updatedMembers };
+              await saveSquad(updatedSquad);
+              if (setSquads) {
+                  setSquads(prev => prev.map(s => s.id === squad.id ? updatedSquad : s));
+              }
+          }
+
+          // 4. Finally, delete the user from database
           if (onDeleteUser) {
               await onDeleteUser(targetUserId);
           } else {
               const result = await deleteUser(targetUserId);
-              if (result.success) {
-                  setUsers(prev => prev.filter(u => u.id !== targetUserId));
-              } else {
-                  alert('Erro ao excluir colaborador do banco de dados.');
+              if (!result.success) {
+                  console.error('Erro ao excluir colaborador do banco de dados:', result.error);
               }
           }
+          
+          // Force immediate update of local user list for instantaneous UI responsiveness
+          setUsers(prev => prev.filter(u => u.id !== targetUserId));
           
           setReassignModalOpen(false);
           setUserToReassign(null);
@@ -444,28 +456,32 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                   </div>
 
                                   {/* List of members avatars */}
-                                  {s.members && s.members.length > 0 && (
-                                      <div className="flex items-center gap-2 mt-1">
-                                          <div className="flex -space-x-1.5 overflow-hidden">
-                                              {s.members.map(memberId => {
-                                                  const member = users.find(u => u.id === memberId);
-                                                  if (!member) return null;
-                                                  return (
-                                                      <img 
-                                                          key={memberId}
-                                                          className="inline-block h-6 w-6 rounded-full ring-2 ring-white border border-slate-100 object-cover" 
-                                                          src={member.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${member.name}`} 
-                                                          alt={member.name}
-                                                          title={member.name}
-                                                      />
-                                                  );
-                                              })}
+                                  {s.members && s.members.length > 0 && (() => {
+                                      const validMembers = s.members.filter(memberId => users.some(u => u.id === memberId));
+                                      if (validMembers.length === 0) return null;
+                                      return (
+                                          <div className="flex items-center gap-2 mt-1">
+                                              <div className="flex -space-x-1.5 overflow-hidden">
+                                                  {validMembers.map(memberId => {
+                                                      const member = users.find(u => u.id === memberId);
+                                                      if (!member) return null;
+                                                      return (
+                                                          <img 
+                                                              key={memberId}
+                                                              className="inline-block h-6 w-6 rounded-full ring-2 ring-white border border-slate-100 object-cover" 
+                                                              src={member.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${member.name}`} 
+                                                              alt={member.name}
+                                                              title={member.name}
+                                                          />
+                                                      );
+                                                  })}
+                                              </div>
+                                              <span className="text-[10px] text-slate-400 font-semibold">
+                                                  {validMembers.length} {validMembers.length === 1 ? 'membro' : 'membros'}
+                                              </span>
                                           </div>
-                                          <span className="text-[10px] text-slate-400 font-semibold">
-                                              {s.members.length} {s.members.length === 1 ? 'membro' : 'membros'}
-                                          </span>
-                                      </div>
-                                  )}
+                                      );
+                                  })()}
                               </div>
 
                               {!isReadOnly ? (

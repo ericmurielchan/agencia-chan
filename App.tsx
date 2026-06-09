@@ -79,7 +79,12 @@ import {
   fetchFinancialCategories,
   saveFinancialCategory,
   deleteUser,
-  saveBankAccount
+  saveBankAccount,
+  mapUser,
+  mapUserId,
+  mapSquad,
+  subscribeToUsers,
+  subscribeToSquads
 } from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements, initialCategories } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, Client, Notification, SystemModule, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement, FinancialCategory } from './types';
@@ -353,6 +358,55 @@ const App: React.FC = () => {
         setRequisitions(prev => prev.map(r => r.id === updatedReq.id ? updatedReq : r));
       } else if (payload.eventType === 'DELETE') {
         setRequisitions(prev => prev.filter(r => r.id !== payload.old.id));
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Real-time users
+  useEffect(() => {
+    const subscription = subscribeToUsers((payload) => {
+      console.log('Realtime: mudança no colaborador:', payload);
+      
+      if (payload.eventType === 'INSERT') {
+        const newUser = mapUser(payload.new);
+        setUsers(prev => {
+          if (prev.some(u => u.id === newUser.id)) return prev;
+          return [...prev, newUser];
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        const updatedUser = mapUser(payload.new);
+        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      } else if (payload.eventType === 'DELETE') {
+        const deletedId = payload.old.id;
+        setUsers(prev => prev.filter(u => u.id !== deletedId && mapUserId(u.id) !== deletedId));
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Real-time squads
+  useEffect(() => {
+    const subscription = subscribeToSquads((payload) => {
+      console.log('Realtime: mudança na squad:', payload);
+      
+      if (payload.eventType === 'INSERT') {
+        const newSquad = mapSquad(payload.new);
+        setSquads(prev => {
+          if (prev.some(s => s.id === newSquad.id)) return prev;
+          return [...prev, newSquad];
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        const updatedSquad = mapSquad(payload.new);
+        setSquads(prev => prev.map(s => s.id === updatedSquad.id ? updatedSquad : s));
+      } else if (payload.eventType === 'DELETE') {
+        setSquads(prev => prev.filter(s => s.id !== payload.old.id));
       }
     });
 
@@ -1160,9 +1214,23 @@ const App: React.FC = () => {
                         alert('Erro: Você não tem permissão para excluir colaboradores.');
                         return;
                     }
+                    
+                    const mappedId = mapUserId(id) || id;
+                    
+                    // 1. Clean up user from any squads they belong to in DB and local state
+                    const userSquads = squads.filter(s => s.members?.includes(id) || s.members?.includes(mappedId));
+                    for (const squad of userSquads) {
+                        const updatedMembers = (squad.members || []).filter(mId => mId !== id && mId !== mappedId);
+                        const updatedSquad = { ...squad, members: updatedMembers };
+                        await saveSquad(updatedSquad);
+                        setSquads(prev => prev.map(s => s.id === squad.id ? updatedSquad : s));
+                    }
+
+                    // 2. Clear user from local user state and execute DB deletion
+                    setUsers(prev => prev.filter(u => u.id !== id && u.id !== mappedId));
                     const result = await deleteUser(id);
-                    if (result.success) {
-                        setUsers(prev => prev.filter(u => u.id !== id));
+                    if (!result.success) {
+                        console.error('Erro ao excluir colaborador no banco:', result.error);
                     }
                 }}
                 onSaveSquad={async (squad) => {
