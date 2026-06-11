@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Lead, PipelineStage, User, ConfirmOptions, LossReason, Client, Notification, BankAccount, FinancialCategory, FinancialTransaction, Squad } from '../../types';
 import { 
     LayoutDashboard, LayoutGrid, Kanban, List, FileText, Settings, 
@@ -36,18 +36,50 @@ interface CRMModuleProps {
     categories?: FinancialCategory[];
     onSaveTransaction?: (transaction: FinancialTransaction) => Promise<void>;
     squads?: Squad[];
+    onNotificationClick?: (notif: Notification) => void;
+    markAllAsRead?: () => void;
 }
 
 export const CRMModule: React.FC<CRMModuleProps> = ({ 
     leads, setLeads, stages, setStages, lossReasons, setLossReasons, 
     users, currentUser, clients, setClients, notifications, addNotification, openConfirm,
     selectedLeadId, onClearSelectedLead, onSaveLead, onDeleteLead,
-    bankAccounts = [], categories = [], onSaveTransaction, squads = []
+    bankAccounts = [], categories = [], onSaveTransaction, squads = [],
+    onNotificationClick, markAllAsRead
 }) => {
     const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PIPELINE' | 'LIST' | 'REPORTS'>('PIPELINE');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingLead, setEditingLead] = useState<Partial<Lead> | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    const [showLocalNotifications, setShowLocalNotifications] = useState(false);
+    const localNotificationRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (localNotificationRef.current && !localNotificationRef.current.contains(event.target as Node)) {
+                setShowLocalNotifications(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const filterNotification = (n: Notification) => {
+        const basicMatch = n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role));
+        if (!basicMatch) return false;
+
+        if (currentUser.role === 'COMMERCIAL') {
+            if (n.targetUserId === currentUser.id) return true;
+            const commercialModules = ['CRM', 'CLIENTS', 'HELP', 'DASHBOARD'];
+            return commercialModules.includes(n.originModule);
+        }
+        return true;
+    };
+
+    const unreadCount = (currentUser.preferences?.systemNotifications !== false)
+        ? notifications.filter(n => n.status === 'UNREAD' && filterNotification(n)).length
+        : 0;
     const [pipelineSearchTerm, setPipelineSearchTerm] = useState('');
 
     // CRM Filter states
@@ -613,11 +645,87 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                             <span>Novo Lead</span>
                         </button>
 
-                        <div className="relative">
-                            <button className="w-11 h-11 bg-white border border-slate-200/80 rounded-2xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all shadow-sm">
-                                <Bell size={16} />
-                                <span className="absolute top-[10px] right-[11px] w-2 h-2 bg-red-500 rounded-full border border-white" />
+                        <div className="relative" ref={localNotificationRef}>
+                            <button 
+                                onClick={() => setShowLocalNotifications(!showLocalNotifications)}
+                                className="w-11 h-11 bg-white border border-slate-200/80 rounded-2xl flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-slate-50 transition-all shadow-sm relative group"
+                                title="Notificações"
+                            >
+                                <Bell size={16} className="transition-colors text-slate-500 group-hover:text-indigo-600" />
+                                {unreadCount > 0 && (
+                                    <span className="absolute top-[10px] right-[11px] w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse" />
+                                )}
                             </button>
+
+                            {showLocalNotifications && (
+                                <div className="absolute right-0 top-full mt-3 w-80 md:w-96 bg-white rounded-3xl shadow-2xl border border-slate-100 z-[100] animate-pop origin-top-right overflow-hidden">
+                                    <div className="p-4 md:p-5 border-b bg-slate-50/50 flex justify-between items-center">
+                                        <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Notificações</h3>
+                                        {markAllAsRead && (
+                                            <button 
+                                                onClick={() => {
+                                                    markAllAsRead();
+                                                    setShowLocalNotifications(false);
+                                                }} 
+                                                className="text-[10px] font-black text-[#544ff4] hover:text-indigo-700 transition-colors"
+                                            >
+                                                Marcar lidas
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="max-h-64 md:max-h-96 overflow-y-auto custom-scrollbar">
+                                        {(notifications.length > 0 && currentUser.preferences?.systemNotifications !== false) ? (
+                                            <div className="divide-y divide-slate-50">
+                                                {notifications
+                                                    .filter(filterNotification)
+                                                    .sort((a, b) => b.timestamp - a.timestamp)
+                                                    .map(notif => (
+                                                    <button 
+                                                        key={notif.id} 
+                                                        onClick={() => {
+                                                            if (onNotificationClick) {
+                                                                onNotificationClick(notif);
+                                                            }
+                                                            setShowLocalNotifications(false);
+                                                        }}
+                                                        className={`w-full p-4 text-left hover:bg-slate-50 transition-colors flex gap-3 items-start ${notif.status === 'UNREAD' ? 'bg-indigo-50/10' : ''}`}
+                                                    >
+                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                                            notif.type === 'ALERT' ? 'bg-red-50 text-red-600' :
+                                                            notif.type === 'WARNING' ? 'bg-amber-50 text-amber-500' :
+                                                            notif.type === 'SUCCESS' ? 'bg-emerald-50 text-emerald-600' :
+                                                            'bg-indigo-50 text-[#544ff4]'
+                                                        }`}>
+                                                            <Bell size={14} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <p className={`text-[11px] font-black uppercase tracking-tight truncate ${notif.status === 'UNREAD' ? 'text-slate-900' : 'text-slate-600'}`}>{notif.title}</p>
+                                                                <span className="text-[9px] text-slate-400 font-bold ml-2 whitespace-nowrap">
+                                                                    {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-500 font-medium line-clamp-2 leading-relaxed">{notif.message}</p>
+                                                            {notif.navToView && (
+                                                                <div className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-[#544ff4]">
+                                                                    <span>Ver detalhes</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="p-10 text-center">
+                                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-300">
+                                                    <Bell size={20} />
+                                                </div>
+                                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Sem novidades</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

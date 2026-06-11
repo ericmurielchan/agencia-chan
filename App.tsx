@@ -870,6 +870,8 @@ const App: React.FC = () => {
                 setCurrentView={setCurrentView}
                 goals={goals}
                 squads={squads}
+                notifications={notifications}
+                onNotificationClick={handleNotificationClick}
               />
             )}
             {currentView === 'kanban' && (
@@ -908,6 +910,17 @@ const App: React.FC = () => {
                             const exists = prev.some(t => t.id === task.id);
                             if (exists) return prev.map(t => t.id === task.id ? task : t);
                             return [...prev, task];
+                        });
+
+                        // Emit activity notification for the whole team
+                        addNotification({
+                            title: isNew ? 'Nova Tarefa Criada' : 'Tarefa Atualizada',
+                            message: `A tarefa "${task.title}" foi ${isNew ? 'criada' : 'atualizada'} por ${currentUser.name} para o status [${task.status}]`,
+                            type: 'INFO',
+                            priority: 'LOW',
+                            originModule: 'KANBAN',
+                            navToView: 'kanban',
+                            metadata: { referenceId: task.id, module: 'tasks' }
                         });
 
                         // Emit notification if assigned to someone else
@@ -955,6 +968,8 @@ const App: React.FC = () => {
                 selectedLeadId={selectedLeadId}
                 onClearSelectedLead={() => setSelectedLeadId(null)}
                 squads={squads}
+                onNotificationClick={handleNotificationClick}
+                markAllAsRead={markAllAsRead}
                 onNavigate={(view, refId) => {
                   setCurrentView(view);
                   if (view === 'kanban' && refId) setSelectedTaskId(refId);
@@ -962,12 +977,44 @@ const App: React.FC = () => {
                   if (view === 'finance' && refId) setSelectedTransactionId(refId);
                 }}
                 onSaveLead={async (lead) => {
+                    const isNew = !leads.find(l => l.id === lead.id);
+                    const oldLead = leads.find(l => l.id === lead.id);
                     const result = await saveLead(lead);
                     if (result.success) {
                         setLeads(prev => {
                             const exists = prev.some(l => l.id === lead.id);
                             if (exists) return prev.map(l => l.id === lead.id ? lead : l);
                             return [...prev, lead];
+                        });
+
+                        // Resolve notification type and title
+                        let notifType: 'INFO' | 'SUCCESS' | 'ALERT' = 'INFO';
+                        let title = 'CRM: Lead Atualizado';
+                        let message = `O lead "${lead.name}" (${lead.company || 'Sem empresa'}) foi atualizado por ${currentUser.name}.`;
+
+                        if (isNew) {
+                            title = 'CRM: Novo Lead Cadastrado';
+                            message = `O lead "${lead.name}" da empresa "${lead.company || 'Geral'}" foi cadastrado por ${currentUser.name}. Valor estimado: R$ ${(lead.value || 0).toLocaleString('pt-BR')}`;
+                        } else if (oldLead && oldLead.status !== lead.status) {
+                            if (lead.status === 'WON') {
+                                notifType = 'SUCCESS';
+                                title = 'CRM: Lead GANHO! 🏆';
+                                message = `Parabéns! O lead "${lead.name}" (${lead.company}) foi ganho por ${currentUser.name}! Contrato fechado no valor de R$ ${(lead.value || 0).toLocaleString('pt-BR')}`;
+                            } else if (lead.status === 'LOST') {
+                                notifType = 'ALERT';
+                                title = 'CRM: Lead Perdido';
+                                message = `O lead "${lead.name}" (${lead.company}) foi classificado como perdido por ${currentUser.name}.`;
+                            }
+                        }
+
+                        addNotification({
+                            title,
+                            message,
+                            type: notifType,
+                            priority: (lead.status === 'WON' || lead.value > 10000) ? 'HIGH' : 'LOW',
+                            originModule: 'CRM',
+                            navToView: 'crm',
+                            metadata: { referenceId: lead.id, module: 'leads' }
                         });
                     } else {
                         const errorDetails = result.error ? (result.error.message || JSON.stringify(result.error)) : 'Desconhecido';
@@ -1080,12 +1127,23 @@ const App: React.FC = () => {
                 selectedInvoiceId={selectedInvoiceId}
                 onClearSelectedInvoice={() => setSelectedInvoiceId(null)}
                 onSaveTransaction={async (t) => {
+                    const isNew = !financialTransactions.find(item => item.id === t.id);
                     const result = await saveFinancialTransaction(t);
                     if (result.success) {
                         setFinancialTransactions(prev => {
                             const exists = prev.some(item => item.id === t.id);
                             if (exists) return prev.map(item => item.id === t.id ? t : item);
                             return [t, ...prev];
+                        });
+
+                        addNotification({
+                            title: isNew ? 'Financeiro: Novo Lançamento' : 'Financeiro: Lançamento Atualizado',
+                            message: `Transação "${t.description}" no valor de R$ ${(t.amount || 0).toLocaleString('pt-BR')} registrada como ${t.type === 'INCOME' ? 'Receita' : 'Despesa'} por ${currentUser.name}. Status: ${t.status === 'PAID' ? 'Pago' : 'Pendente'}`,
+                            type: t.type === 'INCOME' ? 'SUCCESS' : 'WARNING',
+                            priority: t.amount > 5000 ? 'HIGH' : 'LOW',
+                            originModule: 'FINANCE',
+                            navToView: 'finance',
+                            metadata: { referenceId: t.id, module: 'financial_transactions' }
                         });
                     }
                 }}
@@ -1326,12 +1384,23 @@ const App: React.FC = () => {
                 requisitions={requisitions} 
                 currentUser={currentUser} 
                 onSaveClient={async (client) => {
+                    const isNew = !clients.find(c => c.id === client.id);
                     const result = await saveClient(client);
                     if (result.success) {
                         setClients(prev => {
                             const exists = prev.some(c => c.id === client.id);
                             if (exists) return prev.map(c => c.id === client.id ? client as Client : c);
                             return [...prev, client as Client];
+                        });
+
+                        addNotification({
+                            title: isNew ? 'Clientes: Novo Cliente' : 'Clientes: Cadastro Atualizado',
+                            message: `O cliente "${client.name}" foi ${isNew ? 'cadastrado' : 'atualizado'} no sistema por ${currentUser.name}. Status: ${client.status}`,
+                            type: 'INFO',
+                            priority: 'MEDIUM',
+                            originModule: 'CLIENTS',
+                            navToView: 'clients',
+                            metadata: { referenceId: client.id, module: 'clients' }
                         });
                     }
                 }}

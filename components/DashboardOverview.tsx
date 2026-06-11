@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Task, Lead, FinancialTransaction, User, Client, CardInvoice, BankAccount, CreditCard, ProductivityGoal, Squad } from '../types';
+import { Task, Lead, FinancialTransaction, User, Client, CardInvoice, BankAccount, CreditCard, ProductivityGoal, Squad, Notification } from '../types';
 import { calculateKanbanMetrics } from '../utils/metrics';
 import { 
     Layout, 
@@ -44,6 +44,8 @@ interface DashboardProps {
   setCurrentView: (view: string) => void;
   goals: ProductivityGoal[];
   squads: Squad[];
+  notifications?: Notification[];
+  onNotificationClick?: (notif: Notification) => void;
 }
 
 export const DashboardOverview: React.FC<DashboardProps> = ({ 
@@ -58,7 +60,9 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     currentUser, 
     setCurrentView,
     goals,
-    squads
+    squads,
+    notifications = [],
+    onNotificationClick
 }) => {
   const [startDate, setStartDate] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]); // First day of current month
   const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]); // Last day of current month
@@ -72,6 +76,37 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
 
   const [selectedUserId, setSelectedUserId] = useState<string | 'ALL'>(isEmployee || isCommercial ? currentUser.id : 'ALL');
   const [selectedSquadId, setSelectedSquadId] = useState<string | 'ALL'>(isManager ? currentUser.squad || 'ALL' : 'ALL');
+  
+  const [feedFilter, setFeedFilter] = useState<'ALL' | 'MY'>('ALL');
+  const [feedSearch, setFeedSearch] = useState('');
+
+  const displayFeed = useMemo(() => {
+    let list = notifications || [];
+    
+    // Sorteia por timestamp descendente
+    list = [...list].sort((a, b) => b.timestamp - a.timestamp);
+
+    // Filtra por 'Minhas Ações'
+    if (feedFilter === 'MY') {
+        list = list.filter(n => 
+            n.targetUserId === currentUser.id || 
+            (n.targetRole && n.targetRole === currentUser.role) ||
+            n.message.toLowerCase().includes(currentUser.name.toLowerCase())
+        );
+    }
+
+    // Filtra por pesquisa
+    if (feedSearch.trim()) {
+        const query = feedSearch.toLowerCase();
+        list = list.filter(n => 
+            n.title.toLowerCase().includes(query) ||
+            n.message.toLowerCase().includes(query) ||
+            n.originModule.toLowerCase().includes(query)
+        );
+    }
+
+    return list;
+  }, [notifications, feedFilter, feedSearch, currentUser]);
 
   // Se o usuário selecionado não fizer parte da nova squad selecionada, reseta o usuário para 'ALL'
   React.useEffect(() => {
@@ -555,6 +590,116 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
                       </button>
                   ))}
               </div>
+          </div>
+      </div>
+
+      {/* Centralized Live Activity and System Feed */}
+      <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                      <Activity size={18} className="text-pink-600 animate-pulse" /> Histórico de Atividades e Notificações (Tempo Real)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">Status de ações, vendas, cobranças e atualizações do time consolidados</p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                  <button 
+                      onClick={() => setFeedFilter('ALL')} 
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          feedFilter === 'ALL' 
+                              ? 'bg-pink-600 text-white shadow-md' 
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                  >
+                      Geral (Time)
+                  </button>
+                  <button 
+                      onClick={() => setFeedFilter('MY')} 
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          feedFilter === 'MY' 
+                              ? 'bg-pink-600 text-white shadow-md' 
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                  >
+                      Minhas Ações
+                  </button>
+              </div>
+          </div>
+
+          <div className="mb-4">
+              <input
+                  type="text"
+                  placeholder="Pesquisar ações, usuários ou atividades..."
+                  value={feedSearch}
+                  onChange={(e) => setFeedSearch(e.target.value)}
+                  className="w-full bg-slate-50 hover:bg-slate-100/75 focus:bg-white text-xs font-bold text-slate-700 placeholder-slate-400 border border-slate-200 focus:border-pink-200 outline-none rounded-xl px-4 py-3 transition-all"
+              />
+          </div>
+
+          <div className="max-h-96 overflow-y-auto custom-scrollbar divide-y divide-slate-100">
+              {displayFeed.length > 0 ? (
+                  displayFeed.map((notif) => {
+                      const moduleColors: Record<string, string> = {
+                          KANBAN: 'text-blue-600 bg-blue-50 border-blue-100',
+                          CRM: 'text-purple-600 bg-purple-50 border-purple-100',
+                          FINANCE: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+                          REQUISITIONS: 'text-amber-600 bg-amber-50 border-amber-100',
+                          CLIENTS: 'text-pink-600 bg-pink-50 border-pink-100',
+                          ADMIN: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+                          SYSTEM: 'text-slate-600 bg-slate-50 border-slate-100',
+                      };
+
+                      const colorClass = moduleColors[notif.originModule] || moduleColors.SYSTEM;
+
+                      return (
+                          <div 
+                              key={notif.id}
+                              className={`flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 gap-3 transition-all hover:bg-slate-50/50 px-2 rounded-2xl ${notif.status === 'UNREAD' ? 'bg-pink-50/10' : ''}`}
+                          >
+                              <div className="flex gap-4 items-start flex-1 min-w-0 font-sans">
+                                  <span className={`px-2 py-1 text-[8px] font-black uppercase tracking-widest rounded-md border shrink-0 ${colorClass}`}>
+                                      {notif.originModule}
+                                  </span>
+                                  <div className="min-w-0">
+                                      <p className="text-xs font-black text-slate-800 tracking-tight leading-none mb-1 flex items-center gap-1.5 flex-wrap">
+                                          {notif.title}
+                                          {notif.status === 'UNREAD' && (
+                                              <span className="w-1.5 h-1.5 bg-pink-600 rounded-full inline-block animate-pulse shrink-0" />
+                                          )}
+                                      </p>
+                                      <p className="text-xs text-slate-500 font-medium leading-relaxed break-words">{notif.message}</p>
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-4 shrink-0 mt-2 sm:mt-0 ml-12 sm:ml-0">
+                                  <span className="text-[10px] font-bold text-slate-400 font-mono">
+                                      {new Date(notif.timestamp).toLocaleString('pt-BR', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                      })}
+                                  </span>
+                                  {onNotificationClick && notif.navToView && (
+                                      <button 
+                                          onClick={() => onNotificationClick(notif)}
+                                          className="text-[10px] font-black text-pink-600 hover:text-pink-700 uppercase tracking-widest bg-pink-50 px-3 py-1.5 rounded-xl border border-pink-100 hover:shadow-lg transition-all whitespace-nowrap"
+                                      >
+                                          Navegar
+                                      </button>
+                                  )}
+                              </div>
+                          </div>
+                      );
+                  })
+              ) : (
+                  <div className="py-12 text-center">
+                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-300">
+                          <Activity size={20} />
+                      </div>
+                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Nenhuma atividade recente</p>
+                  </div>
+              )}
           </div>
       </div>
     </div>
