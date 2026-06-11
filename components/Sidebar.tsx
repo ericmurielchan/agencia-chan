@@ -45,8 +45,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'crm', label: 'CRM / Vendas', icon: Briefcase },
     { id: 'approvals', label: 'Aprovações', icon: CheckCircle2 },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
-    { id: 'stock', label: 'Estoque', icon: Package },
-    { id: 'assets', label: 'Ativos', icon: Box },
     { id: 'system-admin', label: 'Administração do Sistema', icon: Settings },
     { id: 'help', label: 'Central de Ajuda', icon: HelpCircle },
   ];
