@@ -42,6 +42,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [showArchived, setShowArchived] = useState(false);
   const [showArchivedColumns, setShowArchivedColumns] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [editingColumn, setEditingColumn] = useState<Partial<ColumnConfig> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -171,9 +173,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           }
       }
       setDraggedTaskId(null);
+      setDragOverColumnId(null);
+      setDragOverTaskId(null);
   };
 
   const handleDropOnTask = (draggedId: string, targetId: string) => {
+      setDragOverColumnId(null);
+      setDragOverTaskId(null);
       const draggedTask = tasks.find(t => t.id === draggedId);
       const targetTask = tasks.find(t => t.id === targetId);
       if (!draggedTask || !targetTask) return;
@@ -226,6 +232,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           });
       }
       setDraggedTaskId(null);
+      setDragOverColumnId(null);
+      setDragOverTaskId(null);
   };
 
   const sidebarWidth = isMobile ? '0px' : (sidebarOpen ? (sidebarCompact ? '80px' : '256px') : '0px');
@@ -404,7 +412,24 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               return posA - posB;
             });
             return (
-              <div key={col.id} onDragOver={e => e.preventDefault()} onDrop={e => handleDropTask(e, col.id)} className="flex-shrink-0 w-80 flex flex-col max-h-full rounded-[32px] bg-slate-200/40 border border-slate-200/50">
+              <div 
+                key={col.id} 
+                onDragOver={e => {
+                  e.preventDefault();
+                  if (dragOverColumnId !== col.id) {
+                    setDragOverColumnId(col.id);
+                  }
+                  if (dragOverTaskId !== null) {
+                    setDragOverTaskId(null);
+                  }
+                }} 
+                onDrop={e => handleDropTask(e, col.id)} 
+                className={`flex-shrink-0 w-80 flex flex-col max-h-full rounded-[32px] transition-all duration-200 border ${
+                  draggedTaskId && dragOverColumnId === col.id 
+                    ? 'bg-pink-50/40 border-pink-200 shadow-md scale-[1.01]' 
+                    : 'bg-slate-200/40 border-slate-200/50'
+                }`}
+              >
                 <div className="p-5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-6 rounded-full bg-pink-500"></div>
@@ -414,47 +439,75 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
                 
                 <div className="px-3 pb-5 space-y-4 overflow-y-auto custom-scrollbar flex-1">
-                  {colTasks.map(task => (
-                    <div 
-                      key={task.id} 
-                      id={`task-${task.id}`}
-                      draggable 
-                      onDragStart={e => setDraggedTaskId(task.id)}
-                      onClick={() => setSelectedTask(task)}
-                      onDragOver={e => {
-                        if (draggedTaskId === task.id) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDrop={e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (!draggedTaskId || draggedTaskId === task.id) return;
-                        handleDropOnTask(draggedTaskId, task.id);
-                      }}
-                      className="bg-white rounded-[32px] shadow-sm border-2 border-white hover:border-pink-200 cursor-grab active:cursor-grabbing transition-all group hover:shadow-premium-hover overflow-hidden flex flex-col"
-                    >
-                      {/* CAPA SANGRE: SEM PADDING E SEM MARGEM */}
-                      {task.coverType === 'color' && (
-                        <div className="h-20 w-full border-b border-slate-100 transition-transform group-hover:scale-105 duration-500" style={{ backgroundColor: task.coverValue || '#cbd5e1' }} />
-                      )}
-                      {task.coverType === 'image' && task.coverValue && (
-                        <img src={task.coverValue} className="h-24 w-full object-cover border-b border-slate-100 transition-transform group-hover:scale-105 duration-500" alt="Capa" />
-                      )}
+                  {/* Empty Column Drop Target Placeholder or Column Top Target Placeholder */}
+                  {draggedTaskId && dragOverColumnId === col.id && (dragOverTaskId === null || colTasks.length === 0) && (
+                    <div className="border-2 border-dashed border-pink-300 bg-pink-50/30 rounded-[32px] p-5 h-28 flex flex-col items-center justify-center text-pink-500 gap-1 transition-all duration-200 animate-pulse select-none">
+                      <span className="text-[10px] uppercase tracking-[0.2em] font-black">Mover para o topo</span>
+                    </div>
+                  )}
 
-                      <div className="p-6">
-                        <div className="flex justify-between items-start mb-4">
-                          <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>{task.priority}</span>
-                          <div className="flex -space-x-2 transition-transform group-hover:translate-x-1">
-                            {task.assigneeIds.slice(0, 3).map(id => (
-                              <img key={id} src={users.find(u => u.id === id)?.avatar || undefined} className="w-7 h-7 rounded-xl border-2 border-white shadow-sm object-cover" />
-                            ))}
+                  {colTasks.map(task => {
+                    const isOverThisTask = draggedTaskId && dragOverTaskId === task.id && draggedTaskId !== task.id;
+                    
+                    return (
+                      <React.Fragment key={task.id}>
+                        {isOverThisTask && (
+                          <div className="border-2 border-dashed border-pink-300 bg-pink-50/30 rounded-[32px] p-5 h-28 flex flex-col items-center justify-center text-pink-500 gap-1 transition-all duration-200 animate-pulse select-none">
+                            <span className="text-[10px] uppercase tracking-[0.2em] font-black">Posicionar aqui</span>
+                          </div>
+                        )}
+                        <div 
+                          id={`task-${task.id}`}
+                          draggable 
+                          onDragStart={e => setDraggedTaskId(task.id)}
+                          onDragEnd={() => {
+                            setDraggedTaskId(null);
+                            setDragOverColumnId(null);
+                            setDragOverTaskId(null);
+                          }}
+                          onClick={() => setSelectedTask(task)}
+                          onDragOver={e => {
+                            if (draggedTaskId === task.id) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (dragOverTaskId !== task.id) {
+                              setDragOverTaskId(task.id);
+                            }
+                            if (dragOverColumnId !== col.id) {
+                              setDragOverColumnId(col.id);
+                            }
+                          }}
+                          onDrop={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!draggedTaskId || draggedTaskId === task.id) return;
+                            handleDropOnTask(draggedTaskId, task.id);
+                          }}
+                          className="bg-white rounded-[32px] shadow-sm border-2 border-white hover:border-pink-200 cursor-grab active:cursor-grabbing transition-all group hover:shadow-premium-hover overflow-hidden flex flex-col"
+                        >
+                          {/* CAPA SANGRE: SEM PADDING E SEM MARGEM */}
+                          {task.coverType === 'color' && (
+                            <div className="h-20 w-full border-b border-slate-100 transition-transform group-hover:scale-105 duration-500" style={{ backgroundColor: task.coverValue || '#cbd5e1' }} />
+                          )}
+                          {task.coverType === 'image' && task.coverValue && (
+                            <img src={task.coverValue} className="h-24 w-full object-cover border-b border-slate-100 transition-transform group-hover:scale-105 duration-500" alt="Capa" />
+                          )}
+
+                          <div className="p-6">
+                            <div className="flex justify-between items-start mb-4">
+                              <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>{task.priority}</span>
+                              <div className="flex -space-x-2 transition-transform group-hover:translate-x-1">
+                                {task.assigneeIds.slice(0, 3).map(id => (
+                                  <img key={id} src={users.find(u => u.id === id)?.avatar || undefined} className="w-7 h-7 rounded-xl border-2 border-white shadow-sm object-cover" />
+                                ))}
+                              </div>
+                            </div>
+                            <h4 className="text-[13px] font-bold text-slate-700 leading-tight group-hover:text-pink-600 transition-colors line-clamp-2 tracking-tight">{task.title}</h4>
                           </div>
                         </div>
-                        <h4 className="text-[13px] font-bold text-slate-700 leading-tight group-hover:text-pink-600 transition-colors line-clamp-2 tracking-tight">{task.title}</h4>
-                      </div>
-                    </div>
-                  ))}
+                      </React.Fragment>
+                    );
+                  })}
                   
                   <button onClick={() => setSelectedTask({ id: Date.now().toString(), title: '', description: '', status: col.id, priority: 'MEDIUM', dueDate: '', timeLogs: [], assigneeIds: [currentUser.id], checklists: [], comments: [], history: [], estimatedTime: 0, isTracking: false, createdAt: Date.now() } as Task)} className="w-full py-4 border-2 border-dashed border-slate-300/50 rounded-[32px] text-slate-400 hover:text-pink-500 hover:border-pink-200 transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white/30"><Plus size={16}/> ADICIONAR</button>
                 </div>
