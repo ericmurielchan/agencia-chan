@@ -148,6 +148,7 @@ export interface Lead {
   createdBy?: string;
   history: LeadHistory[];
   tags?: string[];
+  position?: number;
 }
 
 export interface LossReason {

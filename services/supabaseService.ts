@@ -31,6 +31,50 @@ import {
 } from '../types';
 
 /**
+ * Converte um ID curto do frontend (ex: 'u1', 'user-xxxx') para o formato UUID correspondente usado no Supabase.
+ * Se o ID fornecido já for um UUID válido, ele é mantido intacto para evitar bugs de inversão reversa de UUID -> uX.
+ */
+export const mapToDbUuid = (id: string | null | undefined): string | null => {
+  if (!id) return null;
+
+  // Se já for um UUID no formato padrão de 36 caracteres, retorna ele diretamente
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (isUuid) {
+    return id;
+  }
+
+  // Mapeia IDs curtos de usuários legado 'uX' (ex: 'u1') para UUIDs determinísticos
+  if (/^u[0-9]+$/i.test(id)) {
+    const numPart = id.substring(1);
+    const parsedNum = parseInt(numPart, 10);
+    if (!isNaN(parsedNum)) {
+      const hex = parsedNum.toString(16).padStart(12, '0');
+      return `00000000-0000-0000-0000-${hex}`;
+    }
+  }
+
+  // Mapeia IDs curtos formatados como 'user-timestamp' para UUIDs determinísticos
+  if (id.startsWith('user-')) {
+    const numberStr = id.replace('user-', '');
+    const parsedNum = parseInt(numberStr, 10);
+    if (!isNaN(parsedNum)) {
+      const hex = parsedNum.toString(16).padStart(12, '0');
+      return `deadeade-0000-4000-8000-${hex}`;
+    }
+  }
+
+  // Fallback determinístico para outras strings não-UUID, gerando um UUID baseado em hash
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash << 5) - hash + id.charCodeAt(i);
+    hash |= 0;
+  }
+  const absHash = Math.abs(hash);
+  const hex = absHash.toString(16).padStart(12, '0');
+  return `deadeade-0000-4000-9000-${hex}`;
+};
+
+/**
  * Mapeia uma squad do Supabase para o formato do App
  */
 export const mapSquad = (s: any): Squad => ({
@@ -71,53 +115,87 @@ export const mapUser = (u: any): User => ({
 /**
  * Mapeia uma tarefa do Supabase para o formato do App
  */
-const mapTask = (t: any): Task => ({
-  id: t.id,
-  clientId: t.client_id || '',
-  title: t.title || '',
-  description: t.description || '',
-  status: t.status || 'TODO',
-  priority: t.priority || 'MEDIUM',
-  dueDate: t.due_date || '',
-  estimatedTime: t.estimated_time || 0,
-  assigneeIds: (t.assignee_ids || []).map((id: string) => mapUserId(id) || id),
-  squadId: t.squad_id || '',
-  isTracking: t.is_tracking || false,
-  approvalStatus: t.approval_status || 'PENDING',
-  archived: t.archived || false,
-  createdAt: t.created_at || Date.now(),
-  position: t.position !== undefined ? t.position : undefined,
-  cover: t.cover,
-  timeLogs: t.time_logs || [],
-  checklists: t.checklists || [],
-  comments: t.comments || [],
-  history: t.history || []
-});
+const mapTask = (t: any): Task => {
+  let pos = t.position;
+  if (pos === undefined || pos === null) {
+    try {
+      const savedPositions = localStorage.getItem('task_positions_fallback');
+      if (savedPositions) {
+        const parsed = JSON.parse(savedPositions);
+        if (parsed[t.id] !== undefined) {
+          pos = parsed[t.id];
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+  return {
+    id: t.id,
+    clientId: t.client_id || '',
+    title: t.title || '',
+    description: t.description || '',
+    status: t.status || 'TODO',
+    priority: t.priority || 'MEDIUM',
+    dueDate: t.due_date || '',
+    estimatedTime: t.estimated_time || 0,
+    assigneeIds: (t.assignee_ids || []).map((id: string) => mapUserId(id) || id),
+    squadId: t.squad_id || '',
+    isTracking: t.is_tracking || false,
+    approvalStatus: t.approval_status || 'PENDING',
+    archived: t.archived || false,
+    createdAt: t.created_at || Date.now(),
+    position: pos !== undefined && pos !== null ? pos : undefined,
+    cover: t.cover,
+    timeLogs: t.time_logs || [],
+    checklists: t.checklists || [],
+    comments: t.comments || [],
+    history: t.history || []
+  };
+};
 
 /**
  * Mapeia um lead do Supabase para o formato do App
  */
-const mapLead = (l: any): Lead => ({
-  id: l.id,
-  name: l.name || '',
-  company: l.company || '',
-  value: l.value || 0,
-  stageId: l.stage_id || 'NEW',
-  status: l.status || 'OPEN',
-  email: l.email || '',
-  phone: l.phone || '',
-  priority: l.priority || 'MEDIUM',
-  temperature: l.temperature || 'WARM',
-  responsibleId: mapUserId(l.responsible_id) || '',
-  notes: l.notes || '',
-  tags: l.tags || [],
-  createdAt: l.created_at || Date.now(),
-  updatedAt: l.updated_at || Date.now(),
-  lastContact: l.last_contact || new Date().toISOString(),
-  createdBy: mapUserId(l.created_by) || '',
-  history: l.history || [],
-  tasks: l.tasks || []
-});
+const mapLead = (l: any): Lead => {
+  let pos = l.position;
+  if (pos === undefined || pos === null) {
+    try {
+      const savedPositions = localStorage.getItem('lead_positions_fallback');
+      if (savedPositions) {
+        const parsed = JSON.parse(savedPositions);
+        if (parsed[l.id] !== undefined) {
+          pos = parsed[l.id];
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+  return {
+    id: l.id,
+    name: l.name || '',
+    company: l.company || '',
+    value: l.value || 0,
+    stageId: l.stage_id || 'NEW',
+    status: l.status || 'OPEN',
+    email: l.email || '',
+    phone: l.phone || '',
+    priority: l.priority || 'MEDIUM',
+    temperature: l.temperature || 'WARM',
+    responsibleId: mapUserId(l.responsible_id) || '',
+    notes: l.notes || '',
+    tags: l.tags || [],
+    createdAt: l.created_at || Date.now(),
+    updatedAt: l.updated_at || Date.now(),
+    lastContact: l.last_contact || new Date().toISOString(),
+    createdBy: mapUserId(l.created_by) || '',
+    history: l.history || [],
+    tasks: l.tasks || [],
+    rating: l.rating || 0,
+    position: pos !== undefined && pos !== null ? pos : undefined
+  };
+};
 
 /**
  * Mapeia um cliente do Supabase para o formato do App
@@ -140,7 +218,7 @@ const mapClient = (c: any): Client => ({
   financialContact: c.financial_contact || { name: '', email: '', phone: '' },
   tags: c.tags || [],
   internalNotes: c.internal_notes || '',
-  classification: c.classification || 'NORMAL',
+  classification: c.classification || 'C',
   documentationLinks: c.documentation_links || [],
   serviceIds: c.service_ids || [],
   entryDate: c.entry_date || new Date().toISOString().split('T')[0],
@@ -290,6 +368,19 @@ const checkHasPositionColumn = async () => {
   return _hasPositionColumn;
 };
 
+let _leadHasPositionColumn: boolean | null = null;
+
+const checkLeadHasPositionColumn = async () => {
+  if (_leadHasPositionColumn !== null) return _leadHasPositionColumn;
+  try {
+    const { error } = await supabase.from('leads').select('position').limit(1);
+    _leadHasPositionColumn = !error || error.code !== '42703';
+  } catch (e) {
+    _leadHasPositionColumn = false;
+  }
+  return _leadHasPositionColumn;
+};
+
 /**
  * Busca todas as tarefas do banco de dados
  */
@@ -322,7 +413,7 @@ export const saveTask = async (task: Partial<Task>) => {
     priority: task.priority,
     due_date: task.dueDate ? new Date(task.dueDate).toISOString() : null,
     estimated_time: task.estimatedTime,
-    assignee_ids: task.assigneeIds ? task.assigneeIds.map(id => mapUserId(id) || id) : [],
+    assignee_ids: task.assigneeIds ? task.assigneeIds.map(id => mapToDbUuid(id) || id) : [],
     squad_id: task.squadId || null,
     is_tracking: task.isTracking,
     approval_status: task.approvalStatus,
@@ -339,6 +430,17 @@ export const saveTask = async (task: Partial<Task>) => {
 
   if (hasPos && task.position !== undefined) {
     payload.position = task.position;
+  }
+
+  if (task.id && task.position !== undefined) {
+    try {
+      const saved = localStorage.getItem('task_positions_fallback');
+      const parsed = saved ? JSON.parse(saved) : {};
+      parsed[task.id] = task.position;
+      localStorage.setItem('task_positions_fallback', JSON.stringify(parsed));
+    } catch (e) {
+      // Ignore
+    }
   }
 
   const { error } = await supabase.from('tasks').upsert(payload);
@@ -390,6 +492,12 @@ export const saveClient = async (client: Partial<Client>) => {
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
     
+    // Se o UUID correspondente existe no banco de dados, use-o diretamente!
+    const dbUuid = mapToDbUuid(id);
+    if (dbUuid && existingUserIds.has(dbUuid)) {
+      return dbUuid;
+    }
+
     // Se o ID bruto já existe no banco de dados, use o ID bruto!
     if (existingUserIds.has(id)) {
       return id;
@@ -533,6 +641,12 @@ export const saveLead = async (lead: Partial<Lead>) => {
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
     
+    // Se o UUID correspondente existe no banco de dados, use-o diretamente!
+    const dbUuid = mapToDbUuid(id);
+    if (dbUuid && existingUserIds.has(dbUuid)) {
+      return dbUuid;
+    }
+
     // Se o ID bruto já existe no banco de dados, use o ID bruto!
     if (existingUserIds.has(id)) {
       return id;
@@ -558,7 +672,8 @@ export const saveLead = async (lead: Partial<Lead>) => {
   const stage_id = lead.stageId && existingStageIds.has(lead.stageId) ? lead.stageId : null;
   const loss_reason_id = lead.lossReasonId && existingLossReasonIds.has(lead.lossReasonId) ? lead.lossReasonId : null;
 
-  const payload = {
+  const hasLeadPos = await checkLeadHasPositionColumn();
+  const payload: any = {
     id: lead.id || undefined,
     name: lead.name,
     company: lead.company,
@@ -582,6 +697,21 @@ export const saveLead = async (lead: Partial<Lead>) => {
     created_at: lead.createdAt || Date.now(),
     updated_at: Date.now()
   };
+
+  if (hasLeadPos && lead.position !== undefined) {
+    payload.position = lead.position;
+  }
+
+  if (lead.id && lead.position !== undefined) {
+    try {
+      const saved = localStorage.getItem('lead_positions_fallback');
+      const parsed = saved ? JSON.parse(saved) : {};
+      parsed[lead.id] = lead.position;
+      localStorage.setItem('lead_positions_fallback', JSON.stringify(parsed));
+    } catch (e) {
+      // Ignore
+    }
+  }
 
   const { error } = await supabase.from('leads').upsert(payload);
 
@@ -723,6 +853,12 @@ export const saveFinancialTransaction = async (t: Partial<FinancialTransaction>)
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
     
+    // Se o UUID correspondente existe no banco de dados, use-o diretamente!
+    const dbUuid = mapToDbUuid(id);
+    if (dbUuid && existingUserIds.has(dbUuid)) {
+      return dbUuid;
+    }
+
     // Se o ID bruto já existe no banco de dados, use o ID bruto!
     if (existingUserIds.has(id)) {
       return id;
@@ -1095,7 +1231,7 @@ export const saveUser = async (user: Partial<User>) => {
   const client_id = user.clientId && existingClientIds.has(user.clientId) ? user.clientId : null;
 
   const { error } = await supabase.from('users').upsert({
-    id: mapUserId(user.id) || undefined,
+    id: mapToDbUuid(user.id) || undefined,
     name: user.name,
     email: user.email,
     role: user.role,
@@ -1221,6 +1357,12 @@ export const saveAsset = async (asset: Partial<Asset>) => {
   const resolveDbUserId = (id: string | null | undefined): string | null => {
     if (!id) return null;
     
+    // Se o UUID correspondente existe no banco de dados, use-o diretamente!
+    const dbUuid = mapToDbUuid(id);
+    if (dbUuid && existingUserIds.has(dbUuid)) {
+      return dbUuid;
+    }
+
     // Se o ID bruto já existe no banco de dados, use o ID bruto!
     if (existingUserIds.has(id)) {
       return id;
@@ -1512,16 +1654,16 @@ export const saveRequisition = async (req: Partial<Requisition>) => {
   const { error } = await supabase.from('requisitions').upsert({
     id: req.id || undefined,
     client_id: req.clientId || null,
-    requester_id: mapUserId(req.requesterId),
+    requester_id: mapToDbUuid(req.requesterId),
     title: req.title,
     description: dbDescription,
     estimated_cost: req.estimatedCost,
     status: req.status,
     date: req.date,
     category: req.category,
-    approved_by: mapUserId(req.approvedBy),
+    approved_by: mapToDbUuid(req.approvedBy),
     approved_at: req.approvedAt,
-    rejected_by: mapUserId(req.rejectedBy),
+    rejected_by: mapToDbUuid(req.rejectedBy),
     rejected_at: req.rejectedAt,
     rejected_reason: req.rejectedReason
   });
@@ -1811,7 +1953,7 @@ export const saveNotification = async (notif: Notification) => {
     status: notif.status,
     origin_module: notif.originModule,
     timestamp: notif.timestamp,
-    target_user_id: mapUserId(notif.targetUserId),
+    target_user_id: mapToDbUuid(notif.targetUserId),
     target_role: notif.targetRole,
     nav_to_view: notif.navToView,
     action_label: notif.actionLabel,
@@ -2318,7 +2460,7 @@ export const seedDatabase = async () => {
     // 2. Migrar Usuários (Mapeando IDs para UUID para evitar conflitos na base real do Supabase)
     const { error: userError } = await supabase.from('users').upsert(
       initialUsers.map(u => ({
-        id: mapUserId(u.id) || u.id,
+        id: mapToDbUuid(u.id) || u.id,
         name: u.name,
         email: u.email,
         role: u.role,
@@ -2342,7 +2484,7 @@ export const seedDatabase = async () => {
         legal_name: c.legalName,
         document: c.document,
         status: c.status,
-        responsible_id: mapUserId(c.responsibleId) || null,
+        responsible_id: mapToDbUuid(c.responsibleId) || null,
         squad_id: c.squadId,
         monthly_value: c.monthlyValue,
         is_recurring: c.isRecurring,
@@ -2353,7 +2495,15 @@ export const seedDatabase = async () => {
         contact_info: c.contact,
         financial_contact: c.financialContact,
         tags: c.tags,
-        internal_notes: c.internalNotes
+        internal_notes: c.internalNotes,
+        classification: c.classification || 'C',
+        documentation_links: c.documentationLinks || [],
+        service_ids: c.serviceIds || [],
+        entry_date: c.entryDate || new Date().toISOString().split('T')[0],
+        contacts: c.contacts || [],
+        passwords: c.passwords || [],
+        password_logs: c.passwordLogs || [],
+        system_accesses: c.systemAccesses || []
       }))
     );
     if (clientError) console.error('Erro ao migrar Clientes:', clientError);
@@ -2369,7 +2519,7 @@ export const seedDatabase = async () => {
         priority: t.priority,
         due_date: t.dueDate ? new Date(t.dueDate).toISOString() : null,
         estimated_time: t.estimatedTime,
-        assignee_ids: t.assigneeIds ? t.assigneeIds.map(id => mapUserId(id) || id) : [],
+        assignee_ids: t.assigneeIds ? t.assigneeIds.map(id => mapToDbUuid(id) || id) : [],
         squad_id: t.squadId,
         is_tracking: t.isTracking,
         approval_status: t.approvalStatus,
@@ -2414,7 +2564,7 @@ export const seedDatabase = async () => {
         phone: l.phone,
         priority: l.priority,
         temperature: l.temperature,
-        responsible_id: mapUserId(l.responsibleId) || null,
+        responsible_id: mapToDbUuid(l.responsibleId) || null,
         notes: l.notes,
         tags: l.tags,
         created_at: l.createdAt,
@@ -2450,7 +2600,7 @@ export const seedDatabase = async () => {
         status: n.status,
         origin_module: n.originModule,
         timestamp: n.timestamp,
-        target_user_id: mapUserId(n.targetUserId),
+        target_user_id: mapToDbUuid(n.targetUserId),
         target_role: n.targetRole,
         nav_to_view: n.navToView,
         action_label: n.actionLabel,
@@ -2515,7 +2665,7 @@ export const seedDatabase = async () => {
         category_id: t.categoryId,
         bank_account_id: t.bankAccountId,
         client_id: t.clientId,
-        responsible_id: mapUserId(t.responsibleId) || null,
+        responsible_id: mapToDbUuid(t.responsibleId) || null,
         installments: t.installments,
         created_at: t.createdAt
       };
@@ -2633,16 +2783,16 @@ export const seedDatabase = async () => {
         return {
           id: req.id,
           client_id: req.clientId || null,
-          requester_id: mapUserId(req.requesterId),
+          requester_id: mapToDbUuid(req.requesterId),
           title: req.title,
           description: dbDescription,
           estimated_cost: req.estimatedCost,
           status: req.status,
           date: req.date,
           category: req.category,
-          approved_by: mapUserId(req.approvedBy),
+          approved_by: mapToDbUuid(req.approvedBy),
           approved_at: req.approvedAt,
-          rejected_by: mapUserId(req.rejectedBy),
+          rejected_by: mapToDbUuid(req.rejectedBy),
           rejected_at: req.rejectedAt,
           rejected_reason: req.rejectedReason
         };

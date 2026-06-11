@@ -714,7 +714,7 @@ const App: React.FC = () => {
 
   const contentMargin = getSidebarWidth();
 
-  const isKanban = currentView === 'kanban';
+  const isFullWidth = currentView === 'kanban' || currentView === 'crm';
 
   return (
     <div className={`flex h-screen transition-colors duration-300 ${currentUser.preferences?.theme === 'dark' ? 'bg-slate-900 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
@@ -740,11 +740,11 @@ const App: React.FC = () => {
       />
       
       <main 
-        className={`flex-1 flex flex-col h-full transition-all duration-300 ease-in-out relative ${isKanban ? 'p-0' : 'px-4 py-6'}`}
+        className={`flex-1 flex flex-col h-full transition-all duration-300 ease-in-out relative ${isFullWidth ? 'p-0' : 'px-4 py-6'}`}
         style={{ marginLeft: contentMargin }}
       >
         {/* TOP HEADER SECTION */}
-        {!isKanban && (
+        {!isFullWidth && (
             <div className="sticky top-0 z-40 flex justify-between items-center gap-4 mb-6 md:mb-8">
                 <div className="flex items-center gap-3">
                     {isMobile && (

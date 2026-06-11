@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS public.leads (
     history JSONB DEFAULT '[]'::jsonb,
     last_contact TIMESTAMP WITH TIME ZONE,
     created_by TEXT REFERENCES public.users(id) ON DELETE SET NULL,
+    position DOUBLE PRECISION,
     created_at BIGINT DEFAULT extract(epoch from now()) * 1000,
     updated_at BIGINT DEFAULT extract(epoch from now()) * 1000
 );
@@ -132,6 +133,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     priority TEXT DEFAULT 'MEDIUM',
     due_date TIMESTAMP WITH TIME ZONE,
     estimated_time NUMERIC DEFAULT 0,
+    position DOUBLE PRECISION,
     assignee_ids TEXT[] DEFAULT '{}',
     squad_id TEXT REFERENCES public.squads(id) ON DELETE SET NULL,
     is_tracking BOOLEAN DEFAULT FALSE,
@@ -371,6 +373,20 @@ BEGIN
     -- Corrigir coluna 'limit' em credit_cards se existir com nome antigo
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'credit_cards' AND column_name = 'limit') THEN
         ALTER TABLE public.credit_cards RENAME COLUMN "limit" TO credit_limit;
+    END IF;
+
+    -- Adicionar coluna position em tasks se missing
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tasks') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'position') THEN
+            ALTER TABLE public.tasks ADD COLUMN position DOUBLE PRECISION;
+        END IF;
+    END IF;
+
+    -- Adicionar coluna position em leads se missing
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'leads') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'position') THEN
+            ALTER TABLE public.leads ADD COLUMN position DOUBLE PRECISION;
+        END IF;
     END IF;
 END $$;
 

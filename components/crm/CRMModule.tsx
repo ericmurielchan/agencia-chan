@@ -2,11 +2,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Lead, PipelineStage, User, ConfirmOptions, LossReason, Client, Notification, BankAccount, FinancialCategory, FinancialTransaction, Squad } from '../../types';
 import { 
-    LayoutDashboard, Kanban, List, FileText, Settings, 
+    LayoutDashboard, LayoutGrid, Kanban, List, FileText, Settings, 
     Plus, Search, Filter, Download, Bell, 
     TrendingUp, Target, Users, DollarSign,
     ChevronRight, MoreVertical, Star, CheckCircle2,
-    XCircle, AlertCircle, Clock, Calendar, Shield, HelpCircle, Save
+    XCircle, AlertCircle, Clock, Calendar, Shield, HelpCircle, Save, Menu
 } from 'lucide-react';
 import { CRMDashboard } from './CRMDashboard';
 import { CRMPipeline } from './CRMPipeline';
@@ -49,6 +49,12 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
     const [editingLead, setEditingLead] = useState<Partial<Lead> | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [pipelineSearchTerm, setPipelineSearchTerm] = useState('');
+
+    // CRM Filter states
+    const [filterTemperature, setFilterTemperature] = useState<'ALL' | 'HOT' | 'WARM' | 'COLD'>('ALL');
+    const [filterResponsible, setFilterResponsible] = useState<string>('ALL');
+    const [filterRating, setFilterRating] = useState<'ALL' | 1 | 2 | 3>('ALL');
+    const [showFilterMenu, setShowFilterMenu] = useState(false);
 
     // Conversion states
     const [conversionLead, setConversionLead] = useState<Lead | null>(null);
@@ -305,6 +311,20 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
         return [];
     }, [leads, currentUser, users, squads]);
 
+    // Filtered Leads based on interactive criteria
+    const filteredLeads = useMemo(() => {
+        return visibleLeads.filter(l => {
+            const tempMatch = filterTemperature === 'ALL' || l.temperature === filterTemperature;
+            const respMatch = filterResponsible === 'ALL' || l.responsibleId === filterResponsible;
+            const ratingMatch = filterRating === 'ALL' || l.rating === filterRating;
+            return tempMatch && respMatch && ratingMatch;
+        });
+    }, [visibleLeads, filterTemperature, filterResponsible, filterRating]);
+
+    const activeFiltersCount = (filterTemperature !== 'ALL' ? 1 : 0) + 
+                               (filterResponsible !== 'ALL' ? 1 : 0) + 
+                               (filterRating !== 'ALL' ? 1 : 0);
+
     const handleSaveLead = async (lead: Lead) => {
         const isNew = !leads.find(l => l.id === lead.id);
         
@@ -382,7 +402,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
 
     const exportCSV = () => {
         const headers = ['Empresa', 'Contato', 'Valor', 'Etapa', 'Status', 'Responsável', 'Origem', 'Criado Em'];
-        const rows = visibleLeads.map(l => [
+        const rows = filteredLeads.map(l => [
             l.company,
             l.name,
             l.value,
@@ -408,83 +428,198 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
 
     return (
         <div className="h-full flex flex-col overflow-hidden bg-slate-50/30">
-            {/* FIXED CRM HEADER & ACTION BAR */}
-            <div className="shrink-0 bg-white border-b border-slate-200 px-3 py-2 sm:px-8 sm:py-4 z-10 shadow-sm">
-                <div className="flex flex-col gap-3 sm:gap-6">
-                    {/* TOP ROW: TABS & GLOBAL ACTIONS */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
-                        <div className="flex bg-slate-100 p-1 rounded-xl sm:rounded-2xl border border-slate-200 overflow-x-auto no-scrollbar max-w-full shrink-0">
+            {/* FIXED CRM HEADER & ACTION BAR - REDESIGNED ACCORDING TO IMAGE MOCKUP */}
+            <div className="shrink-0 bg-transparent px-4 py-3 sm:px-8 sm:py-5 z-10">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    {/* LEFT SIDE: TABS, SEARCH BAR, FILTERS */}
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 flex-1">
+                        {/* Mobile sidebar toggle button using standard custom event */}
+                        <button 
+                            onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
+                            className="lg:hidden w-11 h-11 rounded-2xl bg-white border border-slate-200/60 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all shadow-sm shrink-0"
+                            title="Menu"
+                        >
+                            <Menu size={18} />
+                        </button>
+
+                        {/* Segmented Controls for Tabs */}
+                        <div className="flex bg-white p-1 rounded-2xl border border-slate-200/60 shadow-sm shrink-0 h-11 items-center">
                             <button 
                                 onClick={() => setActiveTab('DASHBOARD')}
-                                className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'DASHBOARD' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                title="Dashboard"
+                                className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${activeTab === 'DASHBOARD' ? 'bg-slate-100 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                             >
-                                <LayoutDashboard size={14} /> <span className="hidden xs:inline">Dashboard</span>
+                                <LayoutGrid size={16} />
                             </button>
                             <button 
                                 onClick={() => setActiveTab('PIPELINE')}
-                                className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'PIPELINE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                title="Pipeline (Kanban)"
+                                className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${activeTab === 'PIPELINE' ? 'bg-slate-100 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                             >
-                                <Kanban size={14} /> <span className="hidden xs:inline">Pipeline</span>
+                                <Kanban size={16} />
                             </button>
                             <button 
                                 onClick={() => setActiveTab('LIST')}
-                                className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'LIST' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                title="Lista"
+                                className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${activeTab === 'LIST' ? 'bg-slate-100 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                             >
-                                <List size={14} /> <span className="hidden xs:inline">Lista</span>
+                                <List size={16} />
                             </button>
                             <button 
                                 onClick={() => setActiveTab('REPORTS')}
-                                className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'REPORTS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                title="Relatórios"
+                                className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${activeTab === 'REPORTS' ? 'bg-slate-100 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                             >
-                                <FileText size={14} /> <span className="hidden xs:inline">Relatórios</span>
+                                <FileText size={16} />
                             </button>
                         </div>
 
-                        <div className="flex items-center gap-2 sm:gap-3 justify-between sm:justify-end">
+                        {/* Search bar inside header */}
+                        {(activeTab === 'PIPELINE' || activeTab === 'LIST') && (
+                            <div className="relative w-full sm:w-[260px] md:w-[320px]">
+                                <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    placeholder={activeTab === 'PIPELINE' ? "Buscar no pipeline..." : "Buscar leads..."}
+                                    className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200/80 rounded-full text-xs font-semibold placeholder-slate-400 outline-none shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all text-slate-700 h-11"
+                                    value={activeTab === 'PIPELINE' ? pipelineSearchTerm : searchTerm}
+                                    onChange={e => activeTab === 'PIPELINE' ? setPipelineSearchTerm(e.target.value) : setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                        )}
+
+                        {/* Filters and Export buttons */}
+                        <div className="flex items-center gap-2 relative">
+                            <button 
+                                onClick={() => setShowFilterMenu(!showFilterMenu)}
+                                className={`h-11 px-4 border rounded-full transition-all shadow-sm flex items-center gap-2 text-xs font-semibold ${
+                                    activeFiltersCount > 0 
+                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
+                                        : 'bg-white border-slate-200/80 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                                }`}
+                            >
+                                <Filter size={14} className={activeFiltersCount > 0 ? 'text-indigo-500' : 'text-slate-400'} />
+                                <span>Filtros</span>
+                                {activeFiltersCount > 0 && (
+                                    <span className="w-5 h-5 flex items-center justify-center bg-indigo-600 text-white font-bold text-[10px] rounded-full">
+                                        {activeFiltersCount}
+                                    </span>
+                                )}
+                            </button>
+
+                            {showFilterMenu && (
+                                <div className="absolute top-12 right-0 w-72 bg-white border border-slate-200/80 rounded-2xl shadow-xl p-4 z-50 space-y-4 animate-in fade-in slide-in-from-top-2 duration-150">
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                        <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Filtrar Leads</span>
+                                        {activeFiltersCount > 0 && (
+                                            <button 
+                                                onClick={() => {
+                                                    setFilterTemperature('ALL');
+                                                    setFilterResponsible('ALL');
+                                                    setFilterRating('ALL');
+                                                }}
+                                                className="text-[10px] text-indigo-600 font-extrabold hover:underline"
+                                            >
+                                                Limpar todos
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* TEMP FILTER */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Temperatura</label>
+                                        <div className="grid grid-cols-4 gap-1">
+                                            {(['ALL', 'HOT', 'WARM', 'COLD'] as const).map(temp => {
+                                                const labelMap = { ALL: 'Todos', HOT: 'Quente', WARM: 'Morno', COLD: 'Frio' };
+                                                const active = filterTemperature === temp;
+                                                return (
+                                                    <button
+                                                        key={temp}
+                                                        onClick={() => setFilterTemperature(temp)}
+                                                        className={`py-1.5 px-1 rounded-lg text-[10px] font-bold text-center transition-all border ${
+                                                            active 
+                                                                ? 'bg-slate-900 text-white border-slate-950' 
+                                                                : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100'
+                                                        }`}
+                                                    >
+                                                        {labelMap[temp]}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* RESPONSIBLE FILTER */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Responsável</label>
+                                        <select
+                                            value={filterResponsible}
+                                            onChange={e => setFilterResponsible(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                        >
+                                            <option value="ALL">Qualquer responsável</option>
+                                            {users.map(u => (
+                                                <option key={u.id} value={u.id}>{u.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* RATING FILTER */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Classificação</label>
+                                        <div className="flex gap-1">
+                                            {(['ALL', 1, 2, 3] as const).map(r => {
+                                                const active = filterRating === r;
+                                                return (
+                                                    <button
+                                                        key={r}
+                                                        onClick={() => setFilterRating(r)}
+                                                        className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-bold text-center transition-all border flex items-center justify-center gap-1 ${
+                                                            active 
+                                                                ? 'bg-slate-900 text-white border-slate-950' 
+                                                                : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100'
+                                                        }`}
+                                                    >
+                                                        {r === 'ALL' ? 'Todos' : (
+                                                            <span className="flex items-center gap-0.5">
+                                                                {r} <Star size={10} className="fill-current text-amber-400" />
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <button 
                                 onClick={exportCSV}
-                                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest"
+                                className="h-11 px-4 bg-white border border-slate-200/80 rounded-full text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm flex items-center gap-2 text-xs font-semibold"
                             >
-                                <Download size={14} className="sm:w-4 sm:h-4" /> <span className="inline">Exportar</span>
-                            </button>
-                            <button 
-                                onClick={() => { setEditingLead({ stageId: stages[0]?.id }); setIsModalOpen(true); }}
-                                className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-5 py-2 rounded-xl flex items-center justify-center gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20 transition-all"
-                            >
-                                <Plus size={14} className="sm:w-4 sm:h-4" strokeWidth={3} /> <span className="inline">Novo Lead</span>
+                                <Download size={14} className="text-slate-400" />
+                                <span>Exportar</span>
                             </button>
                         </div>
                     </div>
 
-                    {/* BOTTOM ROW: SEARCH & FILTERS (CONTEXTUAL) */}
-                    {(activeTab === 'PIPELINE' || activeTab === 'LIST') && (
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
-                            <div className="flex items-center gap-2 sm:gap-4 flex-1 w-full sm:max-w-2xl">
-                                <div className="relative flex-1">
-                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input 
-                                        type="text" 
-                                        placeholder={activeTab === 'PIPELINE' ? "Buscar no pipeline..." : "Buscar leads..."}
-                                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold outline-none focus:bg-white focus:border-indigo-500 transition-all"
-                                        value={activeTab === 'PIPELINE' ? pipelineSearchTerm : searchTerm}
-                                        onChange={e => activeTab === 'PIPELINE' ? setPipelineSearchTerm(e.target.value) : setSearchTerm(e.target.value)}
-                                    />
-                                </div>
-                                <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">
-                                    <Filter size={14} /> <span className="hidden sm:inline">Filtros</span>
-                                </button>
-                            </div>
+                    {/* RIGHT SIDE: PRIMARY ACTION "+ NOVO LEAD" & NOTIFICATIONS BELL */}
+                    <div className="flex items-center gap-3 ml-auto lg:ml-0">
+                        <button 
+                            onClick={() => { setEditingLead({ stageId: stages[0]?.id }); setIsModalOpen(true); }}
+                            className="h-11 bg-[#544ff4] hover:bg-[#433ee5] text-white px-6 rounded-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider shadow-md shadow-indigo-600/15 hover:shadow-indigo-600/30 transition-all"
+                        >
+                            <Plus size={14} strokeWidth={3} />
+                            <span>Novo Lead</span>
+                        </button>
 
-                            {activeTab === 'PIPELINE' && (
-                                <button 
-                                    onClick={() => { setEditingLead({ stageId: stages[1]?.id || 'QUALIFIED' }); setIsModalOpen(true); }}
-                                    className="bg-slate-800 hover:bg-slate-900 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl flex items-center gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-lg transition-all justify-center"
-                                >
-                                    <Plus size={14} className="sm:w-4 sm:h-4" strokeWidth={3} /> <span className="inline">Novo Negócio</span>
-                                </button>
-                            )}
+                        <div className="relative">
+                            <button className="w-11 h-11 bg-white border border-slate-200/80 rounded-2xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all shadow-sm">
+                                <Bell size={16} />
+                                <span className="absolute top-[10px] right-[11px] w-2 h-2 bg-red-500 rounded-full border border-white" />
+                            </button>
                         </div>
-                    )}
+                    </div>
                 </div>
             </div>
 
@@ -492,13 +627,13 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
             <div className="flex-1 overflow-hidden relative">
                 {activeTab === 'DASHBOARD' && (
                     <div className="absolute inset-0 overflow-y-auto custom-scrollbar p-4 sm:p-8">
-                        <CRMDashboard leads={visibleLeads} users={users} lossReasons={lossReasons} />
+                        <CRMDashboard leads={filteredLeads} users={users} lossReasons={lossReasons} />
                     </div>
                 )}
                 {activeTab === 'PIPELINE' && (
                     <div className="absolute inset-0 p-4 sm:p-8 overflow-hidden">
                         <CRMPipeline 
-                            leads={visibleLeads} 
+                            leads={filteredLeads} 
                             setLeads={setLeads} 
                             stages={stages} 
                             users={users}
@@ -532,7 +667,7 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
-                                        {visibleLeads.filter(l => l.company.toLowerCase().includes(searchTerm.toLowerCase()) || l.name.toLowerCase().includes(searchTerm.toLowerCase())).map(lead => (
+                                        {filteredLeads.filter(l => l.company.toLowerCase().includes(searchTerm.toLowerCase()) || l.name.toLowerCase().includes(searchTerm.toLowerCase())).map(lead => (
                                             <tr key={lead.id} className="hover:bg-slate-50/50 transition-colors group">
                                                 <td className="px-4 sm:px-6 py-4">
                                                     <div className="flex items-center gap-3">

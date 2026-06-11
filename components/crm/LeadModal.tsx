@@ -482,6 +482,33 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                                         </div>
                                     </div>
                                     <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Classificação (Estrelas)</label>
+                                        <div className="flex items-center gap-1 bg-slate-50 border border-transparent rounded-2xl px-4 py-3 w-fit">
+                                            {[1, 2, 3].map(star => {
+                                                const isActive = star <= (formData.rating || 0);
+                                                return (
+                                                    <button
+                                                        key={star}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newRating = formData.rating === star ? star - 1 : star;
+                                                            setFormData({ ...formData, rating: newRating });
+                                                        }}
+                                                        className="text-slate-300 hover:text-amber-400 transition-colors focus:outline-none"
+                                                    >
+                                                        <Star 
+                                                            size={20} 
+                                                            className={isActive ? "fill-amber-400 text-amber-400" : "text-slate-300 hover:text-amber-300"} 
+                                                        />
+                                                    </button>
+                                                );
+                                            })}
+                                            <span className="text-xs font-bold text-slate-400 ml-3">
+                                                {formData.rating ? `${formData.rating} Estrela${formData.rating > 1 ? 's' : ''}` : 'Sem classificação'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div>
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Notas Internas</label>
                                         <textarea 
                                             className="w-full bg-slate-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl p-4 text-sm font-medium outline-none transition-all min-h-[100px] resize-none" 
