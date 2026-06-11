@@ -6,7 +6,8 @@ import {
     Search, DollarSign, Users, Briefcase, User as UserIcon, Star, Link, Shield, 
     X, Check, ShoppingBag, Key, Lock, Unlock, AlertCircle, Ban, Power, 
     LayoutDashboard, ClipboardList, History, HardDrive, Eye, EyeOff, 
-    MessageSquare, Tag, Building2, Globe, Hash, UserCheck, CreditCard, Info, ListChecks
+    MessageSquare, Tag, Building2, Globe, Hash, UserCheck, CreditCard, Info, ListChecks,
+    List, Layout
 } from 'lucide-react';
 
 interface ClientManagementProps {
@@ -33,6 +34,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'CONTACTS' | 'SERVICES' | 'PASSWORDS' | 'DOCS' | 'INTERNAL'>('GENERAL');
   const [activeViewTab, setActiveViewTab] = useState<'SUMMARY' | 'SERVICES' | 'REQUISITIONS' | 'TASKS' | 'HISTORY' | 'FILES' | 'PASSWORDS'>('SUMMARY');
+  const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
 
   const [editingClient, setEditingClient] = useState<Partial<Client>>({});
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
@@ -156,87 +158,210 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     />
                 </div>
             </div>
-            {!isEmployee && (
-                <button 
-                    onClick={() => { 
-                        setEditingClient({ status: 'ACTIVE', level: 'BASIC', isRecurring: true, systemAccesses: [] }); 
-                        setActiveTab('GENERAL');
-                        setIsModalOpen(true); 
-                    }} 
-                    className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95"
-                >
-                    <Plus size={18} strokeWidth={3} /> Novo Cliente
-                </button>
-            )}
+            
+            <div className="flex items-center gap-4">
+                {/* View Switcher Toggle */}
+                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-2xl border border-slate-100 shrink-0">
+                    <button
+                        onClick={() => setViewMode('GRID')}
+                        className={`p-2 rounded-xl transition-all ${
+                            viewMode === 'GRID' 
+                                ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-150' 
+                                : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                        title="Visualização em Grade"
+                    >
+                        <Layout size={18} />
+                    </button>
+                    <button
+                        onClick={() => setViewMode('LIST')}
+                        className={`p-2 rounded-xl transition-all ${
+                            viewMode === 'LIST' 
+                                ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-150' 
+                                : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                        title="Visualização em Lista"
+                    >
+                        <List size={18} />
+                    </button>
+                </div>
+
+                {!isEmployee && (
+                    <button 
+                        onClick={() => { 
+                            setEditingClient({ status: 'ACTIVE', level: 'BASIC', isRecurring: true, systemAccesses: [] }); 
+                            setActiveTab('GENERAL');
+                            setIsModalOpen(true); 
+                        }} 
+                        className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 shrink-0"
+                    >
+                        <Plus size={18} strokeWidth={3} /> Novo Cliente
+                    </button>
+                )}
+            </div>
         </div>
 
-        {/* CLIENT GRID */}
+        {/* CLIENT DISPLAY SECTION */}
         <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredClients.map(client => (
-                    <div 
-                        key={client.id} 
-                        onClick={() => { setViewingClient(client); setActiveViewTab('SUMMARY'); }}
-                        className="bg-white rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:border-pink-100 transition-all cursor-pointer group flex flex-col overflow-hidden"
-                    >
-                        <div className="p-6 flex-1">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                                    client.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                    client.status === 'LEAD' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                                    'bg-slate-50 text-slate-500 border border-slate-100'
-                                }`}>
-                                    {client.status}
-                                </div>
-                                {!isEmployee && (
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); setEditingClient({ ...client, systemAccesses: client.systemAccesses || [] }); setActiveTab('GENERAL'); setIsModalOpen(true); }} 
-                                            className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
-                                        >
-                                            <Edit2 size={14}/>
-                                        </button>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }} 
-                                            className="p-2 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-all"
-                                        >
-                                            <Trash2 size={14}/>
-                                        </button>
+            {viewMode === 'GRID' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredClients.map(client => (
+                        <div 
+                            key={client.id} 
+                            onClick={() => { setViewingClient(client); setActiveViewTab('SUMMARY'); }}
+                            className="bg-white rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:border-pink-100 transition-all cursor-pointer group flex flex-col overflow-hidden animate-in fade-in duration-300"
+                        >
+                            <div className="p-6 flex-1">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                        client.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                        client.status === 'LEAD' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                        'bg-slate-50 text-slate-500 border border-slate-100'
+                                    }`}>
+                                        {client.status}
                                     </div>
-                                )}
+                                    {!isEmployee && (
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setEditingClient({ ...client, systemAccesses: client.systemAccesses || [] }); setActiveTab('GENERAL'); setIsModalOpen(true); }} 
+                                                className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
+                                            >
+                                                <Edit2 size={14}/>
+                                            </button>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }} 
+                                                className="p-2 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-all"
+                                            >
+                                                <Trash2 size={14}/>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <h3 className="font-black text-slate-800 text-lg leading-tight mb-1 group-hover:text-pink-600 transition-colors truncate">{client.name}</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4 truncate">{client.legalName || 'Razão Social não inf.'}</p>
+                                
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <UserCheck size={14} className="text-slate-300"/>
+                                        <span className="text-[11px] font-bold truncate">{users.find(u => u.id === client.responsibleId)?.name || 'Sem responsável'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <Users size={14} className="text-slate-300"/>
+                                        <span className="text-[11px] font-bold truncate">{squads.find(s => s.id === client.squadId)?.name || 'Sem squad'}</span>
+                                    </div>
+                                </div>
                             </div>
                             
-                            <h3 className="font-black text-slate-800 text-lg leading-tight mb-1 group-hover:text-pink-600 transition-colors">{client.name}</h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">{client.legalName || 'Razão Social não inf.'}</p>
-                            
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-slate-500">
-                                    <UserCheck size={14} className="text-slate-300"/>
-                                    <span className="text-[11px] font-bold">{users.find(u => u.id === client.responsibleId)?.name || 'Sem responsável'}</span>
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                                <div className="flex -space-x-2">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-black text-slate-500">
+                                            {i}
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="flex items-center gap-2 text-slate-500">
-                                    <Users size={14} className="text-slate-300"/>
-                                    <span className="text-[11px] font-bold">{squads.find(s => s.id === client.squadId)?.name || 'Sem squad'}</span>
+                                <div className="flex items-center gap-1 text-pink-600 font-black text-xs">
+                                    <span className="text-[10px] text-slate-400">R$</span>
+                                    {client.monthlyValue?.toLocaleString() || '0'}
                                 </div>
                             </div>
                         </div>
-                        
-                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-                            <div className="flex -space-x-2">
-                                {[1, 2, 3].map(i => (
-                                    <div key={i} className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-black text-slate-500">
-                                        {i}
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="flex items-center gap-1 text-pink-600 font-black text-xs">
-                                <span className="text-[10px] text-slate-400">R$</span>
-                                {client.monthlyValue?.toLocaleString() || '0'}
-                            </div>
-                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-300">
+                    <div className="hidden lg:grid grid-cols-12 gap-4 px-8 py-5 bg-slate-50/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <div className="col-span-4">Cliente / Razão Social</div>
+                        <div className="col-span-2">Responsável</div>
+                        <div className="col-span-2">Squad</div>
+                        <div className="col-span-2 text-right">Fee Mensal</div>
+                        <div className="col-span-2 text-right">Ações</div>
                     </div>
-                ))}
-            </div>
+                    {filteredClients.length === 0 ? (
+                        <div className="p-16 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                            Nenhum cliente cadastrado.
+                        </div>
+                    ) : (
+                        filteredClients.map(client => {
+                            const responsibleName = users.find(u => u.id === client.responsibleId)?.name || 'Sem responsável';
+                            const squadName = squads.find(s => s.id === client.squadId)?.name || 'Sem squad';
+                            return (
+                                <div 
+                                    key={client.id}
+                                    onClick={() => { setViewingClient(client); setActiveViewTab('SUMMARY'); }}
+                                    className="lg:grid lg:grid-cols-12 gap-4 items-center px-8 py-5 hover:bg-slate-50/40 transition-colors cursor-pointer flex flex-col lg:flex-row text-center lg:text-left"
+                                >
+                                    <div className="col-span-4 flex flex-col min-w-0 w-full">
+                                        <div className="flex items-center gap-3 justify-center lg:justify-start">
+                                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                                client.status === 'ACTIVE' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' :
+                                                client.status === 'LEAD' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' :
+                                                'bg-slate-300'
+                                            }`}></div>
+                                            <h4 className="text-base font-black text-slate-800 tracking-tight truncate hover:text-pink-600 transition-colors">
+                                                {client.name}
+                                            </h4>
+                                        </div>
+                                        <p className="text-slate-400 text-xs mt-0.5 truncate pl-5 select-all">{client.legalName || 'Razão Social não informada'}</p>
+                                    </div>
+
+                                    <div className="col-span-2 mt-2 lg:mt-0 w-full">
+                                        <span className="lg:hidden text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Responsável</span>
+                                        <span className="text-slate-600 text-xs font-bold leading-none truncate flex items-center gap-1.5 justify-center lg:justify-start">
+                                            <UserCheck size={12} className="text-slate-400 hidden lg:inline shrink-0" />
+                                            {responsibleName}
+                                        </span>
+                                    </div>
+
+                                    <div className="col-span-2 mt-2 lg:mt-0 w-full">
+                                        <span className="lg:hidden text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Squad</span>
+                                        <span className="text-slate-500 text-xs font-bold truncate flex items-center gap-1.5 justify-center lg:justify-start">
+                                            <Users size={12} className="text-slate-400 hidden lg:inline shrink-0" />
+                                            {squadName}
+                                        </span>
+                                    </div>
+
+                                    <div className="col-span-2 text-center lg:text-right w-full mt-2 lg:mt-0">
+                                        <span className="lg:hidden text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Fee Mensal</span>
+                                        <span className="text-sm font-black text-pink-600">
+                                            R$ {client.monthlyValue?.toLocaleString() || '0'}
+                                        </span>
+                                    </div>
+
+                                    <div className="col-span-2 flex items-center justify-center lg:justify-end gap-2 w-full mt-4 lg:mt-0 shrink-0" onClick={e => e.stopPropagation()}>
+                                        <button 
+                                            onClick={() => { setViewingClient(client); setActiveViewTab('SUMMARY'); }}
+                                            className="p-2.5 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-xl transition-all"
+                                            title="Visualizar"
+                                        >
+                                            <Eye size={14} />
+                                        </button>
+                                        {!isEmployee && (
+                                            <>
+                                                <button 
+                                                    onClick={() => { setEditingClient({ ...client, systemAccesses: client.systemAccesses || [] }); setActiveTab('GENERAL'); setIsModalOpen(true); }} 
+                                                    className="p-2.5 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-pink-600 rounded-xl transition-all"
+                                                    title="Editar"
+                                                >
+                                                    <Edit2 size={14}/>
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDelete(client.id)}
+                                                    className="p-2.5 bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all"
+                                                    title="Excluir"
+                                                >
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            )}
         </div>
 
         {/* REGISTRATION MODAL */}
