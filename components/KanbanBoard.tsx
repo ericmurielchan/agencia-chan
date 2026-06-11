@@ -566,6 +566,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             currentUser={currentUser} 
             openConfirm={openConfirm}
             clients={clients}
+            addNotification={addNotification}
         />
       )}
     </div>

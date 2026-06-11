@@ -20,11 +20,12 @@ interface TaskModalProps {
     currentUser: User;
     openConfirm: (options: ConfirmOptions) => Promise<boolean>;
     clients: Client[];
+    addNotification: (data: any) => Promise<void>;
 }
 
 const PRESET_COLORS = ['#db2777', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#0f172a', '#64748b', '#ec4899', '#6366f1'];
 
-export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUpdate, onDeleteTask, currentUser, openConfirm, clients }) => {
+export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUpdate, onDeleteTask, currentUser, openConfirm, clients, addNotification }) => {
     const [localTitle, setLocalTitle] = useState(task.title);
     const [localDesc, setLocalDesc] = useState(task.description);
     const [newChecklistText, setNewChecklistText] = useState('');
@@ -172,8 +173,29 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
 
     const handleAddComment = () => {
         if (!newComment.trim()) return;
-        const comment: Comment = { id: Date.now().toString(), userId: currentUser.id, text: newComment, timestamp: Date.now() };
+        const commentText = newComment;
+        const comment: Comment = { id: Date.now().toString(), userId: currentUser.id, text: commentText, timestamp: Date.now() };
         onUpdate({ ...task, comments: [...task.comments, comment] });
+
+        // Trigger notifications for mentioned users
+        users.forEach(u => {
+            if (u.id !== currentUser.id && commentText.includes(`@${u.name}`)) {
+                addNotification({
+                    title: 'Mencionou você',
+                    message: `${currentUser.name} mencionou você na tarefa "${task.title}": "${commentText}"`,
+                    type: 'INFO',
+                    priority: 'HIGH',
+                    originModule: 'KANBAN',
+                    targetUserId: u.id,
+                    navToView: 'kanban',
+                    metadata: {
+                        referenceId: task.id,
+                        module: 'kanban'
+                    }
+                }).catch((err: any) => console.error("Erro ao enviar notificação de menção:", err));
+            }
+        });
+
         setNewComment('');
     };
 

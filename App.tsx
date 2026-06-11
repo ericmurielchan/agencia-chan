@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Sidebar } from './components/Sidebar';
 import { KanbanBoard } from './components/KanbanBoard';
 import { CRMModule } from './components/crm/CRMModule';
@@ -127,6 +128,35 @@ const App: React.FC = () => {
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
+
+  const [activeToasts, setActiveToasts] = useState<Notification[]>([]);
+
+  const filterNotificationWithUser = (n: Notification, user: User | null) => {
+    if (!user) return false;
+    const basicMatch = n.targetUserId === user.id || (!n.targetUserId && (!n.targetRole || n.targetRole === user.role));
+    if (!basicMatch) return false;
+
+    if (user.role === 'COMMERCIAL') {
+        if (n.targetUserId === user.id) return true;
+        const commercialModules: SystemModule[] = ['CRM', 'CLIENTS', 'HELP', 'DASHBOARD'];
+        return commercialModules.includes(n.originModule);
+    }
+    return true;
+  };
+
+  const triggerToast = (notif: Notification) => {
+    const user = currentUserRef.current;
+    if (!user || user.preferences?.systemNotifications === false) return;
+
+    setActiveToasts(prev => {
+      if (prev.some(t => t.id === notif.id)) return prev;
+      return [...prev, notif];
+    });
+
+    setTimeout(() => {
+      setActiveToasts(prev => prev.filter(t => t.id !== notif.id));
+    }, 4500);
+  };
 
   const [currentView, setCurrentView] = useState(() => {
     return localStorage.getItem('currentView') || 'dashboard';
@@ -344,6 +374,10 @@ const App: React.FC = () => {
         const newNotif = mapNotification(payload.new);
         setNotifications(prev => {
           if (prev.some(n => n.id === newNotif.id)) return prev;
+          
+          if (filterNotificationWithUser(newNotif, currentUserRef.current)) {
+            triggerToast(newNotif);
+          }
           return [newNotif, ...prev];
         });
       } else if (payload.eventType === 'UPDATE') {
@@ -659,6 +693,10 @@ const App: React.FC = () => {
         return [newNotif, ...prev];
     });
     await saveNotification(newNotif);
+
+    if (filterNotificationWithUser(newNotif, currentUserRef.current)) {
+      triggerToast(newNotif);
+    }
   };
 
   if (isInitializing) {
@@ -686,21 +724,7 @@ const App: React.FC = () => {
   }
 
   const filterNotification = (n: Notification) => {
-    // Basic existence and status checks
-    const basicMatch = n.targetUserId === currentUser.id || (!n.targetUserId && (!n.targetRole || n.targetRole === currentUser.role));
-    if (!basicMatch) return false;
-
-    // Commercial restrictions (Production vs Commercial)
-    if (currentUser.role === 'COMMERCIAL') {
-        // If they are explicitly targeted by ID, allow it regardless of module
-        if (n.targetUserId === currentUser.id) return true;
-        
-        // Otherwise, only show notifications from commercial-related modules
-        const commercialModules: SystemModule[] = ['CRM', 'CLIENTS', 'HELP', 'DASHBOARD'];
-        return commercialModules.includes(n.originModule);
-    }
-
-    return true;
+    return filterNotificationWithUser(n, currentUser);
   };
 
   const unreadCount = (currentUser.preferences?.systemNotifications !== false) 
@@ -1483,6 +1507,64 @@ const App: React.FC = () => {
       </main>
 
       {confirmOptions && <ConfirmDialog options={confirmOptions} onConfirm={() => handleConfirmAction(true)} onCancel={() => handleConfirmAction(false)} />}
+
+      {/* Toast Push Notifications layer */}
+      <div className="fixed top-4 right-4 z-[99999] flex flex-col gap-3 pointer-events-none max-w-sm w-full font-sans">
+        <AnimatePresence>
+          {activeToasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              layout
+              initial={{ opacity: 0, y: -20, scale: 0.9, x: 50 }}
+              animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.85, x: 100, transition: { duration: 0.2 } }}
+              className="pointer-events-auto bg-white/95 backdrop-blur-md rounded-2xl border border-slate-100 shadow-2xl p-4 flex gap-3 items-start overflow-hidden relative group/toast"
+            >
+              {/* Progress bar decay */}
+              <motion.div 
+                initial={{ width: "100%" }}
+                animate={{ width: "0%" }}
+                transition={{ duration: 4.5, ease: "linear" }}
+                className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-pink-500 to-violet-500"
+              />
+              
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                  toast.type === 'ALERT' ? 'bg-red-50 text-red-600' :
+                  toast.type === 'WARNING' ? 'bg-amber-50 text-amber-600' :
+                  toast.type === 'SUCCESS' ? 'bg-emerald-50 text-emerald-600' :
+                  'bg-pink-50 text-pink-600'
+              }`}>
+                  <Bell size={16} className="animate-bounce" />
+              </div>
+              
+              <div className="flex-1 min-w-0 pr-6">
+                <p className="text-xs font-black uppercase tracking-tight text-slate-900 truncate mb-0.5">{toast.title}</p>
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed line-clamp-2">{toast.message}</p>
+                
+                {toast.navToView && (
+                  <button 
+                    onClick={() => {
+                      handleNotificationClick(toast);
+                      setActiveToasts(prev => prev.filter(t => t.id !== toast.id));
+                    }}
+                    className="mt-2 text-[9px] font-black uppercase tracking-widest text-pink-600 hover:text-pink-700 flex items-center gap-1 group/btn pointer-events-auto cursor-pointer"
+                  >
+                    <span>Ver detalhes</span>
+                    <span className="transform transition-transform group-hover/btn:translate-x-0.5">→</span>
+                  </button>
+                )}
+              </div>
+
+              <button 
+                onClick={() => setActiveToasts(prev => prev.filter(t => t.id !== toast.id))}
+                className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-50 pointer-events-auto cursor-pointer"
+              >
+                <XIcon size={14} />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };
