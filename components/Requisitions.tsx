@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from './Modal';
 import { Requisition, User, Notification, FinancialTransaction, Client, ConfirmOptions } from '../types';
-import { Plus, Check, X, ShoppingBag, DollarSign, Clock, Calendar, AlertTriangle, User as UserIcon, Filter, Search, ChevronRight, ReceiptText, Building2, Trash2, Archive, Upload, FileText, XCircle, Loader2, Trash } from 'lucide-react';
+import { Plus, Check, X, ShoppingBag, DollarSign, Clock, Calendar, AlertTriangle, User as UserIcon, Filter, Search, ChevronRight, ReceiptText, Building2, Trash2, Archive, Upload, FileText, XCircle, Loader2, Trash, Layout, List } from 'lucide-react';
 import { deleteRequisition, archiveRequisition } from '../services/supabaseService';
 import { uploadFile } from '../services/uploadService';
 
@@ -31,6 +31,7 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [selectedReqForReject, setSelectedReqForReject] = useState<Requisition | null>(null);
@@ -445,6 +446,31 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
               />
             </div>
 
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200 shrink-0">
+               <button
+                 onClick={() => setViewMode('GRID')}
+                 className={`p-2 rounded-xl transition-all ${
+                   viewMode === 'GRID' 
+                     ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-150' 
+                     : 'text-slate-400 hover:text-slate-600'
+                 }`}
+                 title="Visualização em Grade"
+               >
+                 <Layout size={18} />
+               </button>
+               <button
+                 onClick={() => setViewMode('LIST')}
+                 className={`p-2 rounded-xl transition-all ${
+                   viewMode === 'LIST' 
+                     ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-150' 
+                     : 'text-slate-400 hover:text-slate-600'
+                 }`}
+                 title="Visualização em Lista"
+               >
+                 <List size={18} />
+               </button>
+            </div>
+
             <button 
               onClick={() => { setEditingReq({ category: isClient ? 'Outros' : 'Compra' }); setIsCreateModalOpen(true); }}
               className="px-6 py-3 bg-pink-600 hover:bg-pink-700 text-white font-black text-[10px] uppercase tracking-[0.15em] rounded-2xl transition-all shadow-xl shadow-pink-500/20 flex items-center gap-3 hover:scale-[1.03] active:scale-95 whitespace-nowrap"
@@ -455,164 +481,300 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
         </div>
       </div>
 
-      {/* LISTAGEM DE CARDS */}
+      {/* LISTAGEM DE CARDS E LISTA */}
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-10">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {displayedRequisitions.length === 0 ? (
-            <div className="col-span-full py-24 text-center bg-white rounded-[32px] border-2 border-dashed border-slate-200 flex flex-col items-center">
-              <div className="p-6 bg-slate-50 rounded-full mb-4">
-                <ShoppingBag className="text-slate-300" size={48}/>
+        {viewMode === 'GRID' ? (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {displayedRequisitions.length === 0 ? (
+              <div className="col-span-full py-24 text-center bg-white rounded-[32px] border-2 border-dashed border-slate-200 flex flex-col items-center">
+                <div className="p-6 bg-slate-50 rounded-full mb-4">
+                  <ShoppingBag className="text-slate-300" size={48}/>
+                </div>
+                <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Nenhum pedido registrado no período</p>
               </div>
-              <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Nenhum pedido registrado no período</p>
-            </div>
-          ) : (
-            displayedRequisitions.map(req => {
-              const requester = users.find(u => u.id === req.requesterId);
-              const isProcessing = processingId === req.id;
+            ) : (
+              displayedRequisitions.map(req => {
+                const requester = users.find(u => u.id === req.requesterId);
+                const isProcessing = processingId === req.id;
 
-              const leftBorderColor = 
-                req.status === 'APPROVED' ? 'border-l-emerald-500' : 
-                req.status === 'REJECTED' ? 'border-l-red-500' : 'border-l-amber-500';
+                const leftBorderColor = 
+                  req.status === 'APPROVED' ? 'border-l-emerald-500' : 
+                  req.status === 'REJECTED' ? 'border-l-red-500' : 'border-l-amber-500';
 
-              const iconBgColor = 
-                req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100/50' : 
-                req.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100/50' : 
-                'bg-amber-50 text-amber-600 border-amber-100/50';
+                const iconBgColor = 
+                  req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100/50' : 
+                  req.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100/50' : 
+                  'bg-amber-50 text-amber-600 border-amber-100/50';
 
-              return (
-                <div 
-                  key={req.id} 
-                  onClick={() => setSelectedReq(req)}
-                  className={`group bg-white p-5 rounded-2xl border border-slate-100 border-l-4 ${leftBorderColor} hover:border-pink-200 hover:shadow-xl hover:shadow-slate-200/30 transition-all flex flex-col relative overflow-hidden cursor-pointer`}
-                >
-                  {isProcessing && (
-                    <div className="absolute inset-0 bg-white/80 z-20 flex items-center justify-center backdrop-blur-sm">
-                      <Clock className="animate-spin text-pink-600" size={32}/>
-                    </div>
-                  )}
-                  
-                  {/* Top Section: Main Info & Price */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                    {/* Left: Category icon + texts */}
-                    <div className="flex items-start gap-4 flex-1 min-w-0">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border transition-colors ${iconBgColor}`}>
-                        {req.category === 'Reembolso' ? <DollarSign size={20}/> : <ShoppingBag size={20}/>}
+                return (
+                  <div 
+                    key={req.id} 
+                    onClick={() => setSelectedReq(req)}
+                    className={`group bg-white p-5 rounded-2xl border border-slate-100 border-l-4 ${leftBorderColor} hover:border-pink-200 hover:shadow-xl hover:shadow-slate-200/30 transition-all flex flex-col relative overflow-hidden cursor-pointer`}
+                  >
+                    {isProcessing && (
+                      <div className="absolute inset-0 bg-white/80 z-20 flex items-center justify-center backdrop-blur-sm">
+                        <Clock className="animate-spin text-pink-600" size={32}/>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100 tracking-wider">
-                            {req.category}
-                          </span>
-                          <span className="text-slate-300">•</span>
-                          <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 uppercase tracking-tight">
-                            <Calendar size={11} className="text-slate-300"/> 
-                            {req.date.split('-').reverse().join('/')}
-                          </span>
+                    )}
+                    
+                    {/* Top Section: Main Info & Price */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                      {/* Left: Category icon + texts */}
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border transition-colors ${iconBgColor}`}>
+                          {req.category === 'Reembolso' ? <DollarSign size={20}/> : <ShoppingBag size={20}/>}
                         </div>
-                        
-                        <h4 className="font-extrabold text-slate-800 text-[15px] leading-tight mt-2 tracking-tight group-hover:text-pink-600 transition-colors">
-                          {req.title}
-                        </h4>
-
-                        <div className="flex items-center gap-3 mt-3">
-                          <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
-                            {requester?.avatar ? (
-                              <img src={requester.avatar} className="w-4.5 h-4.5 rounded-full object-cover border border-white" />
-                            ) : (
-                              <div className="w-4.5 h-4.5 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-[8px] font-black">{requester?.name?.charAt(0)}</div>
-                            )}
-                            <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest leading-none">
-                              {requester?.name}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100 tracking-wider">
+                              {req.category}
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 uppercase tracking-tight">
+                              <Calendar size={11} className="text-slate-300"/> 
+                              {req.date.split('-').reverse().join('/')}
                             </span>
                           </div>
+                          
+                          <h4 className="font-extrabold text-slate-800 text-[15px] leading-tight mt-2 tracking-tight group-hover:text-pink-600 transition-colors">
+                            {req.title}
+                          </h4>
 
-                          {req.attachments && req.attachments.length > 0 && (
-                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
-                              <FileText size={11} />
-                              <span className="text-[9px] font-extrabold uppercase tracking-widest leading-none">
-                                {req.attachments.length} {req.attachments.length === 1 ? 'Anexo' : 'Anexos'}
+                          <div className="flex items-center gap-3 mt-3">
+                            <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
+                              {requester?.avatar ? (
+                                <img src={requester.avatar} className="w-4.5 h-4.5 rounded-full object-cover border border-white" />
+                              ) : (
+                                <div className="w-4.5 h-4.5 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-[8px] font-black">{requester?.name?.charAt(0)}</div>
+                              )}
+                              <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest leading-none">
+                                {requester?.name}
                               </span>
                             </div>
+
+                            {req.attachments && req.attachments.length > 0 && (
+                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                <FileText size={11} />
+                                <span className="text-[9px] font-extrabold uppercase tracking-widest leading-none">
+                                  {req.attachments.length} {req.attachments.length === 1 ? 'Anexo' : 'Anexos'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Price & Status */}
+                      <div className="flex sm:flex-col items-end justify-between sm:justify-start gap-4 w-full sm:w-auto shrink-0 self-stretch sm:self-auto pt-1">
+                        {/* Status Badge */}
+                        <span className={`px-3.5 py-1 rounded-xl text-[9px] font-extrabold uppercase tracking-widest border shadow-sm flex items-center gap-1.5 ${
+                          req.status === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
+                          req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            req.status === 'PENDING' ? 'bg-amber-500 animate-pulse' : 
+                            req.status === 'APPROVED' ? 'bg-emerald-500' : 'bg-red-500'
+                          }`} />
+                          {req.status === 'PENDING' ? 'Aguardando' : req.status === 'APPROVED' ? 'Aprovado' : 'Recusado'}
+                        </span>
+
+                        {/* Price tag */}
+                        <div className="text-right">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Custo Estimado</p>
+                          <p className="font-extrabold text-slate-800 text-base md:text-lg leading-none tracking-tight">
+                            R$ {req.estimatedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom: Action Footer */}
+                    {((canApprove && req.status === 'PENDING') || canArchiveOrDelete(req)) && (
+                      <div className="border-t border-slate-50 mt-4 pt-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+                        <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider hidden sm:inline-block">
+                          {canApprove && req.status === 'PENDING' ? 'Controles Administrativos' : 'Controles de Registro'}
+                        </span>
+                        <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
+                          {canApprove && req.status === 'PENDING' && (
+                            <>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleApproveReq(req); }} 
+                                title="Aprovar Solicitação" 
+                                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-xl transition-all border border-emerald-100 hover:border-emerald-600 shadow-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"
+                              >
+                                <Check size={13} strokeWidth={3}/> Aprovar
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setSelectedReqForReject(req); setIsRejectModalOpen(true); }} 
+                                title="Recusar Solicitação" 
+                                className="px-3 py-2 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition-all border border-red-100 hover:border-red-600 shadow-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"
+                              >
+                                <X size={13} strokeWidth={3}/> Recusar
+                              </button>
+                            </>
+                          )}
+                          {canArchiveOrDelete(req) && (
+                            <>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleArchiveReq(req.id, req); }} 
+                                title="Arquivar Solicitação" 
+                                className="p-2 bg-slate-50 hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl transition-all border border-slate-200 hover:border-slate-900 shadow-sm flex items-center justify-center shrink-0"
+                              >
+                                <Archive size={14}/>
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleDeleteReq(req.id, req); }} 
+                                title="Excluir Permanentemente" 
+                                className="p-2 bg-red-50 hover:bg-red-600 hover:text-white text-red-400 rounded-xl transition-all border border-red-100 hover:border-red-600 shadow-sm flex items-center justify-center shrink-0"
+                              >
+                                <Trash2 size={14}/>
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-300">
+            <div className="hidden lg:grid grid-cols-12 gap-4 px-8 py-5 bg-slate-50/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <div className="col-span-5">Solicitação / Categoria</div>
+              <div className="col-span-2">Solicitante</div>
+              <div className="col-span-2">Status</div>
+              <div className="col-span-1 text-right">Custo Est.</div>
+              <div className="col-span-2 text-right">Ações</div>
+            </div>
+            {displayedRequisitions.length === 0 ? (
+              <div className="p-16 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                Nenhuma solicitação cadastrada.
+              </div>
+            ) : (
+              displayedRequisitions.map(req => {
+                const requester = users.find(u => u.id === req.requesterId);
+                const isProcessing = processingId === req.id;
+                
+                const leftBorderColor = 
+                  req.status === 'APPROVED' ? 'border-l-emerald-500' : 
+                  req.status === 'REJECTED' ? 'border-l-red-500' : 'border-l-amber-500';
+
+                return (
+                  <div 
+                    key={req.id}
+                    onClick={() => setSelectedReq(req)}
+                    className={`lg:grid lg:grid-cols-12 gap-4 items-center px-8 py-4.5 hover:bg-slate-50/40 border-l-4 ${leftBorderColor} transition-colors cursor-pointer flex flex-col lg:flex-row text-center lg:text-left relative`}
+                  >
+                    {isProcessing && (
+                      <div className="absolute inset-0 bg-white/80 z-20 flex items-center justify-center backdrop-blur-sm">
+                        <Clock className="animate-spin text-pink-600" size={24}/>
+                      </div>
+                    )}
+
+                    <div className="col-span-5 flex flex-col min-w-0 w-full">
+                      <div className="flex items-center gap-3 justify-center lg:justify-start">
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                          req.status === 'APPROVED' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' :
+                          req.status === 'REJECTED' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' :
+                          'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                        }`}></div>
+                        <h4 className="text-sm font-black text-slate-800 tracking-tight truncate hover:text-pink-600 transition-colors">
+                          {req.title}
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 justify-center lg:justify-start pl-5.5 text-[10px] text-slate-400 font-bold select-none">
+                        <span className="uppercase text-[9px] font-extrabold tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md">
+                          {req.category}
+                        </span>
+                        <span>•</span>
+                        <span>{req.date.split('-').reverse().join('/')}</span>
+                        {req.attachments && req.attachments.length > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="text-emerald-600 font-extrabold">{req.attachments.length} {req.attachments.length === 1 ? 'Anexo' : 'Anexos'}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Right: Price & Status */}
-                    <div className="flex sm:flex-col items-end justify-between sm:justify-start gap-4 w-full sm:w-auto shrink-0 self-stretch sm:self-auto pt-1">
-                      {/* Status Badge */}
-                      <span className={`px-3.5 py-1 rounded-xl text-[9px] font-extrabold uppercase tracking-widest border shadow-sm flex items-center gap-1.5 ${
-                        req.status === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
-                        req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          req.status === 'PENDING' ? 'bg-amber-500 animate-pulse' : 
-                          req.status === 'APPROVED' ? 'bg-emerald-500' : 'bg-red-500'
-                        }`} />
-                        {req.status === 'PENDING' ? 'Aguardando' : req.status === 'APPROVED' ? 'Aprovado' : 'Recusado'}
+                    <div className="col-span-2 mt-2 lg:mt-0 w-full">
+                      <span className="lg:hidden text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Solicitante</span>
+                      <span className="text-slate-650 text-xs font-bold leading-none truncate flex items-center gap-1.5 justify-center lg:justify-start">
+                        {requester?.avatar ? (
+                          <img src={requester.avatar} className="w-5 h-5 rounded-full object-cover border border-slate-100" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-[9px] font-black">{requester?.name?.charAt(0)}</div>
+                        )}
+                        {requester?.name || 'Sistema'}
                       </span>
+                    </div>
 
-                      {/* Price tag */}
-                      <div className="text-right">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Custo Estimado</p>
-                        <p className="font-extrabold text-slate-800 text-base md:text-lg leading-none tracking-tight">
-                          R$ {req.estimatedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
+                    <div className="col-span-2 mt-2 lg:mt-0 w-full">
+                      <span className="lg:hidden text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Status</span>
+                      <div className="flex justify-center lg:justify-start">
+                        <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-widest border ${
+                          req.status === 'PENDING' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
+                          req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                        }`}>
+                          {req.status === 'PENDING' ? 'Aguardando' : req.status === 'APPROVED' ? 'Aprovado' : 'Recusado'}
+                        </span>
                       </div>
+                    </div>
+
+                    <div className="col-span-1 text-center lg:text-right w-full mt-2 lg:mt-0">
+                      <span className="lg:hidden text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Custo Estimado</span>
+                      <span className="text-sm font-black text-slate-800">
+                        R$ {req.estimatedCost?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                      </span>
+                    </div>
+
+                    <div className="col-span-2 flex items-center justify-center lg:justify-end gap-1.5 w-full mt-4 lg:mt-0 shrink-0" onClick={e => e.stopPropagation()}>
+                      {canApprove && req.status === 'PENDING' && (
+                        <>
+                          <button 
+                            onClick={() => handleApproveReq(req)} 
+                            title="Aprovar Solicitação" 
+                            className="p-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-xl transition-all border border-emerald-100 hover:border-emerald-600"
+                          >
+                            <Check size={14} strokeWidth={3}/>
+                          </button>
+                          <button 
+                            onClick={() => { setSelectedReqForReject(req); setIsRejectModalOpen(true); }} 
+                            title="Recusar Solicitação" 
+                            className="p-2 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition-all border border-red-100 hover:border-red-600"
+                          >
+                            <X size={14} strokeWidth={3}/>
+                          </button>
+                        </>
+                      )}
+                      {canArchiveOrDelete(req) && (
+                        <>
+                          <button 
+                            onClick={() => handleArchiveReq(req.id, req)} 
+                            title="Arquivar Solicitação" 
+                            className="p-2 bg-slate-50 hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl transition-all border border-slate-200"
+                          >
+                            <Archive size={14}/>
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteReq(req.id, req)} 
+                            title="Excluir Permanentemente" 
+                            className="p-2 bg-red-50 hover:bg-red-600 hover:text-white text-red-400 rounded-xl transition-all border border-red-100"
+                          >
+                            <Trash2 size={14}/>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
-
-                  {/* Bottom: Action Footer */}
-                  {((canApprove && req.status === 'PENDING') || canArchiveOrDelete(req)) && (
-                    <div className="border-t border-slate-50 mt-4 pt-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
-                      <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider hidden sm:inline-block">
-                        {canApprove && req.status === 'PENDING' ? 'Controles Administrativos' : 'Controles de Registro'}
-                      </span>
-                      <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
-                        {canApprove && req.status === 'PENDING' && (
-                          <>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleApproveReq(req); }} 
-                              title="Aprovar Solicitação" 
-                              className="px-3 py-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-xl transition-all border border-emerald-100 hover:border-emerald-600 shadow-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"
-                            >
-                              <Check size={13} strokeWidth={3}/> Aprovar
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); setSelectedReqForReject(req); setIsRejectModalOpen(true); }} 
-                              title="Recusar Solicitação" 
-                              className="px-3 py-2 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition-all border border-red-100 hover:border-red-600 shadow-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5"
-                            >
-                              <X size={13} strokeWidth={3}/> Recusar
-                            </button>
-                          </>
-                        )}
-                        {canArchiveOrDelete(req) && (
-                          <>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleArchiveReq(req.id, req); }} 
-                              title="Arquivar Solicitação" 
-                              className="p-2 bg-slate-50 hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl transition-all border border-slate-200 hover:border-slate-900 shadow-sm flex items-center justify-center shrink-0"
-                            >
-                              <Archive size={14}/>
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleDeleteReq(req.id, req); }} 
-                              title="Excluir Permanentemente" 
-                              className="p-2 bg-red-50 hover:bg-red-600 hover:text-white text-red-400 rounded-xl transition-all border border-red-100 hover:border-red-600 shadow-sm flex items-center justify-center shrink-0"
-                            >
-                              <Trash2 size={14}/>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
       </div>
