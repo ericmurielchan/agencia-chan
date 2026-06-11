@@ -5,7 +5,7 @@ import {
     Plus, Edit2, Trash2, ShoppingBag, CheckCircle, XCircle, X, 
     Layers, Clock, FileText, DollarSign, Tag, Info, 
     ChevronRight, Layout, ListChecks, MessageSquare, Eye,
-    AlertCircle, Search, Filter, MoreHorizontal, ArrowRight
+    AlertCircle, Search, Filter, MoreHorizontal, ArrowRight, List
 } from 'lucide-react';
 
 interface ServiceCatalogProps {
@@ -33,6 +33,7 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
     const [isViewOnly, setIsViewOnly] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('ALL');
+    const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
 
     const canManage = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE' || currentUser.role === 'COMMERCIAL';
     const canDelete = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE' || currentUser.role === 'COMMERCIAL';
@@ -153,8 +154,8 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
             </div>
 
             {/* Filters & Search */}
-            <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
+            <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col lg:flex-row gap-4 items-center">
+                <div className="relative flex-1 w-full">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
                         type="text"
@@ -164,125 +165,282 @@ export const ServiceCatalog: React.FC<ServiceCatalogProps> = ({
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
-                    {categories.map(cat => (
+                <div className="flex items-center gap-4 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0 hide-scrollbar justify-between lg:justify-end">
+                    <div className="flex items-center gap-2">
+                        {categories.map(cat => (
+                            <button
+                                key={cat}
+                                onClick={() => setFilterCategory(cat)}
+                                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                                    filterCategory === cat 
+                                        ? 'bg-slate-800 text-white shadow-md' 
+                                        : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                                }`}
+                            >
+                                {cat === 'ALL' ? 'Todos' : cat}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-2xl border border-slate-100 shrink-0">
                         <button
-                            key={cat}
-                            onClick={() => setFilterCategory(cat)}
-                            className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                                filterCategory === cat 
-                                    ? 'bg-slate-800 text-white shadow-md' 
-                                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                            onClick={() => setViewMode('GRID')}
+                            className={`p-2 rounded-xl transition-all ${
+                                viewMode === 'GRID' 
+                                    ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-100' 
+                                    : 'text-slate-400 hover:text-slate-600'
                             }`}
+                            title="Visualização em Grade"
                         >
-                            {cat === 'ALL' ? 'Todos' : cat}
+                            <Layout size={18} />
                         </button>
-                    ))}
+                        <button
+                            onClick={() => setViewMode('LIST')}
+                            className={`p-2 rounded-xl transition-all ${
+                                viewMode === 'LIST' 
+                                    ? 'bg-white text-pink-600 shadow-sm ring-1 ring-slate-100' 
+                                    : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                            title="Visualização em Lista"
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* Services Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredServices.map(service => (
-                    <div 
-                        key={service.id} 
-                        className={`group bg-white rounded-[40px] border-2 transition-all duration-300 hover:shadow-2xl hover:shadow-slate-200/50 flex flex-col ${
-                            service.status === 'ACTIVE' ? 'border-slate-50' : 'border-slate-100 opacity-75'
-                        }`}
-                    >
-                        <div className="p-8 flex-1">
-                            <div className="flex justify-between items-start mb-6">
-                                <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em] ${
-                                    service.type === 'COMBO' ? 'bg-pink-50 text-pink-600' :
-                                    service.type === 'RECURRENT' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
-                                }`}>
-                                    {service.type === 'COMBO' ? 'Combo / Pacote' :
-                                     service.type === 'RECURRENT' ? 'Recorrente' : 'Pontual'}
+            {/* Services Grid or List */}
+            {viewMode === 'GRID' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredServices.map(service => (
+                        <div 
+                            key={service.id} 
+                            className={`group bg-white rounded-[40px] border-2 transition-all duration-300 hover:shadow-2xl hover:shadow-slate-200/50 flex flex-col ${
+                                service.status === 'ACTIVE' ? 'border-slate-50' : 'border-slate-100 opacity-75'
+                            }`}
+                        >
+                            <div className="p-8 flex-1">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em] ${
+                                        service.type === 'COMBO' ? 'bg-pink-50 text-pink-600' :
+                                        service.type === 'RECURRENT' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
+                                    }`}>
+                                        {service.type === 'COMBO' ? 'Combo / Pacote' :
+                                         service.type === 'RECURRENT' ? 'Recorrente' : 'Pontual'}
+                                    </div>
+                                    <div className={`w-2.5 h-2.5 rounded-full ${service.status === 'ACTIVE' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
                                 </div>
-                                <div className={`w-2.5 h-2.5 rounded-full ${service.status === 'ACTIVE' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
-                            </div>
 
-                            <h3 className="text-xl font-black text-slate-800 mb-2 group-hover:text-pink-600 transition-colors">{service.name}</h3>
-                            <p className="text-slate-500 text-sm font-medium line-clamp-2 mb-6 leading-relaxed">{service.description}</p>
+                                <h3 className="text-xl font-black text-slate-800 mb-2 group-hover:text-pink-600 transition-colors">{service.name}</h3>
+                                <p className="text-slate-500 text-sm font-medium line-clamp-2 mb-6 leading-relaxed">{service.description}</p>
 
-                            {service.type === 'COMBO' && service.servicesInCombo && service.servicesInCombo.length > 0 && (
-                                <div className="mt-4 mb-6 p-4 bg-pink-50/20 rounded-2xl border border-pink-100/30">
-                                    <p className="text-[8px] font-bold uppercase tracking-wider text-pink-600 mb-2">Serviços inclusos no Combo:</p>
-                                    <div className="flex flex-col gap-1.5">
-                                        {service.servicesInCombo.map(id => {
-                                            const sub = services.find(s => s.id === id);
-                                            return sub ? (
-                                                <div key={id} className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
-                                                    <span>{sub.name}</span>
-                                                </div>
-                                            ) : null;
-                                        })}
+                                {service.type === 'COMBO' && service.servicesInCombo && service.servicesInCombo.length > 0 && (
+                                    <div className="mt-4 mb-6 p-4 bg-pink-50/20 rounded-2xl border border-pink-100/30">
+                                        <p className="text-[8px] font-bold uppercase tracking-wider text-pink-600 mb-2">Serviços inclusos no Combo:</p>
+                                        <div className="flex flex-col gap-1.5">
+                                            {service.servicesInCombo.map(id => {
+                                                const sub = services.find(s => s.id === id);
+                                                return sub ? (
+                                                    <div key={id} className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
+                                                        <span>{sub.name}</span>
+                                                    </div>
+                                                ) : null;
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex flex-wrap gap-2 mb-6">
+                                    <span className="px-3 py-1.5 bg-slate-50 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-100">
+                                        {service.category}
+                                    </span>
+                                    {service.deliveries.length > 0 && (
+                                        <span className="px-3 py-1.5 bg-pink-50 text-pink-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-pink-100 flex items-center gap-1.5">
+                                            <ListChecks size={12} />
+                                            {service.deliveries.length} Entregas
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Valor Base</p>
+                                        <p className="text-lg font-black text-slate-800">R$ {(service.basePrice || 0).toLocaleString()}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => handleOpenModal(service, true)}
+                                            className="p-3 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-2xl transition-all"
+                                            title="Visualizar"
+                                        >
+                                            <Eye size={18} />
+                                        </button>
+                                        {canManage && (
+                                            <button 
+                                                onClick={() => handleOpenModal(service)}
+                                                className="p-3 bg-slate-50 text-slate-400 hover:bg-pink-50 hover:text-pink-600 rounded-2xl transition-all"
+                                                title="Editar"
+                                            >
+                                                <Edit2 size={18} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                            )}
-
-                            <div className="flex flex-wrap gap-2 mb-6">
-                                <span className="px-3 py-1.5 bg-slate-50 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-100">
-                                    {service.category}
-                                </span>
-                                {service.deliveries.length > 0 && (
-                                    <span className="px-3 py-1.5 bg-pink-50 text-pink-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-pink-100 flex items-center gap-1.5">
-                                        <ListChecks size={12} />
-                                        {service.deliveries.length} Entregas
-                                    </span>
-                                )}
                             </div>
 
-                            <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
-                                <div>
-                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Valor Base</p>
-                                    <p className="text-lg font-black text-slate-800">R$ {(service.basePrice || 0).toLocaleString()}</p>
+                            {canManage && (
+                                <div className="px-8 py-4 bg-slate-50/50 rounded-b-[40px] border-t border-slate-50 flex justify-between items-center">
+                                    <button 
+                                        onClick={() => toggleStatus(service)}
+                                        className={`text-[9px] font-black uppercase tracking-widest transition-colors ${
+                                            service.status === 'ACTIVE' ? 'text-slate-400 hover:text-red-500' : 'text-emerald-600 hover:text-emerald-700'
+                                        }`}
+                                    >
+                                        {service.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
+                                    </button>
+                                    {canDelete && (
+                                        <button 
+                                            onClick={() => handleDelete(service.id)}
+                                            className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-red-500 transition-colors"
+                                        >
+                                            Excluir
+                                        </button>
+                                    )}
                                 </div>
-                                <div className="flex items-center gap-2">
+                            )}
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-300">
+                    <div className="hidden lg:grid grid-cols-12 gap-4 px-8 py-5 bg-slate-50/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <div className="col-span-4">Serviço</div>
+                        <div className="col-span-2">Categoria e Tipo</div>
+                        <div className="col-span-2 text-right">Preço Base</div>
+                        <div className="col-span-2 text-center">Entregas / Tarefas</div>
+                        <div className="col-span-2 text-right">Ações</div>
+                    </div>
+                    {filteredServices.length === 0 ? (
+                        <div className="p-16 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                            Nenhum serviço encontrado.
+                        </div>
+                    ) : (
+                        filteredServices.map(service => (
+                            <div 
+                                key={service.id} 
+                                className={`lg:grid lg:grid-cols-12 gap-4 items-center px-8 py-5 hover:bg-slate-50/40 transition-colors flex flex-col lg:flex-row text-center lg:text-left ${
+                                    service.status === 'ACTIVE' ? '' : 'opacity-75 bg-slate-50/20'
+                                }`}
+                            >
+                                {/* Name, description and sub services */}
+                                <div className="col-span-4 flex flex-col lg:flex-row lg:items-center gap-3 w-full">
+                                    <div className="flex items-center gap-3 w-full lg:w-auto">
+                                        <div className={`w-3 h-3 rounded-full shrink-0 ${service.status === 'ACTIVE' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-slate-300'}`}></div>
+                                        <h4 className="text-base font-black text-slate-800 tracking-tight cursor-pointer hover:text-pink-600 transition-colors truncate" onClick={() => handleOpenModal(service, true)}>
+                                            {service.name}
+                                        </h4>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-slate-400 text-xs line-clamp-1">{service.description}</p>
+                                        
+                                        {/* Sub services list for Combos in List view */}
+                                        {service.type === 'COMBO' && service.servicesInCombo && service.servicesInCombo.length > 0 && (
+                                            <div className="mt-1.5 flex flex-wrap gap-1.5 items-center justify-center lg:justify-start">
+                                                <span className="text-[8px] font-black text-pink-600 uppercase tracking-widest">Inclusos:</span>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {service.servicesInCombo.map(id => {
+                                                        const sub = services.find(s => s.id === id);
+                                                        return sub ? (
+                                                            <span key={id} className="text-[9px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                                                {sub.name}
+                                                            </span>
+                                                        ) : null;
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Category & Type */}
+                                <div className="col-span-2 flex lg:flex-col items-center lg:items-start gap-2 lg:gap-1.5 w-full mt-2 lg:mt-0 justify-center lg:justify-start">
+                                    <span className="px-2.5 py-1 bg-slate-50 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-100">
+                                        {service.category}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${
+                                        service.type === 'COMBO' ? 'bg-pink-50 text-pink-600' :
+                                        service.type === 'RECURRENT' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
+                                    }`}>
+                                        {service.type === 'COMBO' ? 'Combo / Pacote' :
+                                         service.type === 'RECURRENT' ? 'Recorrente' : 'Pontual'}
+                                    </span>
+                                </div>
+
+                                {/* Price */}
+                                <div className="col-span-2 w-full mt-2 lg:mt-0 text-center lg:text-right">
+                                    <span className="lg:hidden text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Valor Base</span>
+                                    <span className="text-base font-black text-slate-800">R$ {(service.basePrice || 0).toLocaleString()}</span>
+                                </div>
+
+                                {/* Deliveries/tasks counts */}
+                                <div className="col-span-2 w-full mt-2 lg:mt-0 flex gap-2 justify-center">
+                                    {service.deliveries.length > 0 ? (
+                                        <span className="px-2.5 py-1 bg-pink-50 text-pink-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-pink-100 flex items-center gap-1">
+                                            <ListChecks size={11} />
+                                            {service.deliveries.length} Entregas
+                                        </span>
+                                    ) : (
+                                        <span className="px-2.5 py-1 bg-slate-50 text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-100 flex items-center gap-1">
+                                            Sem entregas
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Actions */}
+                                <div className="col-span-2 w-full mt-4 lg:mt-0 flex items-center justify-center lg:justify-end gap-2 shrink-0">
                                     <button 
                                         onClick={() => handleOpenModal(service, true)}
-                                        className="p-3 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-2xl transition-all"
+                                        className="p-2.5 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-xl transition-all"
                                         title="Visualizar"
                                     >
-                                        <Eye size={18} />
+                                        <Eye size={16} />
                                     </button>
                                     {canManage && (
+                                        <>
+                                            <button 
+                                                onClick={() => handleOpenModal(service)}
+                                                className="p-2.5 bg-slate-50 text-slate-400 hover:bg-pink-50 hover:text-pink-600 rounded-xl transition-all"
+                                                title="Editar"
+                                            >
+                                                <Edit2 size={16} />
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleStatus(service)}
+                                                className={`px-2.5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                                                    service.status === 'ACTIVE' ? 'text-slate-400 hover:text-red-500 bg-slate-50' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                                                }`}
+                                                title={service.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
+                                            >
+                                                {service.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
+                                            </button>
+                                        </>
+                                    )}
+                                    {canManage && canDelete && (
                                         <button 
-                                            onClick={() => handleOpenModal(service)}
-                                            className="p-3 bg-slate-50 text-slate-400 hover:bg-pink-50 hover:text-pink-600 rounded-2xl transition-all"
-                                            title="Editar"
+                                            onClick={() => handleDelete(service.id)}
+                                            className="p-2.5 bg-slate-50 text-slate-300 hover:text-red-500 hover:bg-red-50/50 rounded-xl transition-all"
+                                            title="Excluir"
                                         >
-                                            <Edit2 size={18} />
+                                            <Trash2 size={16} />
                                         </button>
                                     )}
                                 </div>
                             </div>
-                        </div>
-
-                        {canManage && (
-                            <div className="px-8 py-4 bg-slate-50/50 rounded-b-[40px] border-t border-slate-50 flex justify-between items-center">
-                                <button 
-                                    onClick={() => toggleStatus(service)}
-                                    className={`text-[9px] font-black uppercase tracking-widest transition-colors ${
-                                        service.status === 'ACTIVE' ? 'text-slate-400 hover:text-red-500' : 'text-emerald-600 hover:text-emerald-700'
-                                    }`}
-                                >
-                                    {service.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
-                                </button>
-                                {canDelete && (
-                                    <button 
-                                        onClick={() => handleDelete(service.id)}
-                                        className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-red-500 transition-colors"
-                                    >
-                                        Excluir
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
+                        ))
+                    )}
+                </div>
+            )}
 
             {/* Service Modal */}
             {isModalOpen && editingService && (
