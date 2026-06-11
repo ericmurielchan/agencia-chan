@@ -1204,7 +1204,7 @@ const App: React.FC = () => {
                     
                     const result = await saveAgencyService(savedService);
                     if (!result.success) {
-                        console.error('Erro ao sincronizar serviço com o banco:', result.error);
+                        console.error('Erro ao sincronizar serviço com o banco:', (result as any).error);
                     } else if (result.serviceId && result.serviceId !== savedService.id) {
                         // Se o id foi redefinido no banco, sincroniza no estado
                         setServices(prev => prev.map(s => s.id === savedService.id ? { ...savedService, id: result.serviceId } : s));
@@ -1216,7 +1216,7 @@ const App: React.FC = () => {
                     
                     const result = await deleteAgencyService(id);
                     if (!result.success) {
-                        console.error('Erro ao excluir serviço do banco:', result.error);
+                        console.error('Erro ao excluir serviço do banco:', (result as any).error);
                     }
                 }}
               />

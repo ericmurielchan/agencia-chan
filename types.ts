@@ -101,6 +101,7 @@ export interface Task {
   history: HistoryLog[];
   archived?: boolean;
   createdAt: number;
+  position?: number;
   cover?: TaskCover;
   coverType?: 'color' | 'image' | null;
   coverValue?: string | null;

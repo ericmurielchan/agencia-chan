@@ -129,11 +129,29 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       e.preventDefault();
       if (!draggedTaskId) return;
       const task = tasks.find(t => t.id === draggedTaskId);
-      if (task && task.status !== targetColId) {
+      if (task) {
+          // Find sorted tasks under the target category to insert the dragged task at the very top (first position)
+          const colTasks = tasks
+            .filter(t => t.status === targetColId && t.id !== draggedTaskId && (showArchived ? t.archived : !t.archived))
+            .sort((a, b) => {
+              const posA = a.position !== undefined ? a.position : (a.createdAt || 0);
+              const posB = b.position !== undefined ? b.position : (b.createdAt || 0);
+              return posA - posB;
+            });
+
+          let newPosition = 0;
+          if (colTasks.length > 0) {
+              const firstTaskPos = colTasks[0].position !== undefined ? colTasks[0].position : (colTasks[0].createdAt || 0);
+              newPosition = firstTaskPos - 1000;
+          } else {
+              newPosition = Date.now();
+          }
+
           const now = Date.now();
           const updatedTask = { 
               ...task, 
               status: targetColId,
+              position: newPosition,
               completedAt: targetColId === 'DONE' ? now : (task.status === 'DONE' ? undefined : task.completedAt)
           };
           
@@ -144,13 +162,68 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               onSaveTask(updatedTask);
           }
           
-          if (targetColId === 'DONE') {
+          if (targetColId === 'DONE' && task.status !== 'DONE') {
               confetti({
                   particleCount: 150,
                   spread: 70,
                   origin: { y: 0.6 }
               });
           }
+      }
+      setDraggedTaskId(null);
+  };
+
+  const handleDropOnTask = (draggedId: string, targetId: string) => {
+      const draggedTask = tasks.find(t => t.id === draggedId);
+      const targetTask = tasks.find(t => t.id === targetId);
+      if (!draggedTask || !targetTask) return;
+      
+      const targetColId = targetTask.status;
+      
+      // Get all tasks in the target column sorted, excluding the dragged task itself
+      const colTasks = tasks
+        .filter(t => t.status === targetColId && t.id !== draggedId && (showArchived ? t.archived : !t.archived))
+        .sort((a, b) => {
+          const posA = a.position !== undefined ? a.position : (a.createdAt || 0);
+          const posB = b.position !== undefined ? b.position : (b.createdAt || 0);
+          return posA - posB;
+        });
+        
+      const targetIndex = colTasks.findIndex(t => t.id === targetId);
+      
+      let newPosition = 0;
+      if (targetIndex === 0) {
+          // If dropped on the first item, insert it before it
+          const firstTaskPos = colTasks[0]?.position !== undefined ? colTasks[0].position : (colTasks[0]?.createdAt || 0);
+          newPosition = firstTaskPos - 1000;
+      } else {
+          // Intercalate between the preceding item and the target item
+          const prevTask = colTasks[targetIndex - 1];
+          const prevTaskPos = prevTask.position !== undefined ? prevTask.position : (prevTask.createdAt || 0);
+          const targetTaskPos = targetTask.position !== undefined ? targetTask.position : (targetTask.createdAt || 0);
+          newPosition = prevTaskPos + (targetTaskPos - prevTaskPos) / 2;
+      }
+      
+      const now = Date.now();
+      const updatedTask = {
+          ...draggedTask,
+          status: targetColId,
+          position: newPosition,
+          completedAt: targetColId === 'DONE' ? now : (draggedTask.status === 'DONE' ? undefined : draggedTask.completedAt)
+      };
+      
+      setTasks(prev => prev.map(t => t.id === draggedId ? updatedTask : t));
+      
+      if (onSaveTask) {
+          onSaveTask(updatedTask);
+      }
+      
+      if (targetColId === 'DONE' && draggedTask.status !== 'DONE') {
+          confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 }
+          });
       }
       setDraggedTaskId(null);
   };
@@ -325,6 +398,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               }
 
               return matchesStatus && matchesArchived && matchesSearch && matchesFilter;
+            }).sort((a, b) => {
+              const posA = a.position !== undefined ? a.position : (a.createdAt || 0);
+              const posB = b.position !== undefined ? b.position : (b.createdAt || 0);
+              return posA - posB;
             });
             return (
               <div key={col.id} onDragOver={e => e.preventDefault()} onDrop={e => handleDropTask(e, col.id)} className="flex-shrink-0 w-80 flex flex-col max-h-full rounded-[32px] bg-slate-200/40 border border-slate-200/50">
@@ -344,6 +421,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       draggable 
                       onDragStart={e => setDraggedTaskId(task.id)}
                       onClick={() => setSelectedTask(task)}
+                      onDragOver={e => {
+                        if (draggedTaskId === task.id) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!draggedTaskId || draggedTaskId === task.id) return;
+                        handleDropOnTask(draggedTaskId, task.id);
+                      }}
                       className="bg-white rounded-[32px] shadow-sm border-2 border-white hover:border-pink-200 cursor-grab active:cursor-grabbing transition-all group hover:shadow-premium-hover overflow-hidden flex flex-col"
                     >
                       {/* CAPA SANGRE: SEM PADDING E SEM MARGEM */}

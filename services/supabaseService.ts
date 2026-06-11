@@ -86,6 +86,7 @@ const mapTask = (t: any): Task => ({
   approvalStatus: t.approval_status || 'PENDING',
   archived: t.archived || false,
   createdAt: t.created_at || Date.now(),
+  position: t.position !== undefined ? t.position : undefined,
   cover: t.cover,
   timeLogs: t.time_logs || [],
   checklists: t.checklists || [],
@@ -276,11 +277,30 @@ export const fetchUsers = async () => {
   return (data || []).map(mapUser);
 };
 
+let _hasPositionColumn: boolean | null = null;
+
+const checkHasPositionColumn = async () => {
+  if (_hasPositionColumn !== null) return _hasPositionColumn;
+  try {
+    const { error } = await supabase.from('tasks').select('position').limit(1);
+    _hasPositionColumn = !error || error.code !== '42703';
+  } catch (e) {
+    _hasPositionColumn = false;
+  }
+  return _hasPositionColumn;
+};
+
 /**
  * Busca todas as tarefas do banco de dados
  */
 export const fetchTasks = async () => {
-  const { data, error } = await supabase.from('tasks').select('id, client_id, title, description, status, priority, due_date, estimated_time, assignee_ids, squad_id, is_tracking, approval_status, archived, created_at, cover, time_logs, checklists, comments, history');
+  const hasPos = await checkHasPositionColumn();
+  let queryStr = 'id, client_id, title, description, status, priority, due_date, estimated_time, assignee_ids, squad_id, is_tracking, approval_status, archived, created_at, cover, time_logs, checklists, comments, history';
+  if (hasPos) {
+    queryStr += ', position';
+  }
+  
+  const { data, error } = await supabase.from('tasks').select(queryStr);
   if (error) {
     console.error('Erro ao buscar tarefas:', error);
     return [];
@@ -292,7 +312,8 @@ export const fetchTasks = async () => {
  * Salva ou atualiza uma tarefa no banco de dados
  */
 export const saveTask = async (task: Partial<Task>) => {
-  const { error } = await supabase.from('tasks').upsert({
+  const hasPos = await checkHasPositionColumn();
+  const payload: any = {
     id: task.id || undefined,
     client_id: task.clientId || null,
     title: task.title,
@@ -314,7 +335,13 @@ export const saveTask = async (task: Partial<Task>) => {
     checklists: task.checklists,
     comments: task.comments,
     history: task.history
-  });
+  };
+
+  if (hasPos && task.position !== undefined) {
+    payload.position = task.position;
+  }
+
+  const { error } = await supabase.from('tasks').upsert(payload);
 
   if (error) {
     console.error('Erro ao salvar tarefa:', error);
