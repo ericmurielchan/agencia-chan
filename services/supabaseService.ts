@@ -115,7 +115,7 @@ export const mapUser = (u: any): User => ({
 /**
  * Mapeia uma tarefa do Supabase para o formato do App
  */
-const mapTask = (t: any): Task => {
+export const mapTask = (t: any): Task => {
   let pos = t.position;
   if (pos === undefined || pos === null) {
     try {
@@ -130,6 +130,29 @@ const mapTask = (t: any): Task => {
       // Ignore
     }
   }
+
+  // Parse postgres text[] array safely regardless of whether it is returned as direct Array or raw string format
+  let rawAssignees: string[] = [];
+  if (t.assignee_ids) {
+    if (Array.isArray(t.assignee_ids)) {
+      rawAssignees = t.assignee_ids;
+    } else if (typeof t.assignee_ids === 'string') {
+      const trimmed = t.assignee_ids.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        const inside = trimmed.substring(1, trimmed.length - 1);
+        rawAssignees = inside.split(',').map(item => item.trim().replace(/^"|"$/g, '')).filter(Boolean);
+      } else if (trimmed) {
+        rawAssignees = [trimmed];
+      }
+    }
+  }
+
+  const mappedAssigneeIds = Array.from(new Set(
+    rawAssignees
+      .filter(Boolean)
+      .map((id: string) => mapUserId(id) || id)
+  ));
+
   return {
     id: t.id,
     clientId: t.client_id || '',
@@ -139,7 +162,7 @@ const mapTask = (t: any): Task => {
     priority: t.priority || 'MEDIUM',
     dueDate: t.due_date || '',
     estimatedTime: t.estimated_time || 0,
-    assigneeIds: (t.assignee_ids || []).map((id: string) => mapUserId(id) || id),
+    assigneeIds: mappedAssigneeIds,
     squadId: t.squad_id || '',
     isTracking: t.is_tracking || false,
     approvalStatus: t.approval_status || 'PENDING',
@@ -147,6 +170,8 @@ const mapTask = (t: any): Task => {
     createdAt: t.created_at || Date.now(),
     position: pos !== undefined && pos !== null ? pos : undefined,
     cover: t.cover,
+    coverType: t.cover_type || undefined,
+    coverValue: t.cover_value || undefined,
     timeLogs: t.time_logs || [],
     checklists: t.checklists || [],
     comments: t.comments || [],
@@ -386,7 +411,7 @@ const checkLeadHasPositionColumn = async () => {
  */
 export const fetchTasks = async () => {
   const hasPos = await checkHasPositionColumn();
-  let queryStr = 'id, client_id, title, description, status, priority, due_date, estimated_time, assignee_ids, squad_id, is_tracking, approval_status, archived, created_at, cover, time_logs, checklists, comments, history';
+  let queryStr = 'id, client_id, title, description, status, priority, due_date, estimated_time, assignee_ids, squad_id, is_tracking, approval_status, archived, created_at, cover, cover_type, cover_value, time_logs, checklists, comments, history';
   if (hasPos) {
     queryStr += ', position';
   }
@@ -2004,6 +2029,16 @@ export const subscribeToSquads = (callback: (payload: any) => void) => {
   return supabase
     .channel('public:squads')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'squads' }, callback)
+    .subscribe();
+};
+
+/**
+ * Inscreve-se para mudanças em tempo real nas tarefas (Kanban)
+ */
+export const subscribeToTasks = (callback: (payload: any) => void) => {
+  return supabase
+    .channel('public:tasks')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, callback)
     .subscribe();
 };
 

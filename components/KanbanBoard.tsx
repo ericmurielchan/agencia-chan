@@ -497,8 +497,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             <div className="flex justify-between items-start mb-4">
                               <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>{task.priority}</span>
                               <div className="flex -space-x-2 transition-transform group-hover:translate-x-1">
-                                {task.assigneeIds.slice(0, 3).map(id => (
-                                  <img key={id} src={users.find(u => u.id === id)?.avatar || undefined} className="w-7 h-7 rounded-xl border-2 border-white shadow-sm object-cover" />
+                                {Array.from(new Set(task.assigneeIds || [])).slice(0, 3).map((id, idx) => (
+                                  <img key={`${id}-${idx}`} src={users.find(u => u.id === id)?.avatar || undefined} className="w-7 h-7 rounded-xl border-2 border-white shadow-sm object-cover" />
                                 ))}
                               </div>
                             </div>

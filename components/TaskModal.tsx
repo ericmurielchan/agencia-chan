@@ -246,9 +246,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                 <div>
                                     <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Membros</h4>
                                     <div className="flex -space-x-2.5">
-                                        {task.assigneeIds.map(id => {
+                                        {Array.from(new Set(task.assigneeIds || [])).map((id, idx) => {
                                             const u = users.find(user => user.id === id);
-                                            return <img key={id} src={u?.avatar || undefined} title={u?.name} className="w-8 h-8 rounded-full border-2 border-white shadow-sm object-cover hover:translate-y-[-2px] transition-transform cursor-pointer" />;
+                                            return <img key={`${id}-${idx}`} src={u?.avatar || undefined} title={u?.name} className="w-8 h-8 rounded-full border-2 border-white shadow-sm object-cover hover:translate-y-[-2px] transition-transform cursor-pointer" />;
                                         })}
                                         <button onClick={() => setActivePopover('MEMBERS')} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-slate-400 hover:bg-slate-200 transition-colors shadow-sm"><Plus size={14}/></button>
                                     </div>

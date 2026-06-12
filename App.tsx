@@ -81,11 +81,13 @@ import {
   saveFinancialCategory,
   deleteUser,
   saveBankAccount,
+  mapTask,
   mapUser,
   mapUserId,
   mapSquad,
   subscribeToUsers,
-  subscribeToSquads
+  subscribeToSquads,
+  subscribeToTasks
 } from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements, initialCategories } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, Client, Notification, SystemModule, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement, FinancialCategory } from './types';
@@ -490,6 +492,30 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Real-time tasks (Kanban)
+  useEffect(() => {
+    const subscription = subscribeToTasks((payload) => {
+      console.log('Realtime: mudança na tarefa:', payload);
+      
+      if (payload.eventType === 'INSERT') {
+        const newTask = mapTask(payload.new);
+        setTasks(prev => {
+          if (prev.some(t => t.id === newTask.id)) return prev;
+          return [...prev, newTask];
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        const updatedTask = mapTask(payload.new);
+        setTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t));
+      } else if (payload.eventType === 'DELETE') {
+        setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const toggleSidebar = () => {
       // No desktop, o toggle de "abrir/fechar" a sidebar inteira vira o toggle de compactar
       if (!isMobile) {
@@ -527,7 +553,29 @@ const App: React.FC = () => {
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(initialFinancialTransactions);
   const [categories, setCategories] = useState<FinancialCategory[]>(initialCategories);
   const [cardInvoices, setCardInvoices] = useState<CardInvoice[]>(initialCardInvoices);
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [rawUsers, setRawUsers] = useState<User[]>(initialUsers);
+  
+  const sanitizeUsers = (userList: User[]): User[] => {
+    const seen = new Set<string>();
+    return userList.filter(u => {
+      if (!u || !u.id) return false;
+      const mapped = mapUserId(u.id) || u.id;
+      if (seen.has(mapped) || seen.has(u.id)) {
+        return false;
+      }
+      seen.add(mapped);
+      seen.add(u.id);
+      return true;
+    });
+  };
+
+  const users = sanitizeUsers(rawUsers);
+  const setUsers = (val: User[] | ((prev: User[]) => User[])) => {
+    setRawUsers(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      return sanitizeUsers(next);
+    });
+  };
   const [squads, setSquads] = useState<Squad[]>(initialSquads);
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [services, setServices] = useState<AgencyService[]>(initialServices);
