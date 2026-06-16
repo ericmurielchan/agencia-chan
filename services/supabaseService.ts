@@ -81,7 +81,7 @@ export const mapToDbUuid = (id: string | null | undefined): string | null => {
 export const mapSquad = (s: any): Squad => ({
   id: s.id,
   name: s.name,
-  members: s.members || []
+  members: (s.members || []).map((mId: string) => mapUserId(mId) || mId)
 });
 
 /**
@@ -1181,7 +1181,7 @@ export const saveSquad = async (squad: Partial<Squad>) => {
   const { error } = await supabase.from('squads').upsert({
     id: squad.id || undefined,
     name: squad.name,
-    members: squad.members
+    members: squad.members ? squad.members.map(id => mapToDbUuid(id) || id) : []
   });
 
   if (error) {
