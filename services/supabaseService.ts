@@ -1256,10 +1256,24 @@ export const saveUser = async (user: Partial<User>) => {
   const squad_id = user.squad && existingSquadIds.has(user.squad) ? user.squad : null;
   const client_id = user.clientId && existingClientIds.has(user.clientId) ? user.clientId : null;
 
+  // Garantir estabilidade de ID para evitar conflito de e-mail único (Erro 23505 de unique constraint 'users_email_key')
+  let targetId = mapToDbUuid(user.id) || null;
+  if (user.email) {
+    const { data: existingUserByEmail } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', user.email.toLowerCase())
+      .maybeSingle();
+
+    if (existingUserByEmail) {
+      targetId = existingUserByEmail.id;
+    }
+  }
+
   const { error } = await supabase.from('users').upsert({
-    id: mapToDbUuid(user.id) || undefined,
+    id: targetId || undefined,
     name: user.name,
-    email: user.email,
+    email: user.email ? user.email.toLowerCase() : undefined,
     role: user.role,
     avatar: user.avatar,
     squad_id: squad_id,

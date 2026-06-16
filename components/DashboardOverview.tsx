@@ -86,6 +86,20 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     // Sorteia por timestamp descendente
     list = [...list].sort((a, b) => b.timestamp - a.timestamp);
 
+    // Filtra para mostrar apenas notificações acessíveis ao usuário atual
+    list = list.filter(n => {
+        if (n.targetUserId && n.targetUserId !== currentUser.id) return false;
+        if (n.targetRole && n.targetRole !== currentUser.role) return false;
+        
+        if (currentUser.role === 'COMMERCIAL') {
+            if (n.targetUserId === currentUser.id) return true;
+            const commercialModules = ['CRM', 'CLIENTS', 'HELP', 'DASHBOARD'];
+            return commercialModules.includes(n.originModule);
+        }
+        
+        return true;
+    });
+
     // Filtra por 'Minhas Ações'
     if (feedFilter === 'MY') {
         list = list.filter(n => 
@@ -104,6 +118,20 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
             n.originModule.toLowerCase().includes(query)
         );
     }
+
+    // Remove duplicados idênticos lançados em proximidade temporal (dentro de 10 segundos)
+    const processedList: Notification[] = [];
+    for (const n of list) {
+        const isDuplicate = processedList.some(item => 
+            item.title === n.title && 
+            item.message === n.message && 
+            Math.abs(item.timestamp - n.timestamp) < 10000
+        );
+        if (!isDuplicate) {
+            processedList.push(n);
+        }
+    }
+    list = processedList;
 
     return list;
   }, [notifications, feedFilter, feedSearch, currentUser]);
