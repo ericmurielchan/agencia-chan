@@ -1605,36 +1605,8 @@ export const mapUserId = (id: string | null | undefined): string | null => {
     return id;
   }
 
-  // 2. Map original mock 'uX' short IDs to deterministic UUIDs
-  if (/^u[0-9]+$/i.test(id)) {
-    const numPart = id.substring(1);
-    const parsedNum = parseInt(numPart, 10);
-    if (!isNaN(parsedNum)) {
-      const hex = parsedNum.toString(16).padStart(12, '0');
-      return `00000000-0000-0000-0000-${hex}`;
-    }
-  }
-
-  // 3. Map original 'user-timestamp' / 'usr-timestamp' short IDs to deterministic UUIDs
-  if (id.startsWith('user-') || id.startsWith('usr-')) {
-    const numberStr = id.startsWith('user-') ? id.replace('user-', '') : id.replace('usr-', '');
-    const parsedNum = parseInt(numberStr, 10);
-    if (!isNaN(parsedNum)) {
-      const hex = parsedNum.toString(16).padStart(12, '0');
-      const prefix = id.startsWith('user-') ? '8000' : '9000';
-      return `deadeade-0000-4000-${prefix}-${hex}`;
-    }
-  }
-
-  // 4. Fallback: Map any other non-UUID text string to a deterministic UUID
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash << 5) - hash + id.charCodeAt(i);
-    hash |= 0;
-  }
-  const absHash = Math.abs(hash);
-  const hex = absHash.toString(16).padStart(12, '0');
-  return `deadeade-0000-4000-9500-${hex}`;
+  // Se não for um UUID, já está no formato do App (e.g. 'u1', 'user-1234')
+  return id;
 };
 
 /**
