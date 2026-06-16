@@ -53,13 +53,14 @@ export const mapToDbUuid = (id: string | null | undefined): string | null => {
     }
   }
 
-  // Mapeia IDs curtos formatados como 'user-timestamp' para UUIDs determinísticos
-  if (id.startsWith('user-')) {
-    const numberStr = id.replace('user-', '');
+  // Mapeia IDs curtos formatados como 'user-timestamp' ou 'usr-timestamp' para UUIDs determinísticos
+  if (id.startsWith('user-') || id.startsWith('usr-')) {
+    const numberStr = id.startsWith('user-') ? id.replace('user-', '') : id.replace('usr-', '');
     const parsedNum = parseInt(numberStr, 10);
     if (!isNaN(parsedNum)) {
       const hex = parsedNum.toString(16).padStart(12, '0');
-      return `deadeade-0000-4000-8000-${hex}`;
+      const prefix = id.startsWith('user-') ? '8000' : '9000';
+      return `deadeade-0000-4000-${prefix}-${hex}`;
     }
   }
 
@@ -71,7 +72,7 @@ export const mapToDbUuid = (id: string | null | undefined): string | null => {
   }
   const absHash = Math.abs(hash);
   const hex = absHash.toString(16).padStart(12, '0');
-  return `deadeade-0000-4000-9000-${hex}`;
+  return `deadeade-0000-4000-9500-${hex}`;
 };
 
 /**
@@ -1569,6 +1570,15 @@ export const mapUserId = (id: string | null | undefined): string | null => {
       }
     }
 
+    // Decode 'usr-timestamp' deterministic UUIDs
+    if (/^deadeade-0000-4000-9000-[0-9a-f]{12}$/i.test(id)) {
+      const hexPart = id.substring(36 - 12);
+      const parsedNum = parseInt(hexPart, 16);
+      if (!isNaN(parsedNum)) {
+        return `usr-${parsedNum}`;
+      }
+    }
+
     // Decode 'uX' deterministic UUIDs
     if (/^00000000-0000-0000-0000-[0-9a-f]{12}$/i.test(id)) {
       const hexPart = id.substring(36 - 12);
@@ -1591,13 +1601,14 @@ export const mapUserId = (id: string | null | undefined): string | null => {
     }
   }
 
-  // 3. Map original 'user-timestamp' short IDs to deterministic UUIDs
-  if (id.startsWith('user-')) {
-    const numberStr = id.replace('user-', '');
+  // 3. Map original 'user-timestamp' / 'usr-timestamp' short IDs to deterministic UUIDs
+  if (id.startsWith('user-') || id.startsWith('usr-')) {
+    const numberStr = id.startsWith('user-') ? id.replace('user-', '') : id.replace('usr-', '');
     const parsedNum = parseInt(numberStr, 10);
     if (!isNaN(parsedNum)) {
       const hex = parsedNum.toString(16).padStart(12, '0');
-      return `deadeade-0000-4000-8000-${hex}`;
+      const prefix = id.startsWith('user-') ? '8000' : '9000';
+      return `deadeade-0000-4000-${prefix}-${hex}`;
     }
   }
 
@@ -1609,7 +1620,7 @@ export const mapUserId = (id: string | null | undefined): string | null => {
   }
   const absHash = Math.abs(hash);
   const hex = absHash.toString(16).padStart(12, '0');
-  return `deadeade-0000-4000-9000-${hex}`;
+  return `deadeade-0000-4000-9500-${hex}`;
 };
 
 /**
@@ -1676,22 +1687,51 @@ export const saveRequisition = async (req: Partial<Requisition>) => {
     });
   }
 
-  const { error } = await supabase.from('requisitions').upsert({
+  // Obter dados reais das tabelas de referência para evitar violações de chaves estrangeiras
+  const [dbUsersResult, dbClientsResult] = await Promise.all([
+    supabase.from('users').select('id'),
+    supabase.from('clients').select('id')
+  ]);
+
+  const existingUserIds = new Set<string>((dbUsersResult.data || []).map((u: any) => u.id));
+  const existingClientIds = new Set<string>((dbClientsResult.data || []).map((c: any) => c.id));
+
+  const resolveUserId = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    const dbUuid = mapToDbUuid(id);
+    if (dbUuid && existingUserIds.has(dbUuid)) return dbUuid;
+    if (existingUserIds.has(id)) return id;
+    return null;
+  };
+
+  const resolveClientId = (id: string | null | undefined): string | null => {
+    if (!id) return null;
+    if (existingClientIds.has(id)) return id;
+    const dbUuid = mapToDbUuid(id);
+    if (dbUuid && existingClientIds.has(dbUuid)) return dbUuid;
+    return null;
+  };
+
+  const payload = {
     id: req.id || undefined,
-    client_id: req.clientId || null,
-    requester_id: mapToDbUuid(req.requesterId),
-    title: req.title,
-    description: dbDescription,
-    estimated_cost: req.estimatedCost,
-    status: req.status,
-    date: req.date,
-    category: req.category,
-    approved_by: mapToDbUuid(req.approvedBy),
-    approved_at: req.approvedAt,
-    rejected_by: mapToDbUuid(req.rejectedBy),
-    rejected_at: req.rejectedAt,
-    rejected_reason: req.rejectedReason
-  });
+    client_id: resolveClientId(req.clientId),
+    requester_id: resolveUserId(req.requesterId),
+    title: req.title || '',
+    description: dbDescription || null,
+    estimated_cost: req.estimatedCost !== undefined ? Number(req.estimatedCost) : 0,
+    status: req.status || 'PENDING',
+    date: req.date || new Date().toISOString().split('T')[0],
+    category: req.category || 'Compra',
+    approved_by: resolveUserId(req.approvedBy),
+    approved_at: req.approvedAt ? new Date(req.approvedAt).toISOString() : null,
+    rejected_by: resolveUserId(req.rejectedBy),
+    rejected_at: req.rejectedAt ? new Date(req.rejectedAt).toISOString() : null,
+    rejected_reason: req.rejectedReason || null,
+    archived: req.archived || false,
+    attachments: req.attachments || []
+  };
+
+  const { error } = await supabase.from('requisitions').upsert(payload);
 
   if (error) {
     console.error('Erro ao salvar requisição:', error);

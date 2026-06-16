@@ -46,6 +46,13 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
   const [customEndDate, setCustomEndDate] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isCreateModalOpen) {
+      setValidationError(null);
+    }
+  }, [isCreateModalOpen]);
 
   const canApprove = currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE';
   const isClient = currentUser.role === 'CLIENT';
@@ -115,12 +122,13 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
   };
 
   const handleSaveReq = async () => {
-      if (!editingReq.title) {
-          alert('Por favor, preencha o título/descrição da solicitação.');
+      setValidationError(null);
+      if (!editingReq.title || !editingReq.title.trim()) {
+          setValidationError('Por favor, preencha o título/descrição da solicitação.');
           return;
       }
       if (!editingReq.estimatedCost || editingReq.estimatedCost <= 0) {
-          alert('Por favor, defina um custo estimado maior que zero (R$ 0,00).');
+          setValidationError('Por favor, defina um custo estimado maior que zero (R$ 0,00).');
           return;
       }
 
@@ -799,6 +807,12 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
                   </div>
                   
                   <div className="p-8 space-y-5 overflow-y-auto custom-scrollbar flex-1 min-h-0">
+                      {validationError && (
+                          <div className="bg-red-50 text-red-600 border border-red-100 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+                              <AlertTriangle size={20} className="text-red-500 shrink-0" />
+                              <span className="text-xs font-bold leading-normal">{validationError}</span>
+                          </div>
+                      )}
                       <div>
                           <label className="text-[9px] uppercase text-slate-400 font-black mb-2 block tracking-[0.2em] ml-1">Tipo de Solicitação</label>
                           <select 
