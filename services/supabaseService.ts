@@ -475,6 +475,14 @@ export const saveTask = async (task: Partial<Task>) => {
     console.error('Erro ao salvar tarefa:', error);
     return { success: false, error };
   }
+
+  // Real-time broadcast for zero-config sync
+  broadcastChange('public:tasks', 'tasks_change', {
+    eventType: task.id ? 'UPDATE' : 'INSERT',
+    new: payload,
+    old: { id: task.id }
+  });
+
   return { success: true };
 };
 
@@ -487,6 +495,13 @@ export const deleteTask = async (id: string) => {
     console.error('Erro ao excluir tarefa:', error);
     return { success: false, error };
   }
+
+  // Real-time broadcast for zero-config sync
+  broadcastChange('public:tasks', 'tasks_change', {
+    eventType: 'DELETE',
+    old: { id }
+  });
+
   return { success: true };
 };
 
@@ -2042,57 +2057,129 @@ export const saveNotification = async (notif: Notification) => {
     console.error('Erro ao salvar notificação:', error);
     return { success: false, error };
   }
+
+  // Real-time broadcast for zero-config sync
+  broadcastChange('public:notifications', 'notifications_change', {
+    eventType: notif.status === 'READ' ? 'UPDATE' : 'INSERT',
+    new: {
+      id: notif.id,
+      title: notif.title,
+      message: notif.message,
+      type: notif.type,
+      priority: notif.priority,
+      status: notif.status,
+      origin_module: notif.originModule,
+      timestamp: notif.timestamp,
+      target_user_id: targetUserIdDb,
+      target_role: notif.targetRole,
+      nav_to_view: notif.navToView,
+      action_label: notif.actionLabel,
+      metadata: updatedMetadata
+    },
+    old: { id: notif.id }
+  });
+
   return { success: true };
+};
+
+/**
+ * Transmite uma alteração em tempo real para os outros clientes via canal de Broadcast
+ */
+export const broadcastChange = (channelName: string, eventName: string, payload: any) => {
+  try {
+    supabase.channel(channelName).send({
+      type: 'broadcast',
+      event: eventName,
+      payload
+    });
+  } catch (err) {
+    console.warn('Erro ao transmitir broadcast:', err);
+  }
 };
 
 /**
  * Inscreve-se para mudanças em tempo real nas notificações
  */
 export const subscribeToNotifications = (callback: (payload: any) => void) => {
-  return supabase
-    .channel('public:notifications')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, callback)
-    .subscribe();
+  const channel = supabase.channel('public:notifications');
+  
+  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, callback);
+  
+  channel.on('broadcast', { event: 'notifications_change' }, (response) => {
+    if (response.payload) {
+      callback(response.payload);
+    }
+  });
+  
+  return channel.subscribe();
 };
 
 /**
  * Inscreve-se para mudanças em tempo real nas solicitações/requisitions
  */
 export const subscribeToRequisitions = (callback: (payload: any) => void) => {
-  return supabase
-    .channel('public:requisitions')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, callback)
-    .subscribe();
+  const channel = supabase.channel('public:requisitions');
+  
+  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, callback);
+  
+  channel.on('broadcast', { event: 'requisitions_change' }, (response) => {
+    if (response.payload) {
+      callback(response.payload);
+    }
+  });
+  
+  return channel.subscribe();
 };
 
 /**
  * Inscreve-se para mudanças em tempo real nos usuários (colaboradores)
  */
 export const subscribeToUsers = (callback: (payload: any) => void) => {
-  return supabase
-    .channel('public:users')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, callback)
-    .subscribe();
+  const channel = supabase.channel('public:users');
+  
+  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, callback);
+  
+  channel.on('broadcast', { event: 'users_change' }, (response) => {
+    if (response.payload) {
+      callback(response.payload);
+    }
+  });
+  
+  return channel.subscribe();
 };
 
 /**
  * Inscreve-se para mudanças em tempo real nas squads (equipes)
  */
 export const subscribeToSquads = (callback: (payload: any) => void) => {
-  return supabase
-    .channel('public:squads')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'squads' }, callback)
-    .subscribe();
+  const channel = supabase.channel('public:squads');
+  
+  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'squads' }, callback);
+  
+  channel.on('broadcast', { event: 'squads_change' }, (response) => {
+    if (response.payload) {
+      callback(response.payload);
+    }
+  });
+  
+  return channel.subscribe();
 };
 
 /**
  * Inscreve-se para mudanças em tempo real nas tarefas (Kanban)
  */
 export const subscribeToTasks = (callback: (payload: any) => void) => {
-  return supabase
-    .channel('public:tasks')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, callback)
-    .subscribe();
+  const channel = supabase.channel('public:tasks');
+  
+  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, callback);
+  
+  channel.on('broadcast', { event: 'tasks_change' }, (response) => {
+    if (response.payload) {
+      callback(response.payload);
+    }
+  });
+  
+  return channel.subscribe();
 };
 
 /**
