@@ -16,6 +16,8 @@ interface RequisitionsProps {
   setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
   clients: Client[];
   onSaveRequisition?: (req: Partial<Requisition>) => Promise<void>;
+  selectedRequisitionId?: string | null;
+  onClearSelectedRequisition?: () => void;
 }
 
 export const Requisitions: React.FC<RequisitionsProps> = ({ 
@@ -27,7 +29,9 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
     openConfirm,
     setTransactions,
     clients,
-    onSaveRequisition
+    onSaveRequisition,
+    selectedRequisitionId,
+    onClearSelectedRequisition
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -53,6 +57,16 @@ export const Requisitions: React.FC<RequisitionsProps> = ({
       setValidationError(null);
     }
   }, [isCreateModalOpen]);
+
+  useEffect(() => {
+    if (selectedRequisitionId) {
+      const req = requisitions.find(r => r.id === selectedRequisitionId);
+      if (req) {
+        setSelectedReq(req);
+      }
+      if (onClearSelectedRequisition) onClearSelectedRequisition();
+    }
+  }, [selectedRequisitionId, requisitions, onClearSelectedRequisition]);
 
   const canApprove = currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE';
   const isClient = currentUser.role === 'CLIENT';

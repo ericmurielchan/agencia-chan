@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Modal } from './Modal';
 import { Client, Squad, AgencyService, User, ConfirmOptions, Task, Requisition, PasswordEntry } from '../types';
 import { 
@@ -23,11 +23,13 @@ interface ClientManagementProps {
   currentUser: User;
   onSaveClient?: (client: Client) => Promise<void>;
   onDeleteClient?: (id: string) => Promise<void>;
+  selectedClientId?: string | null;
+  onClearSelectedClient?: () => void;
 }
 
 export const ClientManagement: React.FC<ClientManagementProps> = ({ 
     clients, setClients, squads, services, users, setUsers, openConfirm, tasks, requisitions, currentUser,
-    onSaveClient, onDeleteClient
+    onSaveClient, onDeleteClient, selectedClientId, onClearSelectedClient
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
@@ -38,6 +40,17 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 
   const [editingClient, setEditingClient] = useState<Partial<Client>>({});
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (selectedClientId) {
+      const client = clients.find(c => c.id === selectedClientId);
+      if (client) {
+        setViewingClient(client);
+        setActiveViewTab('SUMMARY');
+      }
+      if (onClearSelectedClient) onClearSelectedClient();
+    }
+  }, [selectedClientId, clients, onClearSelectedClient]);
 
   const isAdmin = currentUser.role === 'ADMIN';
   const isManager = currentUser.role === 'MANAGER';

@@ -617,6 +617,8 @@ const App: React.FC = () => {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedApprovalBatchId, setSelectedApprovalBatchId] = useState<string | null>(null);
   const [selectedApprovalItemId, setSelectedApprovalItemId] = useState<string | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedRequisitionId, setSelectedRequisitionId] = useState<string | null>(null);
   const [kanbanFilter, setKanbanFilter] = useState<any>(null);
   const [requisitions, setRequisitions] = useState<Requisition[]>(initialRequisitions);
   const [stock, setStock] = useState<StockItem[]>(initialStock);
@@ -746,6 +748,10 @@ const App: React.FC = () => {
             } else if (notif.navToView === 'approvals') {
                 if (notif.metadata?.batchId) setSelectedApprovalBatchId(notif.metadata.batchId);
                 if (notif.metadata?.itemId) setSelectedApprovalItemId(notif.metadata.itemId);
+            } else if (notif.navToView === 'clients') {
+                setSelectedClientId(notif.metadata?.referenceId || null);
+            } else if (notif.navToView === 'requisitions') {
+                setSelectedRequisitionId(notif.metadata?.referenceId || null);
             }
         }
     }
@@ -1178,6 +1184,8 @@ const App: React.FC = () => {
                 openConfirm={openConfirm}
                 setTransactions={setFinancialTransactions} 
                 clients={clients} 
+                selectedRequisitionId={selectedRequisitionId}
+                onClearSelectedRequisition={() => setSelectedRequisitionId(null)}
                 onSaveRequisition={async (req) => {
                     const result = await saveRequisition(req);
                     if (result.success) {
@@ -1495,6 +1503,8 @@ const App: React.FC = () => {
                 tasks={tasks} 
                 requisitions={requisitions} 
                 currentUser={currentUser} 
+                selectedClientId={selectedClientId}
+                onClearSelectedClient={() => setSelectedClientId(null)}
                 onSaveClient={async (client) => {
                     const isNew = !clients.find(c => c.id === client.id);
                     const result = await saveClient(client);
