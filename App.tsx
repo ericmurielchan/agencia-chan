@@ -87,7 +87,9 @@ import {
   mapSquad,
   subscribeToUsers,
   subscribeToSquads,
-  subscribeToTasks
+  subscribeToTasks,
+  subscribeToSystemSettings,
+  mapSettings
 } from './services/supabaseService';
 import { initialUsers, initialTasks, initialLeads, initialBankAccounts, initialCreditCards, initialFinancialTransactions, initialCardInvoices, initialSquads, initialTaskColumns, initialCrmColumns, initialClients, initialNotifications, initialServices, initialRequisitions, initialLossReasons, initialGoals, initialApprovalBatches, initialStock, initialAssets, initialCashSessions, initialCashMovements, initialCategories } from './utils/mockData';
 import { Task, User, Lead, BankAccount, CreditCard, FinancialTransaction, CardInvoice, Role, Squad, ColumnConfig, Client, Notification, SystemModule, AgencyService, Requisition, SystemSettings, LeadTask, ConfirmOptions, LossReason, PipelineStage, ProductivityGoal, ApprovalBatch, StockItem, Asset, CashRegisterSession, CashMovement, FinancialCategory } from './types';
@@ -112,6 +114,9 @@ const App: React.FC = () => {
         // Sessão válida (menos de 1 hora de inatividade)
         try {
           const parsed = JSON.parse(savedUser);
+          if (parsed && parsed.id) {
+            parsed.id = mapUserId(parsed.id) || parsed.id;
+          }
           return parsed;
         } catch (e) {
           return null;
@@ -305,11 +310,17 @@ const App: React.FC = () => {
                 setCurrentUser(null);
               } else if (dbUserFound) {
                 // Sincronizar dados e role do usuário atual
-                if (parsedUser.role !== dbUserFound.role || parsedUser.name !== dbUserFound.name || parsedUser.email !== dbUserFound.email) {
+                const updatedUserObj = { ...parsedUser, ...dbUserFound };
+                const mappedUserObj = { ...updatedUserObj, id: mapUserId(updatedUserObj.id) || updatedUserObj.id };
+                if (
+                  parsedUser.id !== mappedUserObj.id ||
+                  parsedUser.role !== dbUserFound.role ||
+                  parsedUser.name !== dbUserFound.name ||
+                  parsedUser.email !== dbUserFound.email
+                ) {
                   console.log('Sincronizando dados ou cargo atualizado do usuário atual:', dbUserFound);
-                  const updatedUserObj = { ...parsedUser, ...dbUserFound };
-                  localStorage.setItem('currentUser', JSON.stringify(updatedUserObj));
-                  setCurrentUser(updatedUserObj);
+                  localStorage.setItem('currentUser', JSON.stringify(mappedUserObj));
+                  setCurrentUser(mappedUserObj);
                 }
               }
             } catch (e) {
@@ -318,7 +329,10 @@ const App: React.FC = () => {
           }
           
           setUsers(dbUsers as any);
-          if (settingsData) setSystemSettings(settingsData);
+          if (settingsData) {
+            setSystemSettings(settingsData);
+            localStorage.setItem('systemSettings', JSON.stringify(settingsData));
+          }
           setClients(clientsData as any);
           if (squadsData.length > 0) setSquads(squadsData as any);
 
@@ -442,8 +456,9 @@ const App: React.FC = () => {
           if (currentActive.id === updatedUser.id || currentActiveMappedId === updatedUserMappedId) {
             console.log('O usuário ativo recebeu uma atualização em tempo real. Sincronizando dados...');
             const mergedUser = { ...currentActive, ...updatedUser };
-            localStorage.setItem('currentUser', JSON.stringify(mergedUser));
-            setCurrentUser(mergedUser);
+            const mappedMergedUser = { ...mergedUser, id: mapUserId(mergedUser.id) || mergedUser.id };
+            localStorage.setItem('currentUser', JSON.stringify(mappedMergedUser));
+            setCurrentUser(mappedMergedUser);
           }
         }
       } else if (payload.eventType === 'DELETE') {
@@ -508,6 +523,22 @@ const App: React.FC = () => {
         setTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t));
       } else if (payload.eventType === 'DELETE') {
         setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Real-time system settings
+  useEffect(() => {
+    const subscription = subscribeToSystemSettings((payload) => {
+      console.log('Realtime: mudança nas configurações do sistema:', payload);
+      if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+        const updatedSettings = mapSettings(payload.new);
+        setSystemSettings(updatedSettings);
+        localStorage.setItem('systemSettings', JSON.stringify(updatedSettings));
       }
     });
 
@@ -595,12 +626,20 @@ const App: React.FC = () => {
   const [goals, setGoals] = useState<ProductivityGoal[]>(initialGoals);
   const [approvalBatches, setApprovalBatches] = useState<ApprovalBatch[]>(initialApprovalBatches);
   const [leadSources, setLeadSources] = useState<string[]>(['Instagram', 'Linkedin', 'Google Ads', 'Indicação', 'Site']);
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => {
+    const local = localStorage.getItem('systemSettings');
+    if (local) {
+      try {
+        return JSON.parse(local);
+      } catch (e) {}
+    }
+    return {
       agencyName: 'Agência Chan',
       logo: '',
       favicon: '',
       primaryColor: '#db2777',
       sidebarColor: '#0f172a'
+    };
   });
 
   // Guard against restricted views for various roles
@@ -653,8 +692,9 @@ const App: React.FC = () => {
   }, []);
 
   const handleLogin = async (user: User) => {
-    setCurrentUser(user);
-    localStorage.setItem('currentUser', JSON.stringify(user));
+    const mappedUser = { ...user, id: mapUserId(user.id) || user.id };
+    setCurrentUser(mappedUser);
+    localStorage.setItem('currentUser', JSON.stringify(mappedUser));
     localStorage.setItem('lastActivity', Date.now().toString());
     
     try {
@@ -1490,7 +1530,11 @@ const App: React.FC = () => {
                 currentUserRole={currentUser?.role}
                 onUpdateSettings={async (newSettings) => {
                   setSystemSettings(newSettings);
-                  await updateSystemSettings(newSettings);
+                  localStorage.setItem('systemSettings', JSON.stringify(newSettings));
+                  const res = await updateSystemSettings(newSettings);
+                  if (!res.success) {
+                    console.error('Erro ao salvar no Supabase:', res.error);
+                  }
                 }} 
               />
             )}
@@ -1541,12 +1585,14 @@ const App: React.FC = () => {
               />
             )}
             {currentView === 'help' && <HelpCenter currentUser={currentUser} />}
-            {currentView === 'settings' && (
+             {currentView === 'settings' && (
               <ProfileSettings 
                 currentUser={currentUser} 
                 onUpdateUser={async (u) => { 
+                  const mappedUserObj = { ...u, id: mapUserId(u.id) || u.id };
                   setUsers(users.map(us => us.id === u.id ? u : us)); 
-                  setCurrentUser(u); 
+                  setCurrentUser(mappedUserObj); 
+                  localStorage.setItem('currentUser', JSON.stringify(mappedUserObj));
                   await saveUser(u);
                 }} 
               />

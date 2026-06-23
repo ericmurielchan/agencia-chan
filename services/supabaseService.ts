@@ -87,7 +87,7 @@ export const mapSquad = (s: any): Squad => ({
 /**
  * Mapeia as configurações do sistema do Supabase para o formato do App
  */
-const mapSettings = (s: any): SystemSettings => ({
+export const mapSettings = (s: any): SystemSettings => ({
   agencyName: s.agency_name || 'Agência Chan',
   logo: s.logo || '',
   favicon: s.favicon || '',
@@ -1050,20 +1050,30 @@ export const fetchSystemSettings = async () => {
  * Atualiza as configurações do sistema
  */
 export const updateSystemSettings = async (settings: SystemSettings) => {
-  const { error } = await supabase.from('system_settings').upsert({
+  const payload = {
     id: 1, // Usamos ID fixo 1 para as configurações globais
     agency_name: settings.agencyName,
     logo: settings.logo,
     favicon: settings.favicon,
     primary_color: settings.primaryColor,
     sidebar_color: settings.sidebarColor,
-    updated_at: Date.now()
-  });
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase.from('system_settings').upsert(payload);
   
   if (error) {
     console.error('Erro ao atualizar configurações:', error);
     return { success: false, error };
   }
+
+  // Real-time broadcast for zero-config sync
+  broadcastChange('public:system_settings', 'system_settings_change', {
+    eventType: 'UPDATE',
+    new: payload,
+    old: { id: 1 }
+  });
+
   return { success: true };
 };
 
@@ -2183,6 +2193,23 @@ export const subscribeToTasks = (callback: (payload: any) => void) => {
 };
 
 /**
+ * Inscreve-se para mudanças em tempo real nas configurações do sistema
+ */
+export const subscribeToSystemSettings = (callback: (payload: any) => void) => {
+  const channel = supabase.channel('public:system_settings');
+  
+  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, callback);
+  
+  channel.on('broadcast', { event: 'system_settings_change' }, (response) => {
+    if (response.payload) {
+      callback(response.payload);
+    }
+  });
+  
+  return channel.subscribe();
+};
+
+/**
  * Busca todos os lotes de aprovação (Normalizado)
  */
 export const fetchApprovalBatches = async () => {
@@ -3009,6 +3036,18 @@ export const seedDatabase = async () => {
       }))
     );
     if (goalError) console.error('Erro ao migrar Metas:', goalError);
+
+    // 21. Migrar Configurações do Sistema (System Settings)
+    const { error: settingsError } = await supabase.from('system_settings').upsert({
+      id: 1,
+      agency_name: 'Agência Chan',
+      logo: '',
+      favicon: '',
+      primary_color: '#db2777',
+      sidebar_color: '#0f172a',
+      updated_at: new Date().toISOString()
+    });
+    if (settingsError) console.error('Erro ao migrar Configurações do Sistema:', settingsError);
 
     console.log('Migração concluída com sucesso!');
     return { success: true };
