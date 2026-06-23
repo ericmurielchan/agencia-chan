@@ -75,7 +75,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
   const isCommercial = currentUser.role === 'COMMERCIAL';
 
   const [selectedUserId, setSelectedUserId] = useState<string | 'ALL'>(isEmployee || isCommercial ? currentUser.id : 'ALL');
-  const [selectedSquadId, setSelectedSquadId] = useState<string | 'ALL'>(isManager ? currentUser.squad || 'ALL' : 'ALL');
+  const [selectedSquadId, setSelectedSquadId] = useState<string | 'ALL'>('ALL');
   
   const [feedFilter, setFeedFilter] = useState<'ALL' | 'MY'>('ALL');
   const [feedSearch, setFeedSearch] = useState('');
@@ -182,7 +182,9 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
         baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
         baseLeads = leads.filter(l => l.responsibleId === currentUser.id);
-        baseClients = clients.filter(c => c.responsibleId === currentUser.id);
+        const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
+        const mySquadIds = mySquads.map(s => s.id);
+        baseClients = clients.filter(c => c.responsibleId === currentUser.id || (c.squadId && mySquadIds.includes(c.squadId)));
         baseFinance = [];
     } else if (currentUser.role === 'COMMERCIAL') {
         // Commercial sees their own tasks but ALL leads and clients to manage them
@@ -215,7 +217,8 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     if (selectedUserId !== 'ALL') {
         baseTasks = baseTasks.filter(t => t.assigneeIds.includes(selectedUserId));
         baseLeads = baseLeads.filter(l => l.responsibleId === selectedUserId);
-        baseClients = baseClients.filter(c => c.responsibleId === selectedUserId);
+        const userSquadIds = squads.filter(s => s.members?.includes(selectedUserId)).map(s => s.id);
+        baseClients = baseClients.filter(c => c.responsibleId === selectedUserId || (c.squadId && userSquadIds.includes(c.squadId)));
     }
 
     return {
