@@ -1963,21 +1963,24 @@ export const saveAgencyService = async (service: Partial<AgencyService>) => {
 /**
  * Mapeia uma notificação do banco de dados para a interface do sistema
  */
-export const mapNotification = (n: any): Notification => ({
-  id: n.id,
-  title: n.title || '',
-  message: n.message || '',
-  type: n.type || 'INFO',
-  priority: n.priority || 'LOW',
-  status: n.status || 'UNREAD',
-  originModule: n.origin_module || 'SYSTEM',
-  timestamp: n.timestamp || Date.now(),
-  targetUserId: mapUserId(n.target_user_id) || undefined,
-  targetRole: n.target_role,
-  navToView: n.nav_to_view,
-  actionLabel: n.action_label,
-  metadata: n.metadata
-});
+export const mapNotification = (n: any): Notification => {
+  const meta = n.metadata || {};
+  return {
+    id: n.id,
+    title: n.title || '',
+    message: n.message || '',
+    type: n.type || 'INFO',
+    priority: n.priority || 'LOW',
+    status: n.status || 'UNREAD',
+    originModule: n.origin_module || 'SYSTEM',
+    timestamp: n.timestamp || Date.now(),
+    targetUserId: meta.originalTargetUserId || mapUserId(n.target_user_id) || undefined,
+    targetRole: n.target_role,
+    navToView: n.nav_to_view,
+    actionLabel: n.action_label,
+    metadata: meta
+  };
+};
 
 /**
  * Busca todas as notificações
@@ -1995,6 +1998,30 @@ export const fetchNotifications = async () => {
  * Salva ou atualiza uma notificação
  */
 export const saveNotification = async (notif: Notification) => {
+  let targetUserIdDb: string | null = null;
+  if (notif.targetUserId) {
+    const mappedUuid = mapToDbUuid(notif.targetUserId);
+    if (mappedUuid) {
+      try {
+        const { data: userExists } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', mappedUuid)
+          .maybeSingle();
+        if (userExists) {
+          targetUserIdDb = mappedUuid;
+        }
+      } catch (err) {
+        console.error('Erro ao verificar existência do usuário:', err);
+      }
+    }
+  }
+
+  const updatedMetadata = {
+    ...(notif.metadata || {}),
+    originalTargetUserId: notif.targetUserId
+  };
+
   const { error } = await supabase.from('notifications').upsert({
     id: notif.id,
     title: notif.title,
@@ -2004,11 +2031,11 @@ export const saveNotification = async (notif: Notification) => {
     status: notif.status,
     origin_module: notif.originModule,
     timestamp: notif.timestamp,
-    target_user_id: mapToDbUuid(notif.targetUserId),
+    target_user_id: targetUserIdDb,
     target_role: notif.targetRole,
     nav_to_view: notif.navToView,
     action_label: notif.actionLabel,
-    metadata: notif.metadata
+    metadata: updatedMetadata
   });
 
   if (error) {

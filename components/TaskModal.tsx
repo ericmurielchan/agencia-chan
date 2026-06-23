@@ -143,6 +143,48 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
         onUpdate(updatedTask);
     };
 
+    const getDueDateParts = (dueDate: string | undefined) => {
+        if (!dueDate) return { date: '', time: '' };
+        try {
+            const d = new Date(dueDate);
+            if (isNaN(d.getTime())) {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+                    return { date: dueDate, time: '' };
+                }
+                return { date: '', time: '' };
+            }
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const hours = String(d.getHours()).padStart(2, '0');
+            const minutes = String(d.getMinutes()).padStart(2, '0');
+            return {
+                date: `${year}-${month}-${day}`,
+                time: `${hours}:${minutes}`
+            };
+        } catch (e) {
+            return { date: '', time: '' };
+        }
+    };
+
+    const handleDateChange = (newDate: string) => {
+        const { time } = getDueDateParts(task.dueDate);
+        if (!newDate) {
+            updateWithLog({ dueDate: '' }, 'removeu o prazo');
+            return;
+        }
+        const timeToUse = time || '12:00';
+        const combined = `${newDate}T${timeToUse}`;
+        updateWithLog({ dueDate: new Date(combined).toISOString() }, 'alterou a data de entrega');
+    };
+
+    const handleTimeChange = (newTime: string) => {
+        const { date } = getDueDateParts(task.dueDate);
+        const dateToUse = date || new Date().toISOString().split('T')[0];
+        const combined = `${dateToUse}T${newTime || '12:00'}`;
+        updateWithLog({ dueDate: new Date(combined).toISOString() }, 'alterou a hora de entrega');
+    };
+
     const handleToggleTimer = () => {
         const now = Date.now();
         if (task.isTracking) {
@@ -270,9 +312,25 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                             </div>
                             <div>
                                 <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Entrega</h4>
-                                <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl">
-                                    <Calendar size={14} className="text-slate-400"/>
-                                    <input type="date" className="bg-transparent text-[11px] font-black text-slate-700 outline-none" value={task.dueDate || ''} onChange={e => updateWithLog({ dueDate: e.target.value }, 'alterou o prazo')}/>
+                                <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl">
+                                    <div className="flex items-center gap-1.5 border-r border-slate-200 pr-2">
+                                        <Calendar size={14} className="text-slate-400"/>
+                                        <input 
+                                            type="date" 
+                                            className="bg-transparent text-[11px] font-black text-slate-700 outline-none w-[110px]" 
+                                            value={getDueDateParts(task.dueDate).date} 
+                                            onChange={e => handleDateChange(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Clock size={14} className="text-slate-400"/>
+                                        <input 
+                                            type="time" 
+                                            className="bg-transparent text-[11px] font-black text-slate-700 outline-none w-[60px]" 
+                                            value={getDueDateParts(task.dueDate).time} 
+                                            onChange={e => handleTimeChange(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Task, User, ColumnConfig, Notification, SystemModule, ConfirmOptions, Client, Squad } from '../types';
 import { 
-    Plus, Archive, Settings, X, Search, Bell, Layers, Menu
+    Plus, Archive, Settings, X, Search, Bell, Layers, Menu, Calendar, Clock
 } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import confetti from 'canvas-confetti';
@@ -395,7 +395,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 if (activeFilter.status && t.status !== activeFilter.status) matchesFilter = false;
                 if (activeFilter.overdue) {
                   const today = new Date().toISOString().split('T')[0];
-                  if (!(t.dueDate < today && t.status !== 'DONE' && !t.archived)) matchesFilter = false;
+                  if (!(t.dueDate && t.dueDate.split('T')[0] < today && t.status !== 'DONE' && !t.archived)) matchesFilter = false;
                 }
                 if (activeFilter.inProgress) {
                   if (!(t.status !== 'BACKLOG' && t.status !== 'DONE' && !t.archived)) matchesFilter = false;
@@ -503,6 +503,23 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                               </div>
                             </div>
                             <h4 className="text-[13px] font-bold text-slate-700 leading-tight group-hover:text-pink-600 transition-colors line-clamp-2 tracking-tight">{task.title}</h4>
+                            {task.dueDate && (
+                              <div className="flex items-center gap-1.5 mt-3 text-[10px] font-semibold text-slate-500">
+                                <Calendar size={12} className="text-slate-400 shrink-0" />
+                                <span>
+                                  {(() => {
+                                    try {
+                                      const d = new Date(task.dueDate);
+                                      if (isNaN(d.getTime())) return task.dueDate;
+                                      const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+                                      return d.toLocaleString('pt-BR', options);
+                                    } catch (e) {
+                                      return task.dueDate;
+                                    }
+                                  })()}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </React.Fragment>
