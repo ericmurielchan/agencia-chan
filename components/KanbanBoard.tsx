@@ -496,7 +496,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <div className="p-6">
                             <div className="flex justify-between items-start mb-4">
                               <div className="flex gap-1.5 flex-wrap">
-                                <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>{task.priority}</span>
+                                <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${
+                                  task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 
+                                  task.priority === 'MEDIUM' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 
+                                  'bg-slate-50 text-slate-500 border border-slate-100'
+                                }`}>
+                                  {task.priority === 'HIGH' ? 'ALTA' : task.priority === 'MEDIUM' ? 'MÉDIA' : 'BAIXA'}
+                                </span>
                                 {(() => {
                                   if (!task.dueDate || task.status === 'DONE') return null;
                                   try {
