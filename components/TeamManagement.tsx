@@ -353,69 +353,77 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   return (
     <div className="space-y-8 animate-pop">
-      <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-slate-800">Equipes & Squads</h2>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">Equipes & Squads</h2>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Gerencie colaboradores, permissões e squads da sua agência</p>
+          </div>
           {!isReadOnly && (
-              <button onClick={() => { setEditingUser(INITIAL_USER_STATE); setIsModalOpen(true) }} className="bg-pink-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow hover:bg-pink-700 active:scale-95 transition-all"><Plus size={18}/> Novo Colaborador</button>
+              <button 
+                  onClick={() => { setEditingUser(INITIAL_USER_STATE); setIsModalOpen(true) }} 
+                  className="h-11 px-6 bg-pink-600 hover:bg-pink-700 text-white rounded-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg shadow-pink-500/20 transition-all transform hover:scale-[1.02] active:scale-95 whitespace-nowrap self-start md:self-auto"
+              >
+                  <Plus size={16}/> Novo Colaborador
+              </button>
           )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white rounded-xl border shadow-sm">
-              <div className="p-4 border-b bg-slate-50 font-bold flex items-center justify-between">
-                <span>{isCommercial ? 'Acessos de Clientes' : 'Colaboradores'}</span>
-                {isCommercial && <span className="text-[10px] text-slate-400 font-normal">Apenas perfis de clientes</span>}
+          <div className="bg-white/60 backdrop-blur-xl rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm p-6">
+              <div className="mb-6 flex items-center justify-between">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">{isCommercial ? 'Acessos de Clientes' : 'Colaboradores'}</h3>
+                {isCommercial && <span className="text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2.5 py-1 rounded-lg">Apenas Clientes</span>}
               </div>
-              <div className="divide-y max-h-[500px] overflow-y-auto custom-scrollbar">
+              <div className="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
                   {displayedUsers.map(user => (
-                      <div key={user.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors group">
-                          <div className="flex items-center gap-3">
+                      <div key={user.id} className="p-4 rounded-2xl border border-slate-50 hover:border-pink-200/50 hover:bg-pink-50/5 transition-all flex items-center justify-between group">
+                          <div className="flex items-center gap-4">
                               <div className="relative">
-                                  <img src={user.avatar || undefined} className="w-10 h-10 rounded-full border shadow-sm" />
+                                  <img src={user.avatar || undefined} className="w-11 h-11 rounded-2xl border border-slate-200/50 shadow-sm object-cover" />
                                   {user.hasSystemAccess && (
-                                      <div className="absolute -bottom-1 -right-1 bg-emerald-500 border-2 border-white w-4 h-4 rounded-full flex items-center justify-center" title="Acesso ao Sistema Habilitado">
-                                          <CheckCircle size={10} className="text-white"/>
+                                      <div className="absolute -bottom-1 -right-1 bg-emerald-500 border-2 border-white w-5 h-5 rounded-full flex items-center justify-center shadow-sm" title="Acesso ao Sistema Habilitado">
+                                          <CheckCircle size={11} className="text-white"/>
                                       </div>
                                   )}
                               </div>
                               <div className="flex flex-col">
-                                  <span className="font-bold text-sm text-slate-800">{user.name}</span>
-                                  <div className="flex items-center gap-2">
-                                      <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                  <span className="font-extrabold text-slate-800 text-sm">{user.name}</span>
+                                  <div className="flex items-center gap-2.5 mt-1 flex-wrap">
+                                      <span className="text-[9px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg uppercase tracking-widest">
                                           {ROLES.find(r => r.value === user.role)?.label.split(' ')[0] || user.role}
                                       </span>
-                                      <span className="text-[10px] text-slate-400">{user.email}</span>
+                                      <span className="text-[10px] text-slate-400 font-bold">{user.email}</span>
                                   </div>
                               </div>
                           </div>
                           {canEditUser(user) ? (
-                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button 
                                     onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
-                                    className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
                                     title="Editar"
                                   >
-                                      <Edit2 size={16}/>
+                                      <Edit2 size={15}/>
                                   </button>
                                   {canDeleteUser(user) && (
                                       <button 
                                         onClick={()=>handleDeleteUser(user.id)} 
-                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                         title="Excluir"
                                       >
-                                          <Trash2 size={16}/>
+                                          <Trash2 size={15}/>
                                       </button>
                                   )}
                               </div>
                           ) : (
                               (user.id === currentUserId || (currentUserRole === 'MANAGER' && (user.role === 'ADMIN' || user.role === 'MANAGER'))) ? (
-                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
                                         onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
-                                        className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
+                                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
                                         title="Visualizar"
                                       >
-                                          <Eye size={16}/>
+                                          <Eye size={15}/>
                                       </button>
                                   </div>
                               ) : null
@@ -426,30 +434,35 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
           </div>
 
           {!isCommercial && (
-            <div className="bg-white rounded-xl border shadow-sm p-4">
+            <div className="bg-white/60 backdrop-blur-xl rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm p-6">
               <div className="flex justify-between mb-6 items-center">
-                  <h3 className="font-bold">Squads</h3>
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Squads</h3>
                   {currentUserRole !== 'EMPLOYEE' && currentUserRole !== 'FREELANCER' && (
-                      <button onClick={()=>{setEditingSquad({name:'',members:[]});setIsSquadModalOpen(true)}} className="text-xs text-pink-600 font-bold hover:text-pink-800 transition-colors">+ Criar Squad</button>
+                      <button 
+                          onClick={()=>{setEditingSquad({name:'',members:[]});setIsSquadModalOpen(true)}} 
+                          className="text-[10px] font-black uppercase tracking-widest text-pink-600 hover:text-pink-800 transition-colors flex items-center gap-1.5"
+                      >
+                          <Plus size={14}/> Criar Squad
+                      </button>
                   )}
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
                   {squads.map(s => {
                       const isMySquad = !!(currentUserId && s.members?.includes(currentUserId));
                       return (
                           <div 
                               key={s.id} 
-                              className={`p-4 border rounded-xl flex justify-between items-center group transition-all ${
+                              className={`p-5 rounded-[24px] border flex justify-between items-center group transition-all ${
                                   isMySquad 
-                                      ? 'bg-pink-50/30 border-pink-300 shadow-sm ring-1 ring-pink-200' 
-                                      : 'bg-slate-50/50 border-slate-200'
+                                      ? 'bg-pink-50/10 border-pink-200 shadow-sm ring-1 ring-pink-100' 
+                                      : 'bg-slate-50/30 border-slate-100/80 hover:border-pink-100/50 hover:bg-pink-50/5'
                               }`}
                           >
-                              <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-bold text-slate-800">{s.name}</span>
+                              <div className="flex flex-col gap-2">
+                                  <div className="flex items-center gap-2.5 flex-wrap">
+                                      <span className="font-extrabold text-slate-800 text-sm tracking-tight">{s.name}</span>
                                       {isMySquad && (
-                                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-pink-100 text-pink-700 px-2 py-0.5 rounded border border-pink-200 animate-pulse">
+                                          <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider bg-pink-100 text-pink-700 px-2.5 py-0.5 rounded-lg border border-pink-200/30 animate-pulse">
                                               <Users size={10} className="text-pink-600" /> Minha Squad
                                           </span>
                                       )}
@@ -460,15 +473,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                       const validMembers = s.members.filter(memberId => users.some(u => u.id === memberId));
                                       if (validMembers.length === 0) return null;
                                       return (
-                                          <div className="flex items-center gap-2 mt-1">
-                                              <div className="flex -space-x-1.5 overflow-hidden">
+                                          <div className="flex items-center gap-3 mt-1">
+                                              <div className="flex -space-x-2 overflow-hidden">
                                                   {validMembers.map(memberId => {
                                                       const member = users.find(u => u.id === memberId);
                                                       if (!member) return null;
                                                       return (
                                                           <img 
                                                               key={memberId}
-                                                              className="inline-block h-6 w-6 rounded-full ring-2 ring-white border border-slate-100 object-cover" 
+                                                              className="inline-block h-6 w-6 rounded-xl ring-2 ring-white border border-slate-100 object-cover" 
                                                               src={member.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${member.name}`} 
                                                               alt={member.name}
                                                               title={member.name}
@@ -476,7 +489,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                                       );
                                                   })}
                                               </div>
-                                              <span className="text-[10px] text-slate-400 font-semibold">
+                                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                                                   {validMembers.length} {validMembers.length === 1 ? 'membro' : 'membros'}
                                               </span>
                                           </div>
@@ -485,30 +498,30 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                               </div>
 
                               {!isReadOnly ? (
-                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
                                         onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} 
-                                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
                                         title="Editar"
                                       >
-                                          <Edit2 size={16}/>
+                                          <Edit2 size={15}/>
                                       </button>
                                       <button 
                                         onClick={()=>handleDeleteSquad(s.id)} 
-                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                         title="Excluir"
                                       >
-                                          <Trash2 size={16}/>
+                                          <Trash2 size={15}/>
                                       </button>
                                   </div>
                               ) : (
-                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
                                         onClick={()=>{setEditingSquad(s); setIsSquadModalOpen(true)}} 
-                                        className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
+                                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
                                         title="Visualizar"
                                       >
-                                          <Eye size={16}/>
+                                          <Eye size={15}/>
                                       </button>
                                   </div>
                               )}
