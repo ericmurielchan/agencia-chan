@@ -495,7 +495,27 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
                           <div className="p-6">
                             <div className="flex justify-between items-start mb-4">
-                              <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>{task.priority}</span>
+                              <div className="flex gap-1.5 flex-wrap">
+                                <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>{task.priority}</span>
+                                {(() => {
+                                  if (!task.dueDate || task.status === 'DONE') return null;
+                                  try {
+                                    const d = new Date(task.dueDate);
+                                    if (isNaN(d.getTime())) return null;
+                                    const now = new Date();
+                                    const diffMs = d.getTime() - now.getTime();
+                                    const diffHours = diffMs / (1000 * 60 * 60);
+                                    if (diffMs < 0) {
+                                      return <span className="text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-red-100 text-red-700 border border-red-200">Atrasada</span>;
+                                    } else if (diffHours <= 24) {
+                                      return <span className="text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-amber-100 text-amber-700 border border-amber-200">Vence Hoje</span>;
+                                    } else if (diffHours <= 72) {
+                                      return <span className="text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-blue-100 text-blue-700 border border-blue-200">Em Breve</span>;
+                                    }
+                                  } catch (e) {}
+                                  return null;
+                                })()}
+                              </div>
                               <div className="flex -space-x-2 transition-transform group-hover:translate-x-1">
                                 {Array.from(new Set(task.assigneeIds || [])).slice(0, 3).map((id, idx) => (
                                   <img key={`${id}-${idx}`} src={users.find(u => u.id === id)?.avatar || undefined} className="w-7 h-7 rounded-xl border-2 border-white shadow-sm object-cover" />
@@ -504,8 +524,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             </div>
                             <h4 className="text-[13px] font-bold text-slate-700 leading-tight group-hover:text-pink-600 transition-colors line-clamp-2 tracking-tight">{task.title}</h4>
                             {task.dueDate && (
-                              <div className="flex items-center gap-1.5 mt-3 text-[10px] font-semibold text-slate-500">
-                                <Calendar size={12} className="text-slate-400 shrink-0" />
+                              <div className={`flex items-center gap-1.5 mt-3 text-[10px] font-bold ${(() => {
+                                if (task.status === 'DONE') return 'text-slate-400';
+                                try {
+                                  const d = new Date(task.dueDate);
+                                  if (isNaN(d.getTime())) return 'text-slate-500';
+                                  const diffMs = d.getTime() - Date.now();
+                                  if (diffMs < 0) return 'text-red-600 animate-pulse';
+                                  if (diffMs / (1000 * 60 * 60) <= 24) return 'text-amber-600';
+                                  if (diffMs / (1000 * 60 * 60) <= 72) return 'text-blue-600';
+                                } catch (e) {}
+                                return 'text-slate-500';
+                              })()}`}>
+                                <Calendar size={12} className="shrink-0" />
                                 <span>
                                   {(() => {
                                     try {

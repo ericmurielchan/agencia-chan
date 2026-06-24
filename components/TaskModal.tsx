@@ -6,7 +6,7 @@ import {
     Clock, Plus, CheckCircle, X, Trash2, Archive, Image as ImageIcon, 
     CheckSquare, Users, Layout, Upload, Check, Activity, Play, Pause, 
     Calendar, Save, Palette, Camera, Trash, MoreHorizontal, MessageCircle,
-    UserPlus, Hash, AlignLeft, Info, History, User as UserIcon, AtSign, Building2
+    UserPlus, Hash, AlignLeft, Info, History, User as UserIcon, AtSign, Building2, AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { compressImage } from '../utils/imageCompressor';
@@ -307,6 +307,28 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                     >
                                         <option value="">Sem Cliente</option>
                                         {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Prioridade</h4>
+                                <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl">
+                                    <AlertCircle size={14} className={
+                                        task.priority === 'HIGH' ? 'text-red-500 animate-pulse' :
+                                        task.priority === 'MEDIUM' ? 'text-indigo-500' :
+                                        'text-slate-400'
+                                    }/>
+                                    <select 
+                                        className="bg-transparent text-[11px] font-black text-slate-700 outline-none appearance-none cursor-pointer" 
+                                        value={task.priority || 'MEDIUM'} 
+                                        onChange={e => {
+                                            const p = e.target.value as 'LOW' | 'MEDIUM' | 'HIGH';
+                                            updateWithLog({ priority: p }, `alterou a prioridade para ${p === 'HIGH' ? 'ALTA' : p === 'MEDIUM' ? 'MÉDIA' : 'BAIXA'}`);
+                                        }}
+                                    >
+                                        <option value="LOW">BAIXA</option>
+                                        <option value="MEDIUM">MÉDIA</option>
+                                        <option value="HIGH">ALTA</option>
                                     </select>
                                 </div>
                             </div>

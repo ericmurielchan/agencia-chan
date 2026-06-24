@@ -1056,12 +1056,61 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                                             <div className="flex items-center gap-4">
                                                 <div className={`w-2 h-10 rounded-full ${
                                                     task.status === 'DONE' ? 'bg-emerald-500' :
-                                                    task.status === 'IN_PROGRESS' ? 'bg-indigo-500' :
-                                                    'bg-slate-300'
+                                                    (() => {
+                                                      if (!task.dueDate) return task.status === 'IN_PROGRESS' ? 'bg-indigo-500' : 'bg-slate-300';
+                                                      try {
+                                                        const d = new Date(task.dueDate);
+                                                        if (!isNaN(d.getTime()) && d.getTime() < Date.now()) {
+                                                          return 'bg-red-500 animate-pulse';
+                                                        }
+                                                      } catch (e) {}
+                                                      return task.status === 'IN_PROGRESS' ? 'bg-indigo-500' : 'bg-slate-300';
+                                                    })()
                                                 }`}></div>
                                                 <div>
                                                     <h5 className="font-black text-slate-800 text-sm mb-1">{task.title}</h5>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{task.status} • Prazo: {task.dueDate}</p>
+                                                    <p className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 flex-wrap">
+                                                        <span className={task.status === 'DONE' ? 'text-emerald-600' : 'text-slate-500'}>{task.status}</span>
+                                                        <span className="text-slate-300">•</span>
+                                                        {task.dueDate ? (
+                                                            <span className={(() => {
+                                                                if (task.status === 'DONE') return 'text-slate-400';
+                                                                try {
+                                                                    const d = new Date(task.dueDate);
+                                                                    if (isNaN(d.getTime())) return 'text-slate-400';
+                                                                    const diffMs = d.getTime() - Date.now();
+                                                                    if (diffMs < 0) return 'text-red-600 font-extrabold';
+                                                                    if (diffMs / (1000 * 60 * 60) <= 24) return 'text-amber-600 font-extrabold';
+                                                                    if (diffMs / (1000 * 60 * 60) <= 72) return 'text-blue-600 font-extrabold';
+                                                                } catch (e) {}
+                                                                return 'text-slate-400';
+                                                            })()}>
+                                                                Prazo: {(() => {
+                                                                    try {
+                                                                        const d = new Date(task.dueDate);
+                                                                        if (isNaN(d.getTime())) return task.dueDate;
+                                                                        return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                                                                    } catch (e) {
+                                                                        return task.dueDate;
+                                                                    }
+                                                                })()}
+                                                                {(() => {
+                                                                    if (task.status === 'DONE') return '';
+                                                                    try {
+                                                                        const d = new Date(task.dueDate);
+                                                                        if (isNaN(d.getTime())) return '';
+                                                                        const diffMs = d.getTime() - Date.now();
+                                                                        if (diffMs < 0) return ' (ATRASADA)';
+                                                                        if (diffMs / (1000 * 60 * 60) <= 24) return ' (HOJE)';
+                                                                        if (diffMs / (1000 * 60 * 60) <= 72) return ' (EM BREVE)';
+                                                                    } catch (e) {}
+                                                                    return '';
+                                                                })()}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-400">Sem prazo definido</span>
+                                                        )}
+                                                    </p>
                                                 </div>
                                             </div>
                                             <div className="flex -space-x-2">
