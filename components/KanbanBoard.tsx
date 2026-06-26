@@ -2,10 +2,57 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Task, User, ColumnConfig, Notification, SystemModule, ConfirmOptions, Client, Squad } from '../types';
 import { 
-    Plus, Archive, Settings, X, Search, Bell, Layers, Menu, Calendar, Clock
+    Plus, Archive, Settings, X, Search, Bell, Layers, Menu, Calendar, Clock, Play
 } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import confetti from 'canvas-confetti';
+
+const TaskTimerBadge: React.FC<{ task: Task; isHeader?: boolean }> = ({ task, isHeader }) => {
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
+
+  useEffect(() => {
+    let interval: any;
+    if (task.isTracking) {
+      interval = setInterval(() => {
+        const activeLog = task.timeLogs?.find(l => !l.endTime);
+        if (activeLog) {
+          const elapsed = Math.floor((Date.now() - activeLog.startTime) / 1000);
+          setSecondsElapsed(elapsed);
+        }
+      }, 1000);
+    } else {
+      setSecondsElapsed(0);
+    }
+    return () => clearInterval(interval);
+  }, [task.isTracking, task.timeLogs]);
+
+  const getAccumulatedSeconds = () => {
+    const closed = (task.timeLogs || []).reduce((acc, log) => acc + (log.duration || 0), 0);
+    return closed + secondsElapsed;
+  };
+
+  const formatSeconds = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  if (isHeader) {
+    return (
+      <span className="text-xs font-mono font-black text-pink-500 tracking-wider">
+        {formatSeconds(getAccumulatedSeconds())}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest bg-pink-500 text-white shadow-sm shadow-pink-500/20 animate-pulse">
+      <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
+      {formatSeconds(getAccumulatedSeconds())}
+    </span>
+  );
+};
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -382,6 +429,38 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         </div>
       </header>
 
+      {/* Active production tracker bar */}
+      {tasks.filter(t => t.isTracking).length > 0 && (
+        <div className="mx-6 mt-4 bg-slate-900 border border-slate-800 rounded-[24px] p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl shadow-pink-500/5 animate-pop">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500"></span>
+            </span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-pink-500">Job em Produção Ativa</p>
+              <p className="text-xs font-bold text-white mt-0.5 line-clamp-1 max-w-md">
+                {tasks.filter(t => t.isTracking).map(t => t.title).join(', ')}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            {tasks.filter(t => t.isTracking).map(t => (
+              <div key={t.id} className="flex items-center gap-3 bg-slate-800/80 border border-slate-700/50 px-4 py-2 rounded-xl">
+                <span className="text-[10px] font-bold text-slate-300 line-clamp-1 max-w-[150px]">{t.title}</span>
+                <TaskTimerBadge task={t} isHeader />
+                <button 
+                  onClick={() => setSelectedTask(t)}
+                  className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all active:scale-95"
+                >
+                  Abrir Job
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar">
         <div className="inline-flex h-full p-6 gap-6 items-start">
           {activeColumns.map(col => {
@@ -483,7 +562,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             if (!draggedTaskId || draggedTaskId === task.id) return;
                             handleDropOnTask(draggedTaskId, task.id);
                           }}
-                          className="bg-white rounded-[32px] shadow-sm border-2 border-white hover:border-pink-200 cursor-grab active:cursor-grabbing transition-all group hover:shadow-premium-hover overflow-hidden flex flex-col"
+                          className={`bg-white rounded-[32px] shadow-sm border-2 cursor-grab active:cursor-grabbing transition-all group hover:shadow-premium-hover overflow-hidden flex flex-col ${
+                            task.isTracking 
+                              ? 'border-pink-500 shadow-lg shadow-pink-500/10 ring-4 ring-pink-500/5' 
+                              : 'border-white hover:border-pink-200'
+                          }`}
                         >
                           {/* CAPA SANGRE: SEM PADDING E SEM MARGEM */}
                           {task.coverType === 'color' && (
@@ -495,7 +578,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
                           <div className="p-6">
                             <div className="flex justify-between items-start mb-4">
-                              <div className="flex gap-1.5 flex-wrap">
+                              <div className="flex gap-1.5 flex-wrap items-center">
                                 <span className={`text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest ${
                                   task.priority === 'HIGH' ? 'bg-red-50 text-red-600 border border-red-100' : 
                                   task.priority === 'MEDIUM' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 
@@ -503,6 +586,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                                 }`}>
                                   {task.priority === 'HIGH' ? 'ALTA' : task.priority === 'MEDIUM' ? 'MÉDIA' : 'BAIXA'}
                                 </span>
+                                {task.isTracking && <TaskTimerBadge task={task} />}
                                 {(() => {
                                   if (!task.dueDate || task.status === 'DONE') return null;
                                   try {
