@@ -170,6 +170,7 @@ export const mapTask = (t: any): Task => {
     archived: t.archived || false,
     createdAt: t.created_at || Date.now(),
     position: pos !== undefined && pos !== null ? pos : undefined,
+    responsibleId: t.cover?.responsibleId || undefined,
     cover: t.cover,
     coverType: t.cover_type || undefined,
     coverValue: t.cover_value || undefined,
@@ -445,7 +446,10 @@ export const saveTask = async (task: Partial<Task>) => {
     approval_status: task.approvalStatus,
     archived: task.archived,
     created_at: task.createdAt || Date.now(),
-    cover: task.cover,
+    cover: {
+      ...(task.cover || {}),
+      responsibleId: task.responsibleId || null
+    },
     cover_type: task.coverType,
     cover_value: task.coverValue,
     time_logs: task.timeLogs,
