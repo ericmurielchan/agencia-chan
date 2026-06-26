@@ -215,7 +215,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
         baseClients = baseClients.filter(c => c.squadId === selectedSquadId);
     }
     if (selectedUserId !== 'ALL') {
-        baseTasks = baseTasks.filter(t => t.assigneeIds.includes(selectedUserId));
+        baseTasks = baseTasks.filter(t => t.responsibleId ? t.responsibleId === selectedUserId : t.assigneeIds.includes(selectedUserId));
         baseLeads = baseLeads.filter(l => l.responsibleId === selectedUserId);
         const userSquadIds = squads.filter(s => s.members?.includes(selectedUserId)).map(s => s.id);
         baseClients = baseClients.filter(c => c.responsibleId === selectedUserId || (c.squadId && userSquadIds.includes(c.squadId)));
@@ -280,8 +280,8 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     const teamBelowGoal = goals.some(g => {
         if (g.month !== currentMonth) return false;
         const realized = g.type === 'PRODUCTION' 
-            ? tasks.filter(t => t.status === 'DONE' && (g.userId ? t.assigneeIds.includes(g.userId) : (g.squadId ? t.squadId === g.squadId : true))).length
-            : tasks.filter(t => (g.userId ? t.assigneeIds.includes(g.userId) : (g.squadId ? t.squadId === g.squadId : true))).reduce((acc, t) => acc + t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0), 0) / 3600;
+            ? tasks.filter(t => t.status === 'DONE' && (g.userId ? (t.responsibleId ? t.responsibleId === g.userId : t.assigneeIds.includes(g.userId)) : (g.squadId ? t.squadId === g.squadId : true))).length
+            : tasks.filter(t => (g.userId ? (t.responsibleId ? t.responsibleId === g.userId : t.assigneeIds.includes(g.userId)) : (g.squadId ? t.squadId === g.squadId : true))).reduce((acc, t) => acc + t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0), 0) / 3600;
         return (realized / g.targetValue) < 0.9;
     });
 

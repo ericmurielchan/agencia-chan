@@ -87,6 +87,7 @@ export interface Task {
   description: string;
   status: string;
   assigneeIds: string[];
+  responsibleId?: string;
   squadId?: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   dueDate: string;

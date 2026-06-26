@@ -14,7 +14,7 @@ export const calculateKanbanMetrics = (tasks: Task[], userId?: string | 'ALL', s
     
     const baseTasks = tasks.filter(t => {
         const isSquadMatch = !squadId || squadId === 'ALL' || t.squadId === squadId;
-        const isUserMatch = !userId || userId === 'ALL' || t.assigneeIds.includes(userId);
+        const isUserMatch = !userId || userId === 'ALL' || (t.responsibleId ? t.responsibleId === userId : t.assigneeIds.includes(userId));
         return isSquadMatch && isUserMatch;
     });
 

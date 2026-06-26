@@ -125,6 +125,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
       priority: newRequest.urgency,
       dueDate: newRequest.deadline || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       assigneeIds: [],
+      responsibleId: currentUser.id,
       clientId: currentUser.clientId,
       clientRequest: true,
       estimatedTime: 0,

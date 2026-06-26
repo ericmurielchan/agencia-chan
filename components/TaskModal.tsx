@@ -297,6 +297,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                 </div>
                             )}
                             <div>
+                                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Responsável</h4>
+                                <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl">
+                                    <UserIcon size={14} className="text-slate-400"/>
+                                    <select 
+                                        className="bg-transparent text-[11px] font-black text-slate-700 outline-none appearance-none cursor-pointer" 
+                                        value={task.responsibleId || ''} 
+                                        onChange={e => {
+                                            const rId = e.target.value;
+                                            const u = users.find(user => user.id === rId);
+                                            updateWithLog({ responsibleId: rId || undefined }, `alterou o responsável para ${u ? u.name : 'Ninguém'}`);
+                                        }}
+                                    >
+                                        <option value="">Sem Responsável</option>
+                                        {users.filter(u => u.role !== 'CLIENT').map(u => (
+                                            <option key={u.id} value={u.id}>{u.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
                                 <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Cliente</h4>
                                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl">
                                     <Building2 size={14} className="text-slate-400"/>

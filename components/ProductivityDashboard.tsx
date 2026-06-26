@@ -123,7 +123,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
           const isDateInRange = referenceDate ? referenceDate >= startDate : true; // Se não tem data, incluímos (para não sumir do dashboard)
           
           const isSquadMatch = selectedSquadId === 'ALL' || t.squadId === selectedSquadId;
-          const isUserMatch = selectedUserId === 'ALL' || t.assigneeIds.includes(selectedUserId);
+          const isUserMatch = selectedUserId === 'ALL' || (t.responsibleId ? t.responsibleId === selectedUserId : t.assigneeIds.includes(selectedUserId));
           return isDateInRange && isSquadMatch && isUserMatch;
       });
   }, [myAccessibleTasks, dateRange, selectedSquadId, selectedUserId]);
@@ -210,7 +210,7 @@ export const ProductivityDashboard: React.FC<ProductivityDashboardProps> = ({
   const individualRanking = users
     .filter(u => u.role !== 'CLIENT' && (selectedUserId === 'ALL' || u.id === selectedUserId))
     .map(user => {
-        const userTasks = filteredTasks.filter(t => t.assigneeIds.includes(user.id));
+        const userTasks = filteredTasks.filter(t => t.responsibleId ? t.responsibleId === user.id : t.assigneeIds.includes(user.id));
         const seconds = userTasks.reduce((acc, t) => acc + t.timeLogs.reduce((s, l) => s + (l.duration || 0), 0), 0);
         const completed = userTasks.filter(t => t.status === 'DONE').length;
         
