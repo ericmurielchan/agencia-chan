@@ -48,6 +48,30 @@ interface DashboardProps {
   onNotificationClick?: (notif: Notification) => void;
 }
 
+const safeGetDateStr = (val: any): string => {
+  if (!val) return '';
+  try {
+    let dateObj: Date;
+    if (typeof val === 'number') {
+      dateObj = new Date(val);
+    } else if (typeof val === 'string') {
+      if (/^\d+$/.test(val)) {
+        dateObj = new Date(Number(val));
+      } else {
+        dateObj = new Date(val);
+      }
+    } else {
+      dateObj = new Date(val);
+    }
+    if (isNaN(dateObj.getTime())) {
+      return '';
+    }
+    return dateObj.toISOString().split('T')[0];
+  } catch (e) {
+    return '';
+  }
+};
+
 export const DashboardOverview: React.FC<DashboardProps> = ({ 
     tasks, 
     leads, 
@@ -261,7 +285,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     const expenses = periodTxs.filter(f => f.type === 'EXPENSE' && f.status === 'PAID').reduce((acc, c) => acc + c.amount, 0);
     const profit = revenue - expenses;
 
-    const periodLeads = filteredData.leads.filter(l => filterByDate(new Date(l.createdAt).toISOString().split('T')[0]));
+    const periodLeads = filteredData.leads.filter(l => filterByDate(safeGetDateStr(l.createdAt)));
     const newLeads = periodLeads.length;
     
     const activeClients = filteredData.clients.filter(c => c.status === 'ACTIVE').length;
@@ -280,8 +304,8 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     const funnelLeads = filteredData.leads.filter(l => l.status === 'OPEN').length;
     const valueInNegotiation = filteredData.leads.filter(l => l.status === 'OPEN').reduce((acc, l) => acc + (l.value || 0), 0);
     const leadsNoContact = filteredData.leads.filter(l => l.status === 'OPEN' && (!l.lastContact || l.history.length === 0)).length;
-    const wonLeads = filteredData.leads.filter(l => l.status === 'WON' && filterByDate(new Date(l.updatedAt).toISOString().split('T')[0])).length;
-    const lostLeads = filteredData.leads.filter(l => l.status === 'LOST' && filterByDate(new Date(l.updatedAt).toISOString().split('T')[0])).length;
+    const wonLeads = filteredData.leads.filter(l => l.status === 'WON' && filterByDate(safeGetDateStr(l.updatedAt))).length;
+    const lostLeads = filteredData.leads.filter(l => l.status === 'LOST' && filterByDate(safeGetDateStr(l.updatedAt))).length;
     const conversionRate = (wonLeads + lostLeads) > 0 ? (wonLeads / (wonLeads + lostLeads)) * 100 : 0;
 
     // Operational Bottlenecks

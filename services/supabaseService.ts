@@ -189,6 +189,22 @@ export const mapTask = (t: any): Task => {
 };
 
 /**
+ * Converte um valor de data/timestamp dinâmico do banco em milissegundos numéricos seguros
+ */
+const parseToTimestamp = (val: any): number => {
+  if (!val) return Date.now();
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    if (/^\d+$/.test(val)) {
+      return Number(val);
+    }
+    const parsed = Date.parse(val);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return Date.now();
+};
+
+/**
  * Mapeia um lead do Supabase para o formato do App
  */
 const mapLead = (l: any): Lead => {
@@ -220,8 +236,8 @@ const mapLead = (l: any): Lead => {
     responsibleId: mapUserId(l.responsible_id) || '',
     notes: l.notes || '',
     tags: l.tags || [],
-    createdAt: l.created_at || Date.now(),
-    updatedAt: l.updated_at || Date.now(),
+    createdAt: parseToTimestamp(l.created_at),
+    updatedAt: parseToTimestamp(l.updated_at),
     lastContact: l.last_contact || new Date().toISOString(),
     createdBy: mapUserId(l.created_by) || '',
     history: l.history || [],
