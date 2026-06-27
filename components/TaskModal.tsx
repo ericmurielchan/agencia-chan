@@ -6,7 +6,8 @@ import {
     Clock, Plus, CheckCircle, X, Trash2, Archive, Image as ImageIcon, 
     CheckSquare, Users, Layout, Upload, Check, Activity, Play, Pause, 
     Calendar, Save, Palette, Camera, Trash, MoreHorizontal, MessageCircle,
-    UserPlus, Hash, AlignLeft, Info, History, User as UserIcon, AtSign, Building2, AlertCircle
+    UserPlus, Hash, AlignLeft, Info, History, User as UserIcon, AtSign, Building2, AlertCircle,
+    ExternalLink, Github, Youtube, Figma, Cloud, Trello
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { compressImage } from '../utils/imageCompressor';
@@ -43,6 +44,74 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
     const fileInputRef = useRef<HTMLInputElement>(null);
     const descTextareaRef = useRef<HTMLTextAreaElement>(null);
     const chatTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const renderFormattedText = (text: string) => {
+        if (!text) return null;
+
+        const urlRegex = /(https?:\/\/[^\s\n\r]+)/g;
+        const parts = text.split(urlRegex);
+
+        return parts.map((part, idx) => {
+            if (urlRegex.test(part)) {
+                let cleanUrl = part;
+                let trailing = '';
+                while (cleanUrl.length > 0 && /[.,;:!?)]$/.test(cleanUrl)) {
+                    trailing = cleanUrl[cleanUrl.length - 1] + trailing;
+                    cleanUrl = cleanUrl.slice(0, -1);
+                }
+
+                let IconComponent = ExternalLink;
+                let iconColor = 'text-blue-500';
+                const lowerUrl = cleanUrl.toLowerCase();
+
+                if (lowerUrl.includes('drive.google.com') || lowerUrl.includes('docs.google.com') || lowerUrl.includes('sheets.google.com') || lowerUrl.includes('slides.google.com')) {
+                    IconComponent = Cloud;
+                    iconColor = 'text-emerald-500';
+                } else if (lowerUrl.includes('github.com')) {
+                    IconComponent = Github;
+                    iconColor = 'text-slate-800';
+                } else if (lowerUrl.includes('figma.com')) {
+                    IconComponent = Figma;
+                    iconColor = 'text-pink-500';
+                } else if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) {
+                    IconComponent = Youtube;
+                    iconColor = 'text-red-600';
+                } else if (lowerUrl.includes('trello.com')) {
+                    IconComponent = Trello;
+                    iconColor = 'text-blue-600';
+                }
+
+                return (
+                    <React.Fragment key={`link-${idx}`}>
+                        <a 
+                            href={cleanUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 bg-slate-100 hover:bg-slate-200 text-pink-600 hover:text-pink-700 transition-colors font-bold rounded-lg break-all align-middle shadow-sm border border-slate-200/40"
+                        >
+                            <IconComponent size={12} className={`${iconColor} shrink-0`} />
+                            <span>{cleanUrl}</span>
+                        </a>
+                        {trailing}
+                    </React.Fragment>
+                );
+            } else {
+                const mentionRegex = /(@\w+ \w+|@\w+)/g;
+                const subParts = part.split(mentionRegex);
+                return subParts.map((subPart, subIdx) => {
+                    if (mentionRegex.test(subPart)) {
+                        return (
+                            <span key={`mention-${idx}-${subIdx}`} className="text-pink-500 font-black">
+                                {subPart}
+                            </span>
+                        );
+                    }
+                    return subPart;
+                });
+            }
+        });
+    };
 
     useEffect(() => {
         let interval: any;
@@ -415,7 +484,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                     </div>
                                 ) : (
                                     <div onClick={() => setIsEditingDesc(true)} className="bg-slate-50/50 hover:bg-slate-100 rounded-2xl p-4 text-xs text-slate-600 leading-relaxed cursor-text min-h-[80px] border-2 border-transparent hover:border-slate-200 transition-all whitespace-pre-wrap font-medium shadow-sm">
-                                        {localDesc || "Adicione instruções (use @ para citar alguém)..."}
+                                        {localDesc ? renderFormattedText(localDesc) : "Adicione instruções (use @ para citar alguém)..."}
                                     </div>
                                 )}
                             </div>
@@ -533,9 +602,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                                                                 <span className="text-[8px] text-slate-300 font-bold">{new Date(comment.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                                             </div>
                                                             <div className={`text-xs p-3 rounded-2xl inline-block shadow-sm border ${isMe ? 'bg-slate-900 text-white border-slate-800 rounded-tr-none' : 'bg-slate-50 text-slate-700 border-slate-100 rounded-tl-none'}`}>
-                                                                {comment.text.split(/(@\w+ \w+)/g).map((part, i) => 
-                                                                    part.startsWith('@') ? <span key={i} className="text-pink-500 font-black">{part}</span> : part
-                                                                )}
+                                                                {renderFormattedText(comment.text)}
                                                             </div>
                                                         </div>
                                                     </div>
