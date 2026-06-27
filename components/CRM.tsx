@@ -32,7 +32,7 @@ export const CRM: React.FC<CRMProps> = ({ leads, setLeads, columns, setColumns, 
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
 
   const isAdmin = currentUser.role === 'ADMIN';
-  const isManager = currentUser.role === 'MANAGER';
+  const isManager = currentUser.role === 'MANAGER' || currentUser.role === 'COMMERCIAL_MANAGER';
   const activeColumns = useMemo(() => columns.filter(c => !c.isArchived).sort((a,b) => a.order - b.order), [columns]);
 
   const filteredLeads = useMemo(() => {

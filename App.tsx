@@ -102,7 +102,8 @@ const ROLE_LABELS: Record<Role, string> = {
     'EMPLOYEE': 'Colaborador',
     'COMMERCIAL': 'Comercial',
     'CLIENT': 'Cliente',
-    'FREELANCER': 'Freelancer'
+    'FREELANCER': 'Freelancer',
+    'COMMERCIAL_MANAGER': 'Gerente Comercial'
 };
 
 const App: React.FC = () => {
@@ -189,6 +190,11 @@ const App: React.FC = () => {
       }
     } else if (role === 'COMMERCIAL') {
       const allowed = ['crm', 'clients', 'catalog', 'requisitions', 'help', 'settings', 'privacy', 'dashboard'];
+      if (!allowed.includes(currentView)) {
+        setCurrentView('dashboard');
+      }
+    } else if (role === 'COMMERCIAL_MANAGER') {
+      const allowed = ['dashboard', 'crm', 'clients', 'catalog', 'requisitions', 'teams', 'productivity', 'help', 'settings', 'privacy'];
       if (!allowed.includes(currentView)) {
         setCurrentView('dashboard');
       }
@@ -710,7 +716,7 @@ const App: React.FC = () => {
     }
     
     if (user.role === 'CLIENT') setCurrentView('client-portal');
-    else if (user.role === 'COMMERCIAL') setCurrentView('crm');
+    else if (user.role === 'COMMERCIAL' || user.role === 'COMMERCIAL_MANAGER') setCurrentView('crm');
     else {
         setCurrentView('dashboard');
     }

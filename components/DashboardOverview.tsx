@@ -70,7 +70,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
 
   const isFinance = currentUser.role === 'FINANCE';
   const isAdmin = currentUser.role === 'ADMIN';
-  const isManager = currentUser.role === 'MANAGER';
+  const isManager = currentUser.role === 'MANAGER' || currentUser.role === 'COMMERCIAL_MANAGER';
   const isEmployee = currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER';
   const isCommercial = currentUser.role === 'COMMERCIAL';
 
@@ -179,28 +179,43 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
     let baseFinance = finance;
     let baseClients = clients;
 
+    // 1. Filtro de Leads (Negociações) por cargo (CRM)
+    if (currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE') {
+        baseLeads = leads;
+    } else if (currentUser.role === 'COMMERCIAL_MANAGER') {
+        const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
+        const mySquadIds = mySquads.map(s => s.id);
+        const squadMembers = users.filter(u => squads.some(s => mySquadIds.includes(s.id) && s.members?.includes(u.id))).map(u => u.id);
+        baseLeads = leads.filter(l => {
+            const isResponsible = l.responsibleId === currentUser.id;
+            const isCreator = l.createdBy === currentUser.id;
+            const responsibleUserInSquad = l.responsibleId && squadMembers.includes(l.responsibleId);
+            const creatorUserInSquad = l.createdBy && squadMembers.includes(l.createdBy);
+            return isResponsible || isCreator || responsibleUserInSquad || creatorUserInSquad;
+        });
+    } else {
+        // MANAGER, EMPLOYEE, COMMERCIAL, FREELANCER visualizam apenas suas próprias negociações
+        baseLeads = leads.filter(l => l.responsibleId === currentUser.id || l.createdBy === currentUser.id);
+    }
+
+    // 2. Filtro dos demais dados (Tarefas, Clientes, Financeiro) por cargo
     if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER') {
         baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
-        baseLeads = leads.filter(l => l.responsibleId === currentUser.id);
         const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
         const mySquadIds = mySquads.map(s => s.id);
         baseClients = clients.filter(c => c.responsibleId === currentUser.id || (c.squadId && mySquadIds.includes(c.squadId)));
         baseFinance = [];
     } else if (currentUser.role === 'COMMERCIAL') {
-        // Commercial sees their own tasks but ALL leads and clients to manage them
+        // Commercial sees their own tasks but only their own leads
         baseTasks = tasks.filter(t => t.assigneeIds.includes(currentUser.id));
-        baseLeads = leads; 
         baseClients = clients;
         baseFinance = [];
-    } else if (currentUser.role === 'MANAGER') {
+    } else if (currentUser.role === 'MANAGER' || currentUser.role === 'COMMERCIAL_MANAGER') {
         const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
         const mySquadIds = mySquads.map(s => s.id);
         
         baseTasks = tasks.filter(t => (t.squadId && mySquadIds.includes(t.squadId)) || t.assigneeIds.includes(currentUser.id));
         baseClients = clients.filter(c => (c.squadId && mySquadIds.includes(c.squadId)) || c.responsibleId === currentUser.id);
-        
-        const squadMembers = users.filter(u => squads.some(s => mySquadIds.includes(s.id) && s.members?.includes(u.id))).map(u => u.id);
-        baseLeads = leads.filter(l => (l.responsibleId && squadMembers.includes(l.responsibleId)) || l.responsibleId === currentUser.id);
         
         baseFinance = []; // Gestão Financeira: não visualiza esse modulo
     }
@@ -338,7 +353,7 @@ export const DashboardOverview: React.FC<DashboardProps> = ({
   const shortcuts = [
     { label: 'Novo Lead', icon: Plus, view: 'crm', color: 'bg-pink-600' },
     { label: 'Nova Tarefa', icon: CheckCircle2, view: 'kanban', color: 'bg-blue-600' },
-    ...(!(currentUser.role === 'MANAGER') ? [{ label: 'Nova Despesa', icon: DollarSign, view: 'finance', color: 'bg-slate-900' }] : []),
+    ...(!(currentUser.role === 'MANAGER' || currentUser.role === 'COMMERCIAL_MANAGER') ? [{ label: 'Nova Despesa', icon: DollarSign, view: 'finance', color: 'bg-slate-900' }] : []),
     { label: 'Novo Cliente', icon: Users, view: 'clients', color: 'bg-emerald-600' },
   ];
 

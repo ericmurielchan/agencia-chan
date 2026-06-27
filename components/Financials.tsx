@@ -2145,6 +2145,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
                                                                     u.role === 'ADMIN' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
                                                                     u.role === 'MANAGER' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                                                    u.role === 'COMMERCIAL_MANAGER' ? 'bg-orange-50 text-orange-700 border border-orange-100' :
                                                                     u.role === 'FINANCE' ? 'bg-teal-50 text-teal-700 border border-teal-100' :
                                                                     u.role === 'FREELANCER' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
                                                                     u.role === 'COMMERCIAL' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
@@ -2152,6 +2153,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                                                 }`}>
                                                                     {u.role === 'ADMIN' ? 'Admin' :
                                                                      u.role === 'MANAGER' ? 'Gerente' :
+                                                                     u.role === 'COMMERCIAL_MANAGER' ? 'Gerente Comercial' :
                                                                      u.role === 'FINANCE' ? 'Financeiro' :
                                                                      u.role === 'EMPLOYEE' ? 'Colaborador' :
                                                                      u.role === 'FREELANCER' ? 'Freelancer' :
@@ -3371,6 +3373,7 @@ export const Financials: React.FC<FinancialsProps> = ({
                                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
                                     {editingBankUser.role === 'ADMIN' ? 'Administrador' :
                                      editingBankUser.role === 'MANAGER' ? 'Gerente' :
+                                     editingBankUser.role === 'COMMERCIAL_MANAGER' ? 'Gerente Comercial' :
                                      editingBankUser.role === 'FINANCE' ? 'Financeiro' :
                                      editingBankUser.role === 'EMPLOYEE' ? 'Colaborador' :
                                      editingBankUser.role === 'FREELANCER' ? 'Freelancer' :

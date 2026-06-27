@@ -28,6 +28,7 @@ interface TeamManagementProps {
 const ROLES: { value: Role; label: string }[] = [
     { value: 'ADMIN', label: 'Administrador (Total)' },
     { value: 'MANAGER', label: 'Gerente / Gestor' },
+    { value: 'COMMERCIAL_MANAGER', label: 'Gerente Comercial' },
     { value: 'FINANCE', label: 'Financeiro' },
     { value: 'EMPLOYEE', label: 'Colaborador' },
     { value: 'COMMERCIAL', label: 'Comercial' },
@@ -43,6 +44,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     onSaveUser, onDeleteUser, onSaveSquad, onDeleteSquad
 }) => {
   const isCommercial = currentUserRole === 'COMMERCIAL';
+  const isCommercialManager = currentUserRole === 'COMMERCIAL_MANAGER';
   const isReadOnly = currentUserRole === 'EMPLOYEE' || currentUserRole === 'FREELANCER' || currentUserRole === 'CLIENT';
   
   // Filtrar usuários para Comercial: Ver apenas CLIENTS
@@ -65,13 +67,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const [isSaving, setIsSaving] = useState(false);
 
   const isEditingSelf = editingUser.id === currentUserId;
-  const isTargetPeerOrSuperior = editingUser.role === 'ADMIN' || (editingUser.role === 'MANAGER' && !isEditingSelf);
-  const isTargetReadOnly = isReadOnly || (currentUserRole === 'MANAGER' && isTargetPeerOrSuperior);
+  const isTargetPeerOrSuperior = editingUser.role === 'ADMIN' || (editingUser.role === 'MANAGER' && !isEditingSelf) || (editingUser.role === 'COMMERCIAL_MANAGER' && !isEditingSelf);
+  const isTargetReadOnly = isReadOnly || ((currentUserRole === 'MANAGER' || currentUserRole === 'COMMERCIAL_MANAGER') && isTargetPeerOrSuperior);
 
   // Filtrar cargos disponíveis
   const availableRoles = isCommercial 
     ? ROLES.filter(r => r.value === 'CLIENT')
-    : ROLES;
+    : isCommercialManager
+      ? ROLES.filter(r => r.value === 'COMMERCIAL' || r.value === 'CLIENT')
+      : ROLES;
 
   const [isSquadModalOpen, setIsSquadModalOpen] = useState(false);
   const [editingSquad, setEditingSquad] = useState<Partial<Squad>>({ name: '', members: [] });
@@ -82,19 +86,19 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const canEditUser = (u: User) => {
       if (isReadOnly) return false;
-      if (currentUserRole === 'MANAGER') {
+      if (currentUserRole === 'MANAGER' || currentUserRole === 'COMMERCIAL_MANAGER') {
           // Pode editar a si mesmo, mas não outros gerentes ou administradores
           if (u.id === currentUserId) return true;
-          if (u.role === 'ADMIN' || u.role === 'MANAGER') return false;
+          if (u.role === 'ADMIN' || u.role === 'MANAGER' || u.role === 'COMMERCIAL_MANAGER') return false;
       }
       return true;
   };
 
   const canDeleteUser = (u: User) => {
       if (isReadOnly) return false;
-      if (currentUserRole === 'MANAGER') {
+      if (currentUserRole === 'MANAGER' || currentUserRole === 'COMMERCIAL_MANAGER') {
           // Gerente não pode excluir a si mesmo nem outros gerentes ou administradores
-          if (u.role === 'ADMIN' || u.role === 'MANAGER') return false;
+          if (u.role === 'ADMIN' || u.role === 'MANAGER' || u.role === 'COMMERCIAL_MANAGER') return false;
       }
       return true;
   };
@@ -107,9 +111,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
           return;
       }
 
-      if (currentUserRole === 'MANAGER') {
+      if (currentUserRole === 'MANAGER' || currentUserRole === 'COMMERCIAL_MANAGER') {
           if (editingUser.id !== currentUserId) {
-              if (editingUser.role === 'ADMIN' || editingUser.role === 'MANAGER') {
+              if (editingUser.role === 'ADMIN' || editingUser.role === 'MANAGER' || editingUser.role === 'COMMERCIAL_MANAGER') {
                   alert('Você não possui permissão para criar ou definir colaboradores com nível de hierarquia igual ou superior ao seu.');
                   return;
               }
@@ -169,7 +173,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       }
 
       const targetUser = users.find(u => u.id === id);
-      if (currentUserRole === 'MANAGER' && targetUser && (targetUser.role === 'ADMIN' || targetUser.role === 'MANAGER')) {
+      if ((currentUserRole === 'MANAGER' || currentUserRole === 'COMMERCIAL_MANAGER') && targetUser && (targetUser.role === 'ADMIN' || targetUser.role === 'MANAGER' || targetUser.role === 'COMMERCIAL_MANAGER')) {
           alert('Você não possui permissão para excluir colaboradores com nível de hierarquia igual ou superior ao seu.');
           return;
       }
@@ -416,7 +420,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                   )}
                               </div>
                           ) : (
-                              (user.id === currentUserId || (currentUserRole === 'MANAGER' && (user.role === 'ADMIN' || user.role === 'MANAGER'))) ? (
+                              (user.id === currentUserId || ((currentUserRole === 'MANAGER' || currentUserRole === 'COMMERCIAL_MANAGER') && (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'COMMERCIAL_MANAGER'))) ? (
                                   <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
                                         onClick={()=> {setEditingUser(user); setIsModalOpen(true)}} 
@@ -567,7 +571,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                 className="w-full border p-3 pl-10 rounded-lg outline-none focus:ring-2 focus:ring-pink-100 focus:border-pink-500 transition-all appearance-none bg-white disabled:opacity-75 disabled:bg-slate-50"
                                 value={editingUser.role || 'EMPLOYEE'}
                                 onChange={e => setEditingUser({...editingUser, role: e.target.value as Role})}
-                                disabled={isTargetReadOnly || isCommercial || currentUserRole === 'MANAGER'}
+                                disabled={isTargetReadOnly || isCommercial || currentUserRole === 'MANAGER' || currentUserRole === 'COMMERCIAL_MANAGER'}
                               >
                                   {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                               </select>

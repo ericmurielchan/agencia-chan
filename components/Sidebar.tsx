@@ -61,6 +61,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return allowedForCommercial.includes(itemId);
     }
 
+    // Gerente Comercial vê a parte comercial, equipes, produtividade e visão geral
+    if (currentUserRole === 'COMMERCIAL_MANAGER') {
+      const allowedForCommercialManager = ['dashboard', 'crm', 'clients', 'catalog', 'requisitions', 'teams', 'productivity', 'help', 'settings'];
+      return allowedForCommercialManager.includes(itemId);
+    }
+
     // Colaborador (EMPLOYEE), Freelancer (FREELANCER) e Gerente (MANAGER) não têm acesso a: Financeiro (finance), estoque (stock), ativos (assets) e administração (system-admin)
     if (currentUserRole === 'EMPLOYEE' || currentUserRole === 'FREELANCER' || currentUserRole === 'MANAGER') {
       const restricted = ['finance', 'stock', 'assets', 'system-admin'];

@@ -102,7 +102,7 @@ export const CommissionDashboard: React.FC<CommissionDashboardProps> = ({
 
     // Commercial or manager role users list + anyone with won leads in period
     const relevantUsers = useMemo(() => {
-        const withRole = users.filter(u => u.role === 'COMMERCIAL' || u.role === 'MANAGER' || u.role === 'ADMIN');
+        const withRole = users.filter(u => u.role === 'COMMERCIAL' || u.role === 'COMMERCIAL_MANAGER' || u.role === 'MANAGER' || u.role === 'ADMIN');
         const wonLeadsResponsibleIds = new Set(wonLeadsInPeriod.map(l => l.responsibleId).filter(Boolean));
         
         const finalUsers = [...withRole];

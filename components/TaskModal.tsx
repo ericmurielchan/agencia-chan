@@ -101,9 +101,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({ task, users, onClose, onUp
                 const subParts = part.split(mentionRegex);
                 return subParts.map((subPart, subIdx) => {
                     if (mentionRegex.test(subPart)) {
+                        const displayValue = subPart.startsWith('@') ? subPart.slice(1) : subPart;
                         return (
-                            <span key={`mention-${idx}-${subIdx}`} className="text-pink-500 font-black">
-                                {subPart}
+                            <span 
+                                key={`mention-${idx}-${subIdx}`} 
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 bg-pink-50/80 hover:bg-pink-100 text-pink-600 border border-pink-200/50 rounded-lg font-black text-[10px] uppercase tracking-wide align-middle transition-colors shadow-xs select-all"
+                            >
+                                <AtSign size={10} className="text-pink-500 shrink-0" strokeWidth={3} />
+                                <span>{displayValue}</span>
                             </span>
                         );
                     }

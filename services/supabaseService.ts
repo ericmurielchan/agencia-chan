@@ -24,7 +24,7 @@ import {
   initialCardInvoices
 } from '../utils/mockData';
 import { 
-  User, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount,
+  User, Role, Task, Lead, Client, SystemSettings, Squad, CreditCard, BankAccount,
   FinancialTransaction, StockItem, Asset, CashRegisterSession, CashMovement,
   Requisition, AgencyService, Notification, ApprovalBatch, ProductivityGoal,
   ApprovalStatus, ApprovalItem, FinancialCategory, PipelineStage, LossReason, CardInvoice
@@ -98,20 +98,27 @@ export const mapSettings = (s: any): SystemSettings => ({
 /**
  * Mapeia um usuário do Supabase para o formato do App
  */
-export const mapUser = (u: any): User => ({
-  id: mapUserId(u.id) || u.id,
-  name: u.name || '',
-  email: u.email || '',
-  role: u.role || 'EMPLOYEE',
-  avatar: u.avatar || '',
-  squad: u.squad_id || '',
-  clientId: u.client_id || '',
-  hourlyRate: u.hourly_rate || 0,
-  salary: u.salary || 0,
-  hasSystemAccess: u.has_system_access || false,
-  password: u.password || '',
-  preferences: u.preferences || { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false }
-});
+export const mapUser = (u: any): User => {
+  const preferences = u.preferences || { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false };
+  let role = u.role || 'EMPLOYEE';
+  if (role === 'MANAGER' && preferences.subRole === 'COMMERCIAL_MANAGER') {
+    role = 'COMMERCIAL_MANAGER';
+  }
+  return {
+    id: mapUserId(u.id) || u.id,
+    name: u.name || '',
+    email: u.email || '',
+    role: role as Role,
+    avatar: u.avatar || '',
+    squad: u.squad_id || '',
+    clientId: u.client_id || '',
+    hourlyRate: u.hourly_rate || 0,
+    salary: u.salary || 0,
+    hasSystemAccess: u.has_system_access || false,
+    password: u.password || '',
+    preferences: preferences
+  };
+};
 
 /**
  * Mapeia uma tarefa do Supabase para o formato do App
@@ -1299,18 +1306,27 @@ export const saveUser = async (user: Partial<User>) => {
     }
   }
 
+  const basePreferences = user.preferences || { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false };
+  const preferences = {
+    ...basePreferences,
+    subRole: user.role === 'COMMERCIAL_MANAGER' ? 'COMMERCIAL_MANAGER' : undefined
+  };
+
+  const dbRole = user.role === 'COMMERCIAL_MANAGER' ? 'MANAGER' : user.role;
+
   const { error } = await supabase.from('users').upsert({
     id: targetId || undefined,
     name: user.name,
     email: user.email ? user.email.toLowerCase() : undefined,
-    role: user.role,
+    role: dbRole,
     avatar: user.avatar,
     squad_id: squad_id,
     client_id: client_id,
     hourly_rate: user.hourlyRate,
     salary: user.salary,
     has_system_access: user.hasSystemAccess,
-    password: user.password // Salva a senha (texto plano por enquanto conforme solicitado)
+    password: user.password, // Salva a senha (texto plano por enquanto conforme solicitado)
+    preferences: preferences
   });
 
   if (error) {
@@ -2665,20 +2681,28 @@ export const seedDatabase = async () => {
 
     // 2. Migrar Usuários (Mapeando IDs para UUID para evitar conflitos na base real do Supabase)
     const { error: userError } = await supabase.from('users').upsert(
-      initialUsers.map(u => ({
-        id: mapToDbUuid(u.id) || u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        avatar: u.avatar,
-        squad_id: u.squad,
-        client_id: u.clientId,
-        hourly_rate: u.hourlyRate,
-        salary: u.salary,
-        has_system_access: u.hasSystemAccess,
-        password: u.password, // Adicionado para permitir autenticação
-        preferences: u.preferences
-      }))
+      initialUsers.map(u => {
+        const basePreferences = u.preferences || { theme: 'light', emailNotifications: true, systemNotifications: true, compactMode: false };
+        const preferences = {
+          ...basePreferences,
+          subRole: u.role === 'COMMERCIAL_MANAGER' ? 'COMMERCIAL_MANAGER' : undefined
+        };
+        const dbRole = u.role === 'COMMERCIAL_MANAGER' ? 'MANAGER' : u.role;
+        return {
+          id: mapToDbUuid(u.id) || u.id,
+          name: u.name,
+          email: u.email,
+          role: dbRole,
+          avatar: u.avatar,
+          squad_id: u.squad,
+          client_id: u.clientId,
+          hourly_rate: u.hourlyRate,
+          salary: u.salary,
+          has_system_access: u.hasSystemAccess,
+          password: u.password, // Adicionado para permitir autenticação
+          preferences: preferences
+        };
+      })
     );
     if (userError) console.error('Erro ao migrar Usuários:', userError);
 

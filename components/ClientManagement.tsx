@@ -53,7 +53,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   }, [selectedClientId, clients, onClearSelectedClient]);
 
   const isAdmin = currentUser.role === 'ADMIN';
-  const isManager = currentUser.role === 'MANAGER';
+  const isManager = currentUser.role === 'MANAGER' || currentUser.role === 'COMMERCIAL_MANAGER';
   const isFinance = currentUser.role === 'FINANCE';
   const canManageAccess = isAdmin || isManager || isFinance;
   const isEmployee = currentUser.role === 'EMPLOYEE' || currentUser.role === 'FREELANCER';

@@ -1121,7 +1121,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                 getClientName={getClientName}
                 onArchive={handleArchiveBatch}
                 onDelete={handleDeleteBatch}
-                isAdmin={currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE'}
+                isAdmin={currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE' || currentUser.role === 'COMMERCIAL_MANAGER'}
               />
             ))}
           </div>
@@ -1147,7 +1147,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                     getClientName={getClientName}
                     onArchive={handleArchiveBatch}
                     onDelete={handleDeleteBatch}
-                    isAdmin={currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE'}
+                    isAdmin={currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'FINANCE' || currentUser.role === 'COMMERCIAL_MANAGER'}
                   />
                 ))}
               </div>

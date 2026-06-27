@@ -318,29 +318,39 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
 
     // Access Control Logic
     const visibleLeads = useMemo(() => {
-        if (currentUser.role === 'ADMIN') return leads;
+        // Administradores e Financeiro visualizam tudo no CRM
+        if (currentUser.role === 'ADMIN' || currentUser.role === 'FINANCE') {
+            return leads;
+        }
         
-        if (currentUser.role === 'MANAGER') {
+        // Gerentes Comerciais visualizam suas próprias negociações e as da sua equipe (squad)
+        if (currentUser.role === 'COMMERCIAL_MANAGER') {
             const mySquads = squads.filter(s => s.members?.includes(currentUser.id));
             const mySquadIds = mySquads.map(s => s.id);
             const squadMembers = users.filter(u => squads.some(s => mySquadIds.includes(s.id) && s.members?.includes(u.id))).map(u => u.id);
             
-            // Manager sees all leads from their team/squad members or their own
             return leads.filter(l => {
                 const isResponsible = l.responsibleId === currentUser.id;
                 const isCreator = l.createdBy === currentUser.id;
                 const responsibleUserInSquad = l.responsibleId && squadMembers.includes(l.responsibleId);
+                const creatorUserInSquad = l.createdBy && squadMembers.includes(l.createdBy);
                 
-                return isResponsible || isCreator || responsibleUserInSquad;
+                return isResponsible || isCreator || responsibleUserInSquad || creatorUserInSquad;
             });
         }
 
-        if (currentUser.role === 'EMPLOYEE' || currentUser.role === 'COMMERCIAL' || currentUser.role === 'FREELANCER') {
-            // Commercial/Employee sees only leads they are responsible for OR that they created
+        // Gerentes (MANAGER), Colaboradores (EMPLOYEE, COMMERCIAL) e Freelancers (FREELANCER) visualizam apenas suas próprias negociações
+        if (
+            currentUser.role === 'MANAGER' || 
+            currentUser.role === 'EMPLOYEE' || 
+            currentUser.role === 'COMMERCIAL' || 
+            currentUser.role === 'FREELANCER'
+        ) {
             return leads.filter(l => l.responsibleId === currentUser.id || l.createdBy === currentUser.id);
         }
         
-        return [];
+        // Default seguro: apenas suas próprias negociações
+        return leads.filter(l => l.responsibleId === currentUser.id || l.createdBy === currentUser.id);
     }, [leads, currentUser, users, squads]);
 
     // Filtered Leads based on interactive criteria
@@ -735,7 +745,13 @@ export const CRMModule: React.FC<CRMModuleProps> = ({
             <div className="flex-1 overflow-hidden relative">
                 {activeTab === 'DASHBOARD' && (
                     <div className="absolute inset-0 overflow-y-auto custom-scrollbar p-4 sm:p-8">
-                        <CRMDashboard leads={filteredLeads} users={users} lossReasons={lossReasons} />
+                        <CRMDashboard 
+                            leads={filteredLeads} 
+                            users={users} 
+                            lossReasons={lossReasons} 
+                            currentUser={currentUser}
+                            squads={squads}
+                        />
                     </div>
                 )}
                 {activeTab === 'PIPELINE' && (
